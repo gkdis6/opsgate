@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -54,6 +55,48 @@ func TestRegistration(t *testing.T) {
 			var names []string
 			for _, spec := range tools.Tools {
 				names = append(names, spec.Name)
+				if spec.Title == "" || spec.Description == "" {
+					t.Fatalf("missing tool metadata: %+v", spec)
+				}
+				if spec.Name == "k8s_list" || spec.Name == "k8s_get" {
+					for _, kinds := range []string{
+						"pods (pod, po)", "deployments (deployment, deploy)", "statefulsets (statefulset, sts)",
+						"daemonsets (daemonset, ds)", "replicasets (replicaset, rs)", "jobs (job)", "cronjobs (cronjob)",
+						"services (service, svc)", "ingresses (ingress, ing)", "configmaps (configmap, cm)",
+						"persistentvolumeclaims (persistentvolumeclaim, pvc)", "persistentvolumes (persistentvolume, pv)",
+						"nodes (node, no)", "namespaces (namespace, ns)", "take no namespace",
+					} {
+						if !strings.Contains(spec.Description, kinds) {
+							t.Fatalf("%s description missing %q", spec.Name, kinds)
+						}
+					}
+				}
+				for _, detail := range map[string][]string{
+					"k8s_overview": {"10 warnings", "1h", "Takes no inputs"},
+					"k8s_list":     {"all allowed namespaces", "100", "1–500"},
+					"k8s_get":      {"50 events", "1h", "namespace is required"},
+					"k8s_events":   {"warnings_only true", "since 1h", "limit 50", "168h", "1–500"},
+					"k8s_logs":     {"200", "MaxLogLines", "500", "1 MiB", "168h", "Previous defaults to false", "grep defaults to no filter"},
+				}[spec.Name] {
+					if !strings.Contains(spec.Description, detail) {
+						t.Errorf("%s description missing %q", spec.Name, detail)
+					}
+				}
+				data, err := json.Marshal(spec.InputSchema)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var schema struct {
+					Properties map[string]struct{ Description string }
+				}
+				if err := json.Unmarshal(data, &schema); err != nil {
+					t.Fatal(err)
+				}
+				for field, property := range schema.Properties {
+					if property.Description == "" {
+						t.Errorf("%s input %s has no description", spec.Name, field)
+					}
+				}
 				if !spec.Annotations.ReadOnlyHint || *spec.Annotations.DestructiveHint {
 					t.Fatal(spec)
 				}

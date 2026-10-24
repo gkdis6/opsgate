@@ -69,3 +69,76 @@ func TestDurationAndLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterEventsPolicy(t *testing.T) {
+	for _, policy := range []namespacePolicy{
+		{allow: []string{"public"}},
+		{allow: []string{"*"}, deny: []string{"private"}},
+	} {
+		for _, kind := range []string{"Node", "PersistentVolume", "Namespace"} {
+			t.Run(kind+strings.Join(policy.allow, ","), func(t *testing.T) {
+				objects := []runtime.Object{
+					&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "public"}},
+					&corev1.PersistentVolume{ObjectMeta: metav1.ObjectMeta{Name: "public"}},
+					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "public"}},
+				}
+				for _, tt := range []struct{ name, ns, involvedNS string }{
+					{"visible", "public", ""},
+					{"denied-event", "private", ""},
+					{"denied-reference", "public", "private"},
+				} {
+					objects = append(objects, &corev1.Event{
+						ObjectMeta: metav1.ObjectMeta{Name: tt.name, Namespace: tt.ns, CreationTimestamp: metav1.NewTime(time.Now().Add(-12 * time.Minute))},
+						Type:       "Warning", Reason: tt.name, Message: tt.name,
+						LastTimestamp:  metav1.NewTime(time.Now().Add(-45 * time.Second)),
+						InvolvedObject: corev1.ObjectReference{Name: "public", Kind: kind, Namespace: tt.involvedNS},
+					})
+				}
+				p := testProvider(objects...)
+				p.policy = policy
+				for _, entry := range []string{"get", "overview", "events"} {
+					var out string
+					var err error
+					switch entry {
+					case "get":
+						out, err = p.get(context.Background(), tool.Caller{}, getInput{Kind: kind, Name: "public"})
+					case "overview":
+						out, err = p.overview(context.Background(), tool.Caller{}, struct{}{})
+					case "events":
+						out, err = p.events(context.Background(), tool.Caller{}, eventsInput{})
+					}
+					if err != nil || !strings.Contains(out, "visible") || strings.Contains(out, "denied-event") || strings.Contains(out, "denied-reference") || strings.Contains(out, "private") {
+						t.Fatalf("%s: %s %v", entry, out, err)
+					}
+					// AGE is measured from LastTimestamp (45s), not creation (12m).
+					if !strings.Contains(out, "AGE") || !strings.Contains(out, "45s") || strings.Contains(out, "12m") {
+						t.Fatalf("%s: missing event age: %s", entry, out)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestAge(t *testing.T) {
+	for _, tt := range []struct {
+		ago  time.Duration
+		want string
+	}{
+		{45 * time.Second, "45s"}, {12 * time.Minute, "12m"},
+		{3*time.Hour + 12*time.Minute, "3h12m"}, {95 * 24 * time.Hour, "95d"},
+		{(2*365 + 30) * 24 * time.Hour, "2y30d"}, {-time.Hour, "<invalid>"},
+	} {
+		if got := age(time.Now().Add(-tt.ago).UTC().Format(time.RFC3339)); got != tt.want {
+			t.Errorf("%v: got %q, want %q", tt.ago, got, tt.want)
+		}
+	}
+	if got := age("invalid"); got != "-" {
+		t.Fatal(got)
+	}
+	p := testProvider(&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "old", Namespace: "public", CreationTimestamp: metav1.NewTime(time.Now().Add(-95 * 24 * time.Hour))}})
+	out, err := p.list(context.Background(), tool.Caller{}, listInput{Kind: "pods"})
+	if err != nil || !strings.Contains(out, "95d") {
+		t.Fatal(out, err)
+	}
+}

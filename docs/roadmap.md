@@ -1,6 +1,6 @@
 # Roadmap
 
-v0.1 is in progress: stdio-only, read-only Linux and Kubernetes inspection. The shared wrapper checks scopes, supplies context deadlines and calls redaction, truncation and audit APIs. Provider registration, audit persistence and redaction are still TODO stubs in this checkout; the READMEs describe the intended v0.1 tool contract. Complete and test these before relying on the security model.
+v0.1 is implemented and pre-release: stdio-only, read-only Linux and Kubernetes inspection, with host and Kubernetes providers, JSONL audit persistence, best-effort redaction and a read-only RBAC manifest. The shared wrapper checks scopes, supplies cooperative context deadlines, redacts and truncates output, and records calls. v0.1 has not yet been security-reviewed by third parties.
 
 Everything below is **planned, not implemented**. There are no promised release dates.
 

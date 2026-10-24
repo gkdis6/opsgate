@@ -47,18 +47,38 @@ func String(s string) string {
 	return s
 }
 
-// Most operation text contains separators but no sensitive keys. Scan those
-// separators directly rather than running a large regexp over every log word.
+// Scan separators directly rather than running a large regexp over every log
+// word. Whitespace is a separator only for long flags and uppercase env keys.
 func redactAssignments(s string) string {
 	var out strings.Builder
 	cursor, pos, authorityEnd := 0, 0, 0
+	hasFlags := strings.Contains(s, "--")
+	separators := ":="
+	if hasFlags {
+		separators = ":= \t"
+	} else {
+		// All sensitive env keys contain one of these uppercase endings.
+		// Keep the usual separator scan for text without any candidates.
+		for _, ending := range []string{"PASSWORD", "PASSWD", "SECRET", "TOKEN", "APIKEY", "API_KEY", "CREDENTIAL", "PWD", "ACCESS_KEY", "SECRET_KEY", "PRIVATE_KEY", "SESSION_ID", "COOKIE"} {
+			if strings.Contains(s, ending) {
+				separators = ":= \t"
+				break
+			}
+		}
+	}
 	for pos < len(s) {
-		next := strings.IndexAny(s[pos:], ":=")
+		next := strings.IndexAny(s[pos:], separators)
 		if next < 0 {
 			break
 		}
 		sep := pos + next
 		pos = sep + 1
+		space := s[sep] == ' ' || s[sep] == '\t'
+		// Sensitive env keys end in an uppercase letter. Ordinary log words
+		// need no backward scan unless the text also contains long flags.
+		if space && !hasFlags && (sep == 0 || s[sep-1] < 'A' || s[sep-1] > 'Z') {
+			continue
+		}
 		if s[sep] == ':' {
 			if strings.HasPrefix(s[pos:], "//") {
 				authorityEnd = len(s)
@@ -75,18 +95,29 @@ func redactAssignments(s string) string {
 		for end > 0 && (s[end-1] == ' ' || s[end-1] == '\t') {
 			end--
 		}
-		if end > 0 && (s[end-1] == '"' || s[end-1] == '\'') {
+		if !space && end > 0 && (s[end-1] == '"' || s[end-1] == '\'') {
 			end--
 		}
 		start := end
 		for start > 0 && keyByte(s[start-1]) {
 			start--
 		}
-		if start == end || !sensitiveKey(s[start:end]) {
+		if start == end {
+			continue
+		}
+		key := s[start:end]
+		if space && !envKey(key) && !(strings.HasPrefix(key, "--") &&
+			(start == 0 || s[start-1] == ' ' || s[start-1] == '\t' || s[start-1] == '\n')) {
+			continue
+		}
+		if !sensitiveKey(strings.TrimPrefix(key, "--")) {
 			continue
 		}
 		for pos < len(s) && (s[pos] == ' ' || s[pos] == '\t') {
 			pos++
+		}
+		if space && pos < len(s) && (s[pos] == '=' || s[pos] == ':') {
+			continue
 		}
 		value := assignmentValue.FindString(s[pos:])
 		if value == "" {
@@ -112,9 +143,14 @@ func redactAssignments(s string) string {
 
 func sensitiveKey(k string) bool {
 	k = strings.ToLower(k)
+	for _, suffix := range []string{"password", "passwd", "secret", "token", "apikey", "api_key", "credential", "credentials"} {
+		if strings.HasSuffix(k, suffix) {
+			return true
+		}
+	}
 	for {
 		switch k {
-		case "password", "passwd", "pwd", "secret", "client_secret", "token", "access_token", "refresh_token", "api_key", "apikey", "access_key", "secret_key", "private_key", "credential", "credentials", "auth_token", "session_id", "cookie", "set-cookie":
+		case "password", "passwd", "pwd", "secret", "client_secret", "token", "access_token", "refresh_token", "api_key", "api-key", "apikey", "access_key", "secret_key", "private_key", "credential", "credentials", "auth_token", "session_id", "cookie", "set-cookie":
 			return true
 		}
 		i := strings.IndexByte(k, '_')
@@ -128,6 +164,19 @@ func sensitiveKey(k string) bool {
 		}
 		k = k[i+1:]
 	}
+}
+
+func envKey(k string) bool {
+	if k[0] != '_' && (k[0] < 'A' || k[0] > 'Z') {
+		return false
+	}
+	for i := 1; i < len(k); i++ {
+		c := k[i]
+		if !(c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func keyByte(c byte) bool {

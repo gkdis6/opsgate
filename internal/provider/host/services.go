@@ -36,7 +36,7 @@ func (p *provider) units(ctx context.Context) ([]string, error) {
 		}
 		for _, line := range strings.Split(out, "\n") {
 			fields := strings.Fields(line)
-			if len(fields) == 0 {
+			if len(fields) < 2 || fields[1] == "not-found" {
 				continue
 			}
 			if u, err := p.allowed(fields[0]); err == nil {
@@ -182,7 +182,11 @@ func (p *provider) logs(ctx context.Context, in logsInput) (string, error) {
 	if len(in.Grep) > 4096 {
 		return "", fmt.Errorf("grep exceeds 4096 bytes")
 	}
-	args := []string{"-u", unit, "--no-pager", "-o", "short-iso", "-n", strconv.Itoa(lines)}
+	scan := lines
+	if in.Grep != "" {
+		scan = max
+	}
+	args := []string{"-u", unit, "--no-pager", "-o", "short-iso", "-n", strconv.Itoa(scan)}
 	since := ""
 	if in.Since != "" {
 		since, err = absoluteSince(in.Since, p.now())
@@ -207,14 +211,25 @@ func (p *provider) logs(ctx context.Context, in logsInput) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "unit: %s; lines: %d; since: %q; priority: %q; grep: %q\n", unit, lines, since, in.Priority, in.Grep)
+	var scanned, matched []string
+	if out != "" {
+		scanned = strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	}
 	needle := strings.ToLower(in.Grep)
-	for _, line := range strings.Split(strings.TrimSuffix(out, "\n"), "\n") {
+	for _, line := range scanned {
 		if strings.Contains(strings.ToLower(line), needle) {
-			b.WriteString(line)
-			b.WriteByte('\n')
+			matched = append(matched, line)
 		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "unit: %s; lines: %d; scanned: %d; matched: %d; since: %q; priority: %q; grep: %q\n", unit, lines, len(scanned), len(matched), since, in.Priority, in.Grep)
+	start := len(matched) - lines
+	if start < 0 {
+		start = 0
+	}
+	for _, line := range matched[start:] {
+		b.WriteString(line)
+		b.WriteByte('\n')
 	}
 	return b.String(), nil
 }

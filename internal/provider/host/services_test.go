@@ -3,7 +3,9 @@ package host
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -93,7 +95,7 @@ func TestLogs(t *testing.T) {
 		{name: "defaults", in: logsInput{}, tail: []string{"-n", "100"}},
 		{name: "clamp high", in: logsInput{Lines: 9999}, tail: []string{"-n", "200"}},
 		{name: "clamp low", in: logsInput{Lines: -1}, tail: []string{"-n", "1"}},
-		{name: "filter", in: logsInput{Since: "1d", Priority: "err", Grep: "FAIL [x]"}, tail: []string{"-n", "100", "--since", time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC).In(time.Local).Format("2006-01-02 15:04:05"), "-p", "err"}},
+		{name: "filter", in: logsInput{Since: "1d", Priority: "err", Grep: "FAIL [x]"}, tail: []string{"-n", "200", "--since", time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC).In(time.Local).Format("2006-01-02 15:04:05"), "-p", "err"}},
 		{name: "bad priority", in: logsInput{Priority: "--help"}, bad: true}, {name: "bad since", in: logsInput{Since: "today"}, bad: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -137,5 +139,60 @@ func TestProperties(t *testing.T) {
 	rows := parseProperties("Id=a.service\n\nId=b.service\nMemoryCurrent=[not set]\n")
 	if len(rows) != 2 || rows[1]["Id"] != "b.service" {
 		t.Fatal(rows)
+	}
+}
+
+func TestLogsGrepWindow(t *testing.T) {
+	for _, tt := range []struct {
+		name, journal, grep, body        string
+		maximum, fetch, scanned, matched int
+	}{
+		{"configured", "hit old\nHIT middle\nhit newest\nother\nother\n", "hit", "HIT middle\nhit newest\n", 5, 5, 5, 3},
+		{"default", "hit old\nother\nother\n", "hit", "hit old\n", 0, 500, 3, 1},
+		{"no matches", "other\nother\n", "hit", "", 5, 5, 2, 0},
+		{"empty", "", "hit", "", 5, 5, 0, 0},
+		{"unfiltered", "one\ntwo\n", "", "one\ntwo\n", 5, 2, 2, 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p := provider{cfg: config.Host{Units: []string{"nginx"}, MaxLogLines: tt.maximum}, run: func(_ context.Context, name string, args ...string) (string, error) {
+				want := []string{"-u", "nginx.service", "--no-pager", "-o", "short-iso", "-n", strconv.Itoa(tt.fetch)}
+				if name != "journalctl" || !reflect.DeepEqual(args, want) {
+					t.Fatalf("command %s %q, want %q", name, args, want)
+				}
+				return tt.journal, nil
+			}}
+			out, err := p.logs(context.Background(), logsInput{Unit: "nginx", Lines: 2, Grep: tt.grep})
+			header, body, _ := strings.Cut(out, "\n")
+			counts := fmt.Sprintf("scanned: %d; matched: %d;", tt.scanned, tt.matched)
+			if err != nil || body != tt.body || !strings.Contains(header, counts) {
+				t.Fatalf("got %q, %v", out, err)
+			}
+		})
+	}
+}
+
+func TestServicesNotFound(t *testing.T) {
+	for _, patterns := range [][]string{{"ssh*"}, {"ssh*", "sshd"}, {"sshd.service", "ssh*"}} {
+		t.Run(strings.Join(patterns, ","), func(t *testing.T) {
+			p := provider{cfg: config.Host{Units: patterns}, run: func(_ context.Context, name string, args ...string) (string, error) {
+				if args[0] == "list-units" {
+					return "ssh.service loaded active running SSH\nsshd.service not-found inactive dead Missing\nsshd-keygen.service not-found inactive dead Missing\n", nil
+				}
+				want := []string{"ssh.service"}
+				out := "Id=ssh.service\nLoadState=loaded\nActiveState=active\n"
+				if len(patterns) > 1 {
+					want = append(want, "sshd.service")
+					out += "\nId=sshd.service\nLoadState=not-found\nActiveState=inactive\n"
+				}
+				if name != "systemctl" || !reflect.DeepEqual(args[4:], want) {
+					t.Fatalf("unexpected command: %s %q", name, args)
+				}
+				return out, nil
+			}}
+			out, err := p.services(context.Background())
+			if err != nil || !strings.Contains(out, "Id: ssh.service") || strings.Contains(out, "sshd-keygen.service") || strings.Contains(out, "Id: sshd.service") != (len(patterns) > 1) {
+				t.Fatalf("got %q, %v", out, err)
+			}
+		})
 	}
 }

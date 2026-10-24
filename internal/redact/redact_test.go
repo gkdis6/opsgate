@@ -55,7 +55,12 @@ func TestNormalText(t *testing.T) {
 		"id=550e8400-e29b-41d4-a716-446655440000 commit=0123456789abcdef0123456789abcdef01234567",
 		"image=repo/app@sha256:" + strings.Repeat("a", 64),
 		"configmap data: aGVsbG8gd29ybGQ=", "PASSWORD_FILE=/run/secrets/db",
-		"passwords=3 token_count=120 tokenizer=v2 notpassword=public",
+		"passwords=3 token_count=120 tokenizer=v2",
+		"token_count=3", "csrf token missing", "nopassword auth disabled",
+		"-p hunter2", "-p=hunter2", "--port 8080", "--token-count 3", "--password-file /run/secret",
+		"--password", "--password ", "PGPASSWORD", "PGPASSWORD ",
+		"dbpassword hunter2", "githubtoken abc", "PgPassword hunter2", "pgpassword hunter2",
+		"prefix--password hunter2", "MY-PASSWORD hunter2",
 		"https://alice@example.com/path", "-----BEGIN PUBLIC KEY-----\nabc\n-----END PUBLIC KEY-----",
 	} {
 		t.Run(s, func(t *testing.T) {
@@ -63,6 +68,53 @@ func TestNormalText(t *testing.T) {
 				t.Errorf("changed to %q", got)
 			}
 		})
+	}
+}
+
+func TestCLIFlags(t *testing.T) {
+	for _, flag := range []string{"--password", "--db-password", "--token", "--client-secret", "--api-key"} {
+		for _, sep := range []string{" ", "\t", "="} {
+			for _, value := range []string{"hunter2", `"two words"`, `'two words'`} {
+				in := "cmd " + flag + sep + value + " --port 8080"
+				masked := Mask
+				if value[0] == '"' || value[0] == '\'' {
+					masked = string(value[0]) + Mask + string(value[0])
+				}
+				want := "cmd " + flag + sep + masked + " --port 8080"
+				t.Run(in, func(t *testing.T) {
+					if got := String(in); got != want {
+						t.Errorf("String(%q) = %q, want %q", in, got, want)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestSuffixKeys(t *testing.T) {
+	for _, key := range []string{"PGPASSWORD", "MYSQLPASSWORD", "dbpassword", "X_API_KEY", "AUTHTOKEN", "githubtoken", "dbpasswd", "clientsecret", "serviceapikey", "dbcredential", "dbcredentials", "notpassword"} {
+		for _, sep := range []string{"=", ": ", " = ", " : "} {
+			in, want := key+sep+"hunter2", key+sep+Mask
+			t.Run(in, func(t *testing.T) {
+				if got := String(in); got != want {
+					t.Errorf("String(%q) = %q, want %q", in, got, want)
+				}
+			})
+		}
+		t.Run(key+" map", func(t *testing.T) {
+			if got := Value(map[string]any{key: "hunter2"}); !reflect.DeepEqual(got, map[string]any{key: Mask}) {
+				t.Errorf("Value = %#v", got)
+			}
+		})
+		for _, sep := range []string{" ", "\t", "  "} {
+			upper := strings.ToUpper(key)
+			in, want := upper+sep+"hunter2 next=ok", upper+sep+Mask+" next=ok"
+			t.Run(in, func(t *testing.T) {
+				if got := String(in); got != want {
+					t.Errorf("String(%q) = %q, want %q", in, got, want)
+				}
+			})
+		}
 	}
 }
 

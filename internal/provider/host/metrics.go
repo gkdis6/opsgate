@@ -126,6 +126,10 @@ func (p *provider) overview(ctx context.Context) (string, error) {
 			failed = append(failed, row["Id"])
 		}
 	}
-	fmt.Fprintf(&b, "units: %d active; %d failed; failed units: %s\n", active, len(failed), strings.Join(failed, ", "))
+	fmt.Fprintf(&b, "units: %d active, %d failed", active, len(failed))
+	if len(failed) > 0 {
+		fmt.Fprintf(&b, "; failed units: %s", strings.Join(failed, ", "))
+	}
+	b.WriteByte('\n')
 	return b.String(), nil
 }

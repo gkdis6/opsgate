@@ -13,13 +13,13 @@ import (
 )
 
 type logsInput struct {
-	Namespace string `json:"namespace"`
-	Pod       string `json:"pod"`
-	Container string `json:"container,omitempty"`
-	Tail      int    `json:"tail,omitempty"`
-	Since     string `json:"since,omitempty"`
-	Previous  bool   `json:"previous,omitempty"`
-	Grep      string `json:"grep,omitempty"`
+	Namespace string `json:"namespace" jsonschema:"Required allowed namespace"`
+	Pod       string `json:"pod" jsonschema:"Required pod name"`
+	Container string `json:"container,omitempty" jsonschema:"Container name; required unless the pod has exactly one container"`
+	Tail      int    `json:"tail,omitempty" jsonschema:"Maximum log lines; default 200; clamped to 1 through configured MaxLogLines (fallback 500)"`
+	Since     string `json:"since,omitempty" jsonschema:"Positive Go duration up to 168h; omitted means no time filter"`
+	Previous  bool   `json:"previous,omitempty" jsonschema:"Read previous container instance; default false"`
+	Grep      string `json:"grep,omitempty" jsonschema:"Case-insensitive literal substring filter; default no filter"`
 }
 
 func (p *provider) logs(ctx context.Context, _ tool.Caller, in logsInput) (string, error) {

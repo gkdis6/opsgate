@@ -19,15 +19,15 @@ import (
 )
 
 type listInput struct {
-	Kind          string `json:"kind"`
-	Namespace     string `json:"namespace,omitempty"`
-	LabelSelector string `json:"label_selector,omitempty"`
-	Limit         int    `json:"limit,omitempty"`
+	Kind          string `json:"kind" jsonschema:"Resource kind or alias; see the tool description for supported kinds"`
+	Namespace     string `json:"namespace,omitempty" jsonschema:"Namespace; omit for cluster-scoped kinds; defaults to all allowed namespaces"`
+	LabelSelector string `json:"label_selector,omitempty" jsonschema:"Kubernetes label selector; defaults to all labels"`
+	Limit         int    `json:"limit,omitempty" jsonschema:"Maximum objects; default 100; clamped to 1 through 500"`
 }
 type getInput struct {
-	Kind      string `json:"kind"`
-	Namespace string `json:"namespace,omitempty"`
-	Name      string `json:"name"`
+	Kind      string `json:"kind" jsonschema:"Resource kind or alias; see the tool description for supported kinds"`
+	Namespace string `json:"namespace,omitempty" jsonschema:"Namespace; required for namespaced kinds; omit for cluster-scoped kinds"`
+	Name      string `json:"name" jsonschema:"Required object name"`
 }
 
 func clamp(n, def, max int) int {
@@ -90,6 +90,9 @@ func (p *provider) collect(ctx context.Context, r resource, ns, selector string)
 				m, err := objectMap(item)
 				if err != nil {
 					return nil, err
+				}
+				if r.name == "persistentvolumes" && !p.claimAllowed(m) {
+					continue
 				}
 				result = append(result, m)
 			}
@@ -171,6 +174,9 @@ func (p *provider) get(ctx context.Context, _ tool.Caller, in getInput) (string,
 	if err != nil {
 		return "", err
 	}
+	if r.name == "persistentvolumes" && !p.claimAllowed(m) {
+		return "", tool.Denied("namespace is not allowed")
+	}
 	m["apiVersion"], m["kind"] = apiVersion(r.name), r.kind
 	sanitize(m, r.name, p.cfg.ShowConfigMapData)
 	data, err := yaml.Marshal(m)
@@ -182,6 +188,11 @@ func (p *provider) get(ctx context.Context, _ tool.Caller, in getInput) (string,
 		return "", err
 	}
 	return string(data) + "\nEVENTS\n" + events, nil
+}
+
+func (p *provider) claimAllowed(m map[string]any) bool {
+	ns := str(m, "spec", "claimRef", "namespace")
+	return ns == "" || p.policy.allowed(ns)
 }
 
 func apiVersion(kind string) string {

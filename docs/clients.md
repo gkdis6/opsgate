@@ -1,8 +1,8 @@
 # Connecting clients
 
-opsgate currently supports **stdio only**. The client launches the binary and exchanges MCP messages through stdin/stdout. Use absolute executable and configuration paths. Keep stdout free of banners or debugging output; diagnostics and the default audit destination use stderr. These examples assume the v0.1 providers have been completed; provider registration is currently stubbed in this checkout.
+opsgate currently supports **stdio only**. The client launches the binary and exchanges MCP messages through stdin/stdout. Use absolute executable and configuration paths. Keep stdout free of banners or debugging output; diagnostics and the default audit destination use stderr. v0.1 providers, auditing and redaction are implemented; the release is pre-release and has not yet been security-reviewed by third parties.
 
-The process runs with the launching OS user's permissions and configured `stdio.scopes`. `stdio.user` is an audit label. Protect the config and use an unprivileged account. Enable only needed providers and allowlisted units/namespaces.
+The process runs with the launching OS user's permissions and configured `stdio.scopes`. `stdio.user` is an audit label. Protect the config and use an unprivileged account. Enable only needed providers and allowlisted units/namespaces. Kubernetes kubeconfig `exec` and `auth-provider` credential plugins are rejected; use credentials such as a short-lived ServiceAccount token. Namespace policies do not restrict Nodes or PersistentVolumes; review the [RBAC manifest](../deploy/kubernetes/rbac-readonly.yaml) and [security policy](../SECURITY.md).
 
 ## Claude Code
 

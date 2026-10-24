@@ -12,13 +12,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	durationutil "k8s.io/apimachinery/pkg/util/duration"
 )
 
 type eventsInput struct {
-	Namespace    string `json:"namespace,omitempty"`
-	WarningsOnly *bool  `json:"warnings_only,omitempty"`
-	Since        string `json:"since,omitempty"`
-	Limit        int    `json:"limit,omitempty"`
+	Namespace    string `json:"namespace,omitempty" jsonschema:"Namespace; omitted means all allowed namespaces"`
+	WarningsOnly *bool  `json:"warnings_only,omitempty" jsonschema:"Only warnings; default true"`
+	Since        string `json:"since,omitempty" jsonschema:"Recent event window as a positive Go duration; default 1h; maximum 168h"`
+	Limit        int    `json:"limit,omitempty" jsonschema:"Maximum events; default 50; clamped to 1 through 500"`
 }
 
 func duration(s, def string) (time.Duration, error) {
@@ -102,9 +103,12 @@ func (p *provider) recentEvents(ctx context.Context, ns string, warnings bool, s
 	}
 	var b strings.Builder
 	w := tabwriter.NewWriter(&b, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "LAST SEEN\tTYPE\tREASON\tOBJECT\tMESSAGE")
+	// AGE follows kubectl: time since the event was last seen, not since the
+	// (possibly long-lived, aggregated) Event object was created.
+	fmt.Fprintln(w, "AGE\tLAST SEEN\tTYPE\tREASON\tOBJECT\tMESSAGE")
 	for _, e := range events {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s/%s/%s\t%s\n", eventTime(e).UTC().Format(time.RFC3339), display(e.Type), display(e.Reason), display(e.Namespace), display(e.InvolvedObject.Kind), display(e.InvolvedObject.Name), display(e.Message))
+		last := eventTime(e).UTC().Format(time.RFC3339)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s/%s/%s\t%s\n", age(last), last, display(e.Type), display(e.Reason), display(e.Namespace), display(e.InvolvedObject.Kind), display(e.InvolvedObject.Name), display(e.Message))
 	}
 	w.Flush()
 	if truncated {
@@ -118,5 +122,5 @@ func age(timestamp string) string {
 	if err != nil {
 		return "-"
 	}
-	return time.Since(t).Round(time.Second).String()
+	return durationutil.HumanDuration(time.Since(t))
 }

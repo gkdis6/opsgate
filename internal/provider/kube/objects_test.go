@@ -191,3 +191,44 @@ func TestEveryResource(t *testing.T) {
 		}
 	}
 }
+
+func TestPersistentVolumeClaimPolicy(t *testing.T) {
+	for _, policy := range []namespacePolicy{
+		{allow: []string{"public"}},
+		{allow: []string{"*"}, deny: []string{"private"}},
+	} {
+		var objects []runtime.Object
+		for _, tt := range []struct{ name, ns string }{
+			{"allowed", "public"}, {"hidden", "private"}, {"empty-claim", ""}, {"unbound", ""},
+		} {
+			pv := &corev1.PersistentVolume{ObjectMeta: metav1.ObjectMeta{Name: tt.name}}
+			if tt.name != "unbound" {
+				pv.Spec.ClaimRef = &corev1.ObjectReference{Namespace: tt.ns, Name: "claim"}
+			}
+			objects = append(objects, pv)
+		}
+		p := testProvider(objects...)
+		p.policy = policy
+		out, err := p.list(context.Background(), tool.Caller{}, listInput{Kind: "pv"})
+		if err != nil || strings.Contains(out, "hidden") || strings.Contains(out, "private") {
+			t.Fatal(out, err)
+		}
+		for _, name := range []string{"allowed", "empty-claim", "unbound"} {
+			if !strings.Contains(out, name) {
+				t.Fatal(out)
+			}
+			got, err := p.get(context.Background(), tool.Caller{}, getInput{Kind: "pv", Name: name})
+			if err != nil || !strings.Contains(got, "kind: PersistentVolume") {
+				t.Fatal(got, err)
+			}
+		}
+		before := len(p.client.(*fake.Clientset).Actions())
+		out, err = p.get(context.Background(), tool.Caller{}, getInput{Kind: "pv", Name: "hidden"})
+		if out != "" || !errors.Is(err, tool.ErrDenied) || err.Error() != tool.Denied("namespace is not allowed").Error() {
+			t.Fatal(out, err)
+		}
+		if actions := p.client.(*fake.Clientset).Actions()[before:]; len(actions) != 1 || actions[0].GetResource().Resource != "persistentvolumes" {
+			t.Fatal("denied PV queried events", actions)
+		}
+	}
+}

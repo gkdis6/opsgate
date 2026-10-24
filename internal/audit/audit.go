@@ -12,15 +12,18 @@ import (
 
 // Event is one tool call. Args must already be redacted by the caller.
 type Event struct {
-	Time       time.Time      `json:"time"`
-	User       string         `json:"user"`
-	Transport  string         `json:"transport"`
-	Tool       string         `json:"tool"`
-	Args       map[string]any `json:"args,omitempty"`
-	Outcome    string         `json:"outcome"` // "ok", "error", "denied"
-	Error      string         `json:"error,omitempty"`
-	DurationMS int64          `json:"duration_ms"`
-	OutputSize int            `json:"output_bytes"`
+	Time      time.Time      `json:"time"`
+	User      string         `json:"user"`
+	Transport string         `json:"transport"`
+	Tool      string         `json:"tool"`
+	Args      map[string]any `json:"args,omitempty"`
+	Outcome   string         `json:"outcome"` // "ok", "error", "denied", "pending"
+	Error     string         `json:"error,omitempty"`
+	// Write tools only: the plan shown to the human and how it was approved.
+	Plan       string `json:"plan,omitempty"`
+	Approval   string `json:"approval,omitempty"`
+	DurationMS int64  `json:"duration_ms"`
+	OutputSize int    `json:"output_bytes"`
 }
 
 // Logger writes events. It is safe for concurrent use.

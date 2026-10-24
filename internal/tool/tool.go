@@ -37,6 +37,8 @@ type Env struct {
 	// Fallback is the caller used when the request carries no token
 	// (stdio). HTTP transports must always authenticate.
 	Fallback *Caller
+	// Confirm obtains human approval for write tools. Nil denies all writes.
+	Confirm Confirmer
 }
 
 // Spec describes a tool. Scope defaults to ops:read.

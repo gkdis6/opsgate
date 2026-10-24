@@ -1,0 +1,193 @@
+package kube
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gkdis6/opsgate/internal/tool"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+)
+
+func TestListPolicyAndValidation(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		in     listInput
+		want   string
+		denied bool
+	}{
+		{"filter", listInput{Kind: "po"}, "visible", false},
+		{"deny", listInput{Kind: "pods", Namespace: "private"}, "", true},
+		{"invalid namespace", listInput{Kind: "pods", Namespace: "../x"}, "invalid name", false},
+		{"selector", listInput{Kind: "po", LabelSelector: "x in ("}, "invalid label_selector", false},
+		{"secret", listInput{Kind: "secrets"}, "supported kinds:", false},
+		{"cluster namespace", listInput{Kind: "no", Namespace: "public"}, "cluster scoped", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p := testProvider(&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "visible", Namespace: "public"}}, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "hidden", Namespace: "private"}})
+			text, err := p.list(context.Background(), tool.Caller{}, tt.in)
+			if tt.denied {
+				if !errors.Is(err, tool.ErrDenied) {
+					t.Fatal(err)
+				}
+				if len(p.client.(*fake.Clientset).Actions()) != 0 {
+					t.Fatal("denied request reached cluster")
+				}
+				return
+			}
+			if err != nil {
+				text = err.Error()
+			}
+			if !strings.Contains(text, tt.want) || strings.Contains(text, "hidden") {
+				t.Fatal(text, err)
+			}
+		})
+	}
+}
+
+func TestListTruncation(t *testing.T) {
+	var objects []runtime.Object
+	for i := 0; i < 3; i++ {
+		objects = append(objects, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("pod-%d", i), Namespace: "public"}})
+	}
+	p := testProvider(objects...)
+	out, err := p.list(context.Background(), tool.Caller{}, listInput{Kind: "pods", Limit: 1})
+	if err != nil || !strings.Contains(out, "truncated to 1") || strings.Contains(out, "pod-1") {
+		t.Fatal(out, err)
+	}
+}
+
+func TestSanitize(t *testing.T) {
+	for _, kind := range []string{"pods", "deployments", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs"} {
+		t.Run(kind, func(t *testing.T) {
+			spec := map[string]any{}
+			for _, field := range []string{"containers", "initContainers", "ephemeralContainers"} {
+				spec[field] = []any{map[string]any{"name": "app", "env": []any{map[string]any{"name": "DATABASE_URL", "value": "topsecret"}, map[string]any{"name": "NORMAL", "value": "keep"}, map[string]any{"name": "TOKEN", "valueFrom": map[string]any{"secretKeyRef": map[string]any{"name": "reference", "key": "token"}}}}}}
+			}
+			m := map[string]any{"metadata": map[string]any{"managedFields": []any{"private"}, "annotations": map[string]any{"kubectl.kubernetes.io/last-applied-configuration": "topsecret"}}}
+			switch kind {
+			case "pods":
+				m["spec"] = spec
+			case "cronjobs":
+				m["spec"] = map[string]any{"jobTemplate": map[string]any{"spec": map[string]any{"template": map[string]any{"spec": spec}}}}
+			default:
+				m["spec"] = map[string]any{"template": map[string]any{"spec": spec}}
+			}
+			sanitize(m, kind, false)
+			text := fmt.Sprint(m)
+			for _, bad := range []string{"topsecret", "managedFields", "last-applied-configuration"} {
+				if strings.Contains(text, bad) {
+					t.Fatal(text)
+				}
+			}
+			for _, good := range []string{"[REDACTED]", "keep", "reference"} {
+				if !strings.Contains(text, good) {
+					t.Fatal(text)
+				}
+			}
+		})
+	}
+	for _, show := range []bool{true, false} {
+		m := map[string]any{"data": map[string]any{"a": "é"}, "binaryData": map[string]any{"b": "YWJj"}}
+		sanitize(m, "configmaps", show)
+		s := fmt.Sprint(m)
+		if !show && (!strings.Contains(s, "<2 bytes hidden>") || !strings.Contains(s, "<3 bytes hidden>")) {
+			t.Fatal(s)
+		}
+		if show && !strings.Contains(s, "YWJj") {
+			t.Fatal(s)
+		}
+	}
+}
+
+func TestGet(t *testing.T) {
+	for _, tt := range []struct {
+		in   getInput
+		want string
+	}{
+		{getInput{Kind: "cm", Namespace: "public", Name: "settings"}, "<6 bytes hidden>"},
+		{getInput{Kind: "cm", Name: "settings"}, "namespace is required"},
+		{getInput{Kind: "cm", Namespace: "private", Name: "settings"}, "denied by policy"},
+		{getInput{Kind: "cm", Namespace: "public", Name: "../bad"}, "invalid name"},
+	} {
+		p := testProvider(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "public"}, Data: map[string]string{"password": "secret"}})
+		out, err := p.get(context.Background(), tool.Caller{}, tt.in)
+		if err != nil {
+			out = err.Error()
+		}
+		if !strings.Contains(out, tt.want) || strings.Contains(out, "password: secret") {
+			t.Fatal(out)
+		}
+	}
+}
+
+func TestPodProblems(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		pod  corev1.Pod
+		want string
+	}{
+		{"not ready", corev1.Pod{Status: corev1.PodStatus{Phase: corev1.PodRunning}}, "not Ready"},
+		{"pending", corev1.Pod{ObjectMeta: metav1.ObjectMeta{CreationTimestamp: metav1.NewTime(time.Now().Add(-10 * time.Minute))}, Status: corev1.PodStatus{Phase: corev1.PodPending}}, "Pending > 5m"},
+		{"waiting", corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{Name: "app", RestartCount: 5, State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}}}}}, "CrashLoopBackOff"},
+		{"total restarts", corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{Name: "one", RestartCount: 3}, {Name: "two", RestartCount: 3}}}}, "6 total restarts"},
+		{"healthy", corev1.Pod{Status: corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}}}, ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, err := objectMap(&tt.pod)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := podProblem(m, time.Now())
+			if tt.want == "" && got != "" || !strings.Contains(got, tt.want) {
+				t.Fatal(got)
+			}
+		})
+	}
+}
+
+func TestOverview(t *testing.T) {
+	replicas := int32(3)
+	p := testProvider(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "public"}, Spec: appsv1.DeploymentSpec{Replicas: &replicas}, Status: appsv1.DeploymentStatus{ReadyReplicas: 1}}, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "hidden", Namespace: "private"}})
+	out, err := p.overview(context.Background(), tool.Caller{}, struct{}{})
+	if err != nil || !strings.Contains(out, "1/3") || strings.Contains(out, "hidden") {
+		t.Fatal(out, err)
+	}
+}
+
+func TestEveryResource(t *testing.T) {
+	for _, kind := range []string{"pods", "deployments", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs", "services", "ingresses", "configmaps", "persistentvolumeclaims", "persistentvolumes", "nodes", "namespaces"} {
+		t.Run(kind, func(t *testing.T) {
+			p := testProvider()
+			out, err := p.list(context.Background(), tool.Caller{}, listInput{Kind: kind})
+			if err != nil || !strings.Contains(out, "NAME") {
+				t.Fatal(out, err)
+			}
+			r, err := resolveKind(kind)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ns := "public"
+			if r.cluster {
+				ns = ""
+			}
+			_, err = p.get(context.Background(), tool.Caller{}, getInput{Kind: kind, Namespace: ns, Name: "missing"})
+			if err == nil || !strings.Contains(err.Error(), "not found") {
+				t.Fatal(err)
+			}
+		})
+	}
+	for alias, want := range map[string]string{"po": "pods", "deploy": "deployments", "sts": "statefulsets", "ds": "daemonsets", "rs": "replicasets", "svc": "services", "ing": "ingresses", "cm": "configmaps", "pvc": "persistentvolumeclaims", "pv": "persistentvolumes", "no": "nodes", "ns": "namespaces"} {
+		r, err := resolveKind(alias)
+		if err != nil || r.name != want {
+			t.Fatal(alias, r, err)
+		}
+	}
+}

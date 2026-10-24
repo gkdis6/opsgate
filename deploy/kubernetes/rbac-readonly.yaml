@@ -1,0 +1,42 @@
+# Create namespace opsgate before applying. Build a kubeconfig with the cluster
+# API URL, CA certificate, and a short-lived token from:
+# kubectl -n opsgate create token opsgate
+# Set its user token and context namespace to opsgate; protect the file as 0600.
+# DenyNamespaces in opsgate is defense-in-depth on top of RBAC. This role grants
+# cluster-wide reads; use namespace RoleBindings instead for narrower access.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: opsgate
+  namespace: opsgate
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: opsgate-readonly
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, services, configmaps, persistentvolumeclaims, persistentvolumes, nodes, namespaces, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets, replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: opsgate-readonly
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: opsgate-readonly
+subjects:
+  - kind: ServiceAccount
+    name: opsgate
+    namespace: opsgate

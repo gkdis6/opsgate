@@ -14,7 +14,7 @@ Only stdio is supported. Host inspection requires Linux with systemd/journald an
 
 ```sh
 go install github.com/gkdis6/opsgate/cmd/opsgate@latest
-# Or build from a checkout (Go 1.25+):
+# Or build from a checkout (Go 1.26+):
 make build
 ```
 

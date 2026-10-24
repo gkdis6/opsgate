@@ -1,6 +1,6 @@
 # Contributing
 
-Use Go 1.25 or newer, Git and make. Linux is needed for real host inspection; unit tests must run without root, systemd, a cluster or network access. Clone the repository and work on a focused branch.
+Use Go 1.26 or newer, Git and make. Linux is needed for real host inspection; unit tests must run without root, systemd, a cluster or network access. Clone the repository and work on a focused branch.
 
 For the managed development environment, set these before Go commands:
 

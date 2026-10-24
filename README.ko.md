@@ -14,7 +14,7 @@ v0.1 계약은 셸, 임의 명령 실행, Kubernetes Secrets 접근 없는 읽�
 
 ```sh
 go install github.com/gkdis6/opsgate/cmd/opsgate@latest
-# 또는 소스에서 빌드(Go 1.25 이상):
+# 또는 소스에서 빌드(Go 1.26 이상):
 make build
 ```
 

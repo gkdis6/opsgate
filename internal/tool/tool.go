@@ -106,7 +106,7 @@ func Add[In any](s *mcp.Server, env *Env, spec Spec, h Handler[In]) {
 			}
 			ev.Error = redact.String(err.Error())
 			env.Audit.Record(ev)
-			return errorResult(ev.Error), nil, nil
+			return errorResult(truncate(ev.Error, env.MaxOutputBytes)), nil, nil
 		}
 		text = truncate(redact.String(text), env.MaxOutputBytes)
 		ev.Outcome, ev.OutputSize = "ok", len(text)
@@ -147,13 +147,16 @@ func errorResult(msg string) *mcp.CallToolResult {
 }
 
 func truncate(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
 	if len(s) <= max {
 		return s
 	}
 	const note = "\n... [truncated by opsgate]"
 	cut := max - len(note)
 	if cut < 0 {
-		cut = 0
+		return note[:max]
 	}
 	// Do not split a UTF-8 sequence.
 	for cut > 0 && s[cut]&0xC0 == 0x80 {

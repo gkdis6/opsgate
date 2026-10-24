@@ -1,0 +1,24 @@
+# All supported keys. Defaults are noted where this example differs.
+server:
+  name: opsgate # MCP server name.
+  audit_log: "" # Default: stderr; set a protected JSONL file path to persist.
+  max_output_bytes: 65536 # Positive byte limit per tool response.
+  tool_timeout: 30s # Positive per-call context deadline.
+stdio:
+  user: local # Audit label; the launching OS user is the trust boundary.
+  scopes: ["ops:read"] # Only ops:read and ops:write are recognized.
+providers:
+  host:
+    enabled: false # Enable explicitly after reviewing permissions.
+    units: ["ssh.service", "nginx*"] # Glob allowlist; default [] denies all.
+    disk_paths: ["/"] # Mount points reported in the overview.
+    max_log_lines: 500 # Journal lines per call.
+  kubernetes:
+    enabled: false # Enable explicitly with narrowly scoped credentials.
+    kubeconfig: "" # In-cluster, then $KUBECONFIG, then ~/.kube/config.
+    context: "" # Empty uses the selected kubeconfig context.
+    namespaces: ["default", "apps-*"] # Glob allowlist; default [] denies all.
+    deny_namespaces: ["kube-system"] # Denies win; default [].
+    allow_logs: false # Explicit opt-in for pod logs.
+    show_configmap_data: false # Keep values hidden; expose keys only.
+    max_log_lines: 500 # Pod log lines per call.

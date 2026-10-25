@@ -112,6 +112,14 @@ func TestAuthentication(t *testing.T) {
 			if !strings.Contains(challenge, `resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"`) {
 				t.Fatalf("challenge=%q", challenge)
 			}
+			// Clients request exactly the challenge's scopes: a 401 must not
+			// narrow them, and insufficient_scope must offer every scope.
+			if tt.status == 401 && strings.Contains(challenge, "scope=") {
+				t.Fatalf("401 challenge narrows scopes: %q", challenge)
+			}
+			if tt.status == 403 && !strings.Contains(challenge, `error="insufficient_scope", scope="ops:read ops:write dev:run"`) {
+				t.Fatalf("403 challenge=%q", challenge)
+			}
 		})
 	}
 	options.Verifier = nil

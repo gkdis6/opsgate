@@ -3,7 +3,10 @@ package httpserver
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -33,10 +36,14 @@ func Handler(cfg config.Config, o Options) http.Handler {
 		}
 	}
 	stream := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return o.Server }, &mcp.StreamableHTTPOptions{SessionTimeout: 30 * time.Minute})
+	prm := cfg.Issuer() + "/.well-known/oauth-protected-resource/mcp"
+	// The SDK puts its required scopes into the 401 challenge, and MCP clients
+	// request exactly the challenge's scopes, so requiring ops:read there made
+	// clients ask for read-only tokens. Leave the challenge without a scope
+	// (clients then use scopes_supported) and enforce ops:read here instead.
 	mux.Handle("/mcp", auth.RequireBearerToken(verifier, &auth.RequireBearerTokenOptions{
-		ResourceMetadataURL: cfg.Issuer() + "/.well-known/oauth-protected-resource/mcp",
-		Scopes:              []string{config.ScopeRead},
-	})(stream))
+		ResourceMetadataURL: prm,
+	})(requireScope(config.ScopeRead, prm, stream)))
 	metadata := auth.ProtectedResourceMetadataHandler(&oauthex.ProtectedResourceMetadata{
 		Resource: cfg.ResourceURL(), AuthorizationServers: o.AuthorizationServers,
 		ScopesSupported:        config.Scopes,
@@ -49,4 +56,18 @@ func Handler(cfg config.Config, o Options) http.Handler {
 		routes(mux)
 	}
 	return common(cors(mux))
+}
+
+// requireScope rejects tokens lacking scope with RFC 6750 insufficient_scope,
+// advertising every scope so that a client re-authorizing gets a usable token.
+func requireScope(scope, resourceMetadata string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if ti := auth.TokenInfoFromContext(r.Context()); ti == nil || !slices.Contains(ti.Scopes, scope) {
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error="insufficient_scope", scope=%q, resource_metadata=%q`,
+				strings.Join(config.Scopes, " "), resourceMetadata))
+			http.Error(w, "insufficient scope", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

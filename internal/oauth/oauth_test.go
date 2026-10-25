@@ -593,3 +593,32 @@ type testSite struct {
 }
 
 func (s *testSite) Client() *http.Client { return &http.Client{Transport: s.transport} }
+
+func TestBrowserPagesEscaping(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		data pageData
+	}{
+		{"consent", pageData{Name: "<script>client</script>", Host: "client.example", URI: "https://client.example/callback", Subject: "github:operator", CSRF: "test-csrf", Scopes: []string{"ops:read", "ops:write", "dev:run"}}},
+		{"error", pageData{Error: "<script>error</script>"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			htmlPage(w, 200, tc.data)
+			body := w.Body.String()
+			if strings.Contains(strings.ToLower(body), "<script") || !strings.Contains(body, "&lt;script&gt;") || !strings.Contains(body, `class="brand">opsgate`) {
+				t.Fatalf("unsafe or unstyled page: %s", body)
+			}
+			if tc.name == "consent" {
+				for _, want := range []string{`class="host">client.example`, "unverified, self-reported", "github:operator", "Read server, Kubernetes and notes", "Change them after approval", "Start coding agents after approval", `class="chip">dev:run`} {
+					if !strings.Contains(body, want) {
+						t.Errorf("missing %q", want)
+					}
+				}
+			}
+			if w.Header().Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'" || w.Header().Get("Cache-Control") != "no-store" {
+				t.Fatal("security headers changed")
+			}
+		})
+	}
+}

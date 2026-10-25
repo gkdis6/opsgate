@@ -99,7 +99,7 @@ TLS 프록시는 `/mcp`, `/.well-known/*`, `/oauth/*`, `/approve/*`를 전달해
 | `obsidian_replace` | 정확한 부분 문자열 치환 | `path`, 비어 있지 않은 `old_text`, `new_text` 필수; `expected_count=1` 일치 필수; 동일 쓰기 조건 |
 | `obsidian_trash` | 이름 충돌 시 숫자를 붙여 로컬 .trash로 이동 | `path` 필수; 동일 쓰기 조건; 영구 삭제 안 함 |
 | `dev_projects` | 코딩 프로젝트/에이전트 허용 목록 (`dev:run`) | 인수 없음; 실행기 제한 포함 |
-| `dev_task_start` | 사람 승인 후 에이전트 시작 (`dev:run`) | 필수 `project`, `agent`, `prompt`; 선택 `approval_id`; 실행기 프롬프트 32 KiB, 공통 MCP 인수/승인 요약 16 KiB 제한 |
+| `dev_task_start` | 사람 승인 후 에이전트 시작 (`dev:run`) | 필수 `project`, `agent`, `prompt`; 선택 `approval_id`; 프롬프트 최대 32 KiB(MCP 인수 48 KiB, 승인 요약 64 KiB) |
 | `dev_task_status` | 작업 상태와 최종 메시지 (`dev:run`) | 필수 `id` |
 | `dev_task_log` | 신뢰할 수 없는 로그 페이지 (`dev:run`) | 필수 `id`; `offset=0`, `limit=65536`, 최대 262144 바이트; 원본 바이트 기준 `next_offset` |
 | `dev_task_diff` | 기준 커밋 대비 변경 통계와 패치 (`dev:run`) | 필수 `id`; MCP 출력 제한 전 최대 256 KiB |
@@ -139,6 +139,10 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 조회 도구에는 `ops:read`가 필요합니다. 쓰기는 별도 작업 허용 목록, `ops:write`, OS/RBAC 권한 및 사람의 승인이 모두 필요합니다. HTTP 진입에는 `ops:read`도 필요하므로 원격 쓰기 사용자에게 두 범위를 부여하세요. Kubernetes 네임스페이스 허용/거부 규칙은 쓰기에도 적용됩니다. 조회 유닛 목록은 재시작 권한을 부여하지 않습니다.
 
 서버는 입력을 검증하고 부작용 없는 계획을 만든 뒤 확인을 요청합니다. MCP elicitation 지원 클라이언트에는 앱 내 승인 요청을 표시하며 프로토콜 버전에 걸친 여러 차례의 입력 요청을 지원합니다. 미지원 시 builtin 인증과 `approval.web: true`가 있으면 브라우저 승인 링크와 `approval_id`를 반환합니다. 사람은 링크를 열어 동일한 사용자로 upstream에 로그인하고 작업을 검토합니다. 승인 후 정확히 같은 인수에 `approval_id`를 추가하여 재호출하세요. 승인은 만료되며 일회용이고 사용자, 도구, 마스킹 전 정규 JSON 인수의 SHA-256(`approval_id` 제외) 및 계획에 결합됩니다. 요약이 마스킹으로 바뀌면 대상을 명확히 표시할 수 없어 쓰기를 거부합니다. Kubernetes 계획에는 대상 UID가 포함되며 실행은 같은 호출의 계획과 식별자/버전 사전 조건을 사용합니다. 확인 채널이 없으면 쓰기를 거부합니다. stdio는 elicitation만 지원합니다.
+
+시간 제한 자동 승인은 `approval.window`(1m–12h, `0s`이면 비활성화)와 `approval.window_tools`(`path.Match` 도구 이름 glob 허용 목록, 빈 목록은 모두 거부)를 모두 설정해야 합니다. 예를 들어 `window: 30m`, `window_tools: [host_service_restart]`이면 브라우저의 **Approve + allow for 30m** 버튼이나 elicitation의 선택 항목 **Also auto-approve host_service_restart for 30m**으로 권한을 만들 수 있습니다. 권한은 정확히 같은 사용자와 도구에만 적용되며 이후 인수나 대상이 다른 호출도 포함합니다. 범위나 작업 허용 목록을 우회하지 않고 각 호출의 입력 검증과 계획도 수행합니다. 권한은 메모리에만 최대 100개 보관하며 사용해도 만료 시간이 연장되지 않고 재시작하면 사라집니다. 각 호출은 `approval: window`로 감사되며 권한 생성은 출처(`web` 또는 `elicitation`), 기간과 만료를 포함한 별도 `window_granted` 이벤트로 기록합니다. `require_web`이면 브라우저에서만 권한을 얻을 수 있고 stdio 쓰기는 계속 거부됩니다.
+
+승인 화면은 diff 색상이 있는 계획, 요청자, 전송 방식, 만료 및 접힌 인수를 표시합니다. 결정 후 채팅으로 돌아가 assistant에게 재시도를 요청하세요. 자동 리디렉션은 없습니다. 승인 요약은 64 KiB로 제한합니다. 원본 JSON 인수의 기본 상한은 16 KiB이고 `dev_task_start`는 32 KiB 프롬프트를 담도록 48 KiB를 허용합니다. JSON 이스케이프도 전송 크기에 포함됩니다.
 
 `approval.web: true`와 `approval.require_web: true`를 설정하면 elicitation 지원 여부와 관계없이 브라우저 승인이 필요하며 stdio 쓰기는 거부됩니다. 침해된 클라이언트 UI는 elicitation을 자동 승인할 수 있습니다. 프롬프트 인젝션은 모델이 쓰기를 요청하게 만들 수 있으므로 사람이 요약을 읽어야 합니다. [SECURITY.md](SECURITY.md)를 참고하세요.
 
@@ -217,6 +221,8 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 | `approval.ttl` | `10m` | 브라우저 승인 대기 수명 |
 | `approval.web` | `false` | 브라우저 대체 승인; builtin 인증 필수 |
 | `approval.require_web` | `false` | 브라우저 승인 필수; `approval.web` 필요, stdio 쓰기 거부 |
+| `approval.window` | `0s` | 사용자/도구 자동 승인 기간; 활성화 시 1m–12h |
+| `approval.window_tools` | `[]` | 자동 승인 가능한 도구 이름의 `path.Match` glob; 빈 목록은 모두 거부 |
 | `providers.host.restart_units` | `[]` | 별도 재시작 유닛 glob 목록; 빈 목록이면 도구 비활성화 |
 | `providers.host.command_prefix` | `[]` | 쓰기 argv 접두사, 예: [/usr/bin/sudo, -n]; 첫 항목은 절대 실행 경로, 나머지는 경로/플래그 |
 | `providers.kubernetes.rollout_restart` | `[]` | namespace/name glob 목록; 빈 목록이면 도구 비활성화 |
@@ -231,7 +237,7 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 | `providers.dev.enabled` | `false` | 개발 제공자 활성화; 모든 도구에 dev:run 필요 |
 | `providers.dev.runner_socket` | `""` | 별도 dev-runner의 절대 Unix 소켓 경로 |
 
-로그 상한은 양수로 설정하세요. 쓰기의 원본 인수는 마스킹 및 인수 감사 기록 전에 16 KiB로 제한합니다. 네 가지 쓰기 도구는 브라우저 재호출용 선택 인수 `approval_id`를 받습니다. 작업 허용 목록이 비어 있으면 해당 도구는 등록되지 않습니다. 설정 변경 후 재시작해야 합니다.
+로그 상한은 양수로 설정하세요. 쓰기의 원본 인수는 마스킹 및 인수 감사 기록 전에 16 KiB(`dev_task_start`는 48 KiB)로 제한하고 승인 요약은 64 KiB로 제한합니다. 네 가지 쓰기 도구는 브라우저 재호출용 선택 인수 `approval_id`를 받습니다. 작업 허용 목록이 비어 있으면 해당 도구는 등록되지 않습니다. 설정 변경 후 재시작해야 합니다.
 
 ## 감사 형식
 
@@ -241,7 +247,7 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 {"time":"2026-10-24T12:00:00Z","user":"local","transport":"stdio","tool":"host_service_status","args":{"unit":"ssh.service"},"outcome":"ok","duration_ms":12,"output_bytes":120}
 ```
 
-`audit.Event`의 필드: `time`(선택적 소수 초를 포함하는 RFC3339 타임스탬프), `user`, `transport`, `tool`, 선택적 마스킹된 `args`, `outcome`(`ok`, `error`, `denied`, `pending`), 선택적 마스킹된 `error`, `duration_ms`, `output_bytes`(성공 반환 텍스트 크기, 오류 시 0). 쓰기 이벤트에는 선택적 마스킹된 `plan`(사람에게 표시한 요약), `approval`(확인 방법인 `elicitation` 또는 `web`; 거부나 대기 호출에도 포함될 수 있음)이 추가됩니다. `pending`은 브라우저 승인 대기이며 반환 안내 텍스트는 `output_bytes`에 포함됩니다. 계획과 실행에는 각각 제한 시간이 적용되며 사람의 확인은 더 오래 걸릴 수 있습니다. 브라우저 결정은 `approved` 또는 `rejected` 결과, 사용자, 도구 및 승인 ID 앞 8자(`args.approval_id_prefix`)만 포함하는 별도 감사 이벤트로 기록합니다. 거부된 다중 왕복 승인 검증도 요청 상태 없이 `denied`로 기록합니다. 도구 출력 본문은 저장하지 않습니다. 기록 실패는 도구 호출을 실패시키지 않고 stderr로 보고하며 감사는 위변조 방지를 보장하지 않습니다. 민감한 정보가 남을 수 있으므로 로그를 보호하고 순환 관리하세요.
+`audit.Event`의 필드: `time`(선택적 소수 초를 포함하는 RFC3339 타임스탬프), `user`, `transport`, `tool`, 선택적 마스킹된 `args`, `outcome`(`ok`, `error`, `denied`, `pending`), 선택적 마스킹된 `error`, `duration_ms`, `output_bytes`(성공 반환 텍스트 크기, 오류 시 0). 쓰기 이벤트에는 선택적 마스킹된 `plan`(사람에게 표시한 요약), `approval`(확인 방법인 `elicitation`, `web` 또는 `window`; 거부나 대기 호출에도 포함될 수 있음)이 추가됩니다. `pending`은 브라우저 승인 대기이며 반환 안내 텍스트는 `output_bytes`에 포함됩니다. 계획과 실행에는 각각 제한 시간이 적용되며 사람의 확인은 더 오래 걸릴 수 있습니다. 브라우저 결정은 `approved` 또는 `rejected` 결과, 사용자, 도구 및 승인 ID 앞 8자(`args.approval_id_prefix`)만 포함하는 별도 감사 이벤트로 기록합니다. 거부된 다중 왕복 승인 검증도 요청 상태 없이 `denied`로 기록합니다. 도구 출력 본문은 저장하지 않습니다. 기록 실패는 도구 호출을 실패시키지 않고 stderr로 보고하며 감사는 위변조 방지를 보장하지 않습니다. 민감한 정보가 남을 수 있으므로 로그를 보호하고 순환 관리하세요.
 
 ## 개발 및 라이선스
 

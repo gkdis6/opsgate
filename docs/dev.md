@@ -115,10 +115,9 @@ global/system Git configuration, and commit signing are disabled for runner Git
 commands; diff disables external commands and text conversion. Repository local
 Git configuration must remain trusted, including any configured filters.
 
-Prompts are 1..32 KiB and requested identities at most 256 bytes. The shared MCP
-write wrapper limits all serialized arguments to 16 KiB; approval summaries are
-also limited to 16 KiB, so MCP requirements must fit beneath both limits after
-JSON and summary overhead. Logs cap at 20 MiB per task, with excess output drained
+Prompts are 1..32 KiB and requested identities at most 256 bytes. dev_task_start
+accepts up to 48 KiB of MCP arguments and approval summaries up to 64 KiB, so a
+full 32 KiB requirement fits with JSON and summary overhead. Logs cap at 20 MiB per task, with excess output drained
 and discarded. Log pages and diffs cap at 256 KiB before JSON encoding/redaction;
 MCP applies its own output cap afterwards. Final output files are read up to
 256 KiB; without a readable regular output file, the last 8 KiB of log is used.

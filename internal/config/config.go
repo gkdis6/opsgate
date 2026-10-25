@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -150,6 +151,11 @@ type Approval struct {
 	Web bool `yaml:"web"`
 	// RequireWeb disables in-client elicitation, including for stdio.
 	RequireWeb bool `yaml:"require_web"`
+	// Window is the optional lifetime of a user/tool auto-approval grant.
+	// Zero disables grants; otherwise it must be between 1 minute and 12 hours.
+	Window time.Duration `yaml:"window"`
+	// WindowTools is a path.Match glob allowlist. Empty permits no grants.
+	WindowTools []string `yaml:"window_tools"`
 }
 
 type Providers struct {
@@ -334,6 +340,14 @@ func Load(path string) (Config, error) {
 
 // Validate checks settings that do not depend on the transport.
 func (c Config) Validate() error {
+	if c.Approval.Window != 0 && (c.Approval.Window < time.Minute || c.Approval.Window > 12*time.Hour) {
+		return fmt.Errorf("approval.window must be zero or between 1m and 12h")
+	}
+	for _, pattern := range c.Approval.WindowTools {
+		if _, err := path.Match(pattern, ""); err != nil {
+			return fmt.Errorf("approval.window_tools: invalid glob: %w", err)
+		}
+	}
 	if c.Server.MaxOutputBytes <= 0 {
 		return fmt.Errorf("server.max_output_bytes must be positive")
 	}

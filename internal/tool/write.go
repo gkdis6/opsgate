@@ -59,6 +59,8 @@ type WriteHandler[In WriteInput] struct {
 type ConfirmRequest struct {
 	Caller Caller
 	Tool   string
+	// Title is the tool's human-readable title, for approval screens only.
+	Title string
 	// Args are redacted arguments for display only, without approval_id.
 	// ArgsHash binds the canonical unredacted arguments, without approval_id.
 	Args       map[string]any
@@ -157,7 +159,7 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 				return "", err
 			}
 			ev.Approval, err = env.Confirm.Confirm(ctx, req, ConfirmRequest{
-				Caller: c, Tool: spec.Name, Args: args, ArgsHash: argsHash, Summary: ev.Plan, ApprovalID: in.approvalID(),
+				Caller: c, Tool: spec.Name, Title: spec.Title, Args: args, ArgsHash: argsHash, Summary: ev.Plan, ApprovalID: in.approvalID(),
 			})
 			if err != nil {
 				if errors.As(err, &input) && input != nil {

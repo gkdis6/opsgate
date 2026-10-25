@@ -79,7 +79,7 @@ func TestInvalidRequests(t *testing.T) {
 		{name: "no subject", ttl: time.Minute, mutate: func(r *tool.ConfirmRequest) { r.Caller.User = "" }},
 		{name: "no summary", ttl: time.Minute, mutate: func(r *tool.ConfirmRequest) { r.Summary = "" }},
 		{name: "invalid approval id", ttl: time.Minute, mutate: func(r *tool.ConfirmRequest) { r.ApprovalID = "invalid" }},
-		{name: "large summary", ttl: time.Minute, mutate: func(r *tool.ConfirmRequest) { r.Summary = strings.Repeat("a", 16<<10+1) }},
+		{name: "large summary", ttl: time.Minute, mutate: func(r *tool.ConfirmRequest) { r.Summary = strings.Repeat("a", 64<<10+1) }},
 		{name: "large args", ttl: time.Minute, mutate: func(r *tool.ConfirmRequest) { r.Args["large"] = strings.Repeat("a", 64<<10) }},
 		{name: "invalid args", ttl: time.Minute, mutate: func(r *tool.ConfirmRequest) { r.Args["invalid"] = make(chan int) }},
 		{name: "cancelled", ttl: time.Minute, cancel: true},

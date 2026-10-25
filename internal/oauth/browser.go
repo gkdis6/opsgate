@@ -3,7 +3,6 @@ package oauth
 import (
 	"context"
 	"encoding/json"
-	"html/template"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,34 +12,25 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
+
+	"github.com/gkdis6/opsgate/internal/ui"
 )
 
-// The consent page is often opened inside a phone's in-app auth browser, so it
-// needs a viewport and large touch targets. The redirect host is the one fact
-// a person must check (DCR lets anyone register a client), so it is the most
-// prominent element; the client name is self-asserted and labelled as such.
-var page = template.Must(template.New("page").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opsgate authorization</title>
-<style>
-:root{color-scheme:light dark;--fg:#1a1a1a;--muted:#5c5c5c;--bg:#fafafa;--card:#fff;--line:#ddd;--accent:#1f6feb;--warn:#9a6700}
-@media (prefers-color-scheme:dark){:root{--fg:#e6e6e6;--muted:#a0a0a0;--bg:#111;--card:#1c1c1c;--line:#333;--accent:#4c8dff;--warn:#d4a72c}}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,sans-serif}
-main{max-width:28rem;margin:0 auto;padding:1.5rem 1rem}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1.25rem}
-h1{font-size:1.25rem;margin:0 0 1rem}
-.host{font-size:1.4rem;font-weight:700;word-break:break-all;margin:.25rem 0 1rem}
-dl{margin:0 0 1.25rem}dt{color:var(--muted);font-size:.85rem;margin-top:.75rem}dd{margin:0;word-break:break-all}
-.note{color:var(--warn);font-size:.9rem}
-.actions{display:flex;gap:.75rem}
-button{flex:1;font:inherit;font-weight:600;padding:.85rem;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--fg)}
-button[value=approve]{background:var(--accent);border-color:var(--accent);color:#fff}
-</style></head><body><main><div class="card">{{if .Error}}<h1>Authorization failed</h1><p>{{.Error}}</p>{{else}}<h1>Authorize an unverified client</h1>
+// DCR client names are self-asserted. Keep the redirect host prominent so the
+// person can verify the destination independently of that name.
+var page = ui.NewTemplate(`{{define "title"}}{{if .Error}}Authorization failed{{else}}Authorize a connection{{end}}{{end}}
+{{define "content"}}{{if .Error}}<h1>Authorization failed</h1><p>{{.Error}}</p>{{else}}
+<h1>Authorize an unverified client</h1>
 <p class="note">Approve only if you started this connection and the redirect host below is the app you are connecting.</p>
-<dl><dt>Redirect host</dt><dd class="host">{{.Host}}</dd>
-<dt>Client name (unverified, self-reported)</dt><dd>{{.Name}}</dd>
+<div class="target"><p class="target-label">Redirect host</p><div class="host">{{.Host}}</div></div>
+<dl><dt>Client name (unverified, self-reported)</dt><dd>{{.Name}}</dd>
 <dt>Redirect URI</dt><dd>{{.URI}}</dd>
-<dt>Signed in as</dt><dd>{{.Subject}}</dd>
-<dt>Access to grant</dt><dd>{{range .Scopes}}<strong>{{.}}</strong> {{end}}</dd></dl>
-<form method="post" action="/oauth/consent"><input type="hidden" name="csrf_token" value="{{.CSRF}}"><div class="actions"><button name="decision" value="deny">Deny</button><button name="decision" value="approve">Approve</button></div></form>{{end}}</div></main></body></html>`))
+<dt>Signed in as</dt><dd>{{.Subject}}</dd></dl>
+<h2>Access to grant</h2><ul class="scopes">{{range .Scopes}}<li><span class="chip">{{.}}</span>
+{{if eq . "ops:read"}}Read server, Kubernetes and notes{{else if eq . "ops:write"}}Change them after approval{{else if eq . "dev:run"}}Start coding agents after approval{{end}}</li>{{end}}</ul>
+<form method="post" action="/oauth/consent"><input type="hidden" name="csrf_token" value="{{.CSRF}}"><div class="actions">
+<button class="secondary" name="decision" value="deny">Deny</button><button class="primary" name="decision" value="approve">Approve</button>
+</div></form>{{end}}{{end}}`)
 
 type pageData struct {
 	Error, Name, Host, URI, Subject, CSRF string
@@ -49,9 +39,7 @@ type pageData struct {
 
 func htmlPage(w http.ResponseWriter, status int, data pageData) {
 	htmlHeaders(w)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	_ = page.Execute(w, data)
+	ui.Render(w, status, page, data)
 }
 func htmlHeaders(w http.ResponseWriter) {
 	noStore(w)

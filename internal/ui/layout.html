@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{template "title" .}} · opsgate</title>
+<style>
+:root{color-scheme:light dark;--bg:#f2f5f8;--card:#fff;--fg:#172334;--muted:#536479;--line:#cbd5df;--accent:#185ac0;--on-accent:#fff;--target:#f4f7fb;--danger:#b42332;--added:#e1f4e7;--removed:#ffe5e7}
+@media(prefers-color-scheme:dark){:root{--bg:#10161e;--card:#19222e;--fg:#edf2f8;--muted:#a9b8ca;--line:#425167;--accent:#a1c7ff;--on-accent:#10213b;--target:#121c29;--danger:#ffabb3;--added:#183e2c;--removed:#49232d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:1rem/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:36rem;margin:0 auto;padding:1.25rem 1rem 2.5rem}
+.brand{color:var(--muted);font-weight:650;letter-spacing:.04em;margin:0 0 .75rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:1rem;padding:clamp(1rem,4vw,1.75rem)}
+h1{font-size:1.65rem;line-height:1.25;overflow-wrap:anywhere;margin:0 0 1rem;letter-spacing:-.02em}
+h2{font-size:1rem;margin:0 0 .5rem}
+p{margin:.75rem 0 1rem}
+.muted,dt,.note{color:var(--muted)}
+.target{background:var(--target);border:1px solid var(--line);border-radius:.65rem;padding:1rem;margin:1rem 0;overflow-wrap:anywhere}
+.target-label{color:var(--muted);margin:0 0 .35rem}
+.host{font-size:1.65rem;line-height:1.35;font-weight:750;overflow-wrap:anywhere}
+dl{margin:1.25rem 0}dt{margin-top:.75rem}dd{margin:0;overflow-wrap:anywhere}
+pre,.plan{font:1rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4}
+pre{margin:.5rem 0}
+.plan{padding:.75rem 0}.plan-line{display:block;padding:0 1rem;min-height:1.55em}
+.added{background:var(--added)}.removed{background:var(--removed)}.hunk{color:var(--muted)}
+details{border-top:1px solid var(--line);margin:1rem 0;padding-top:.25rem}
+summary{cursor:pointer;min-height:44px;padding:.6rem 0;font-weight:600}
+.actions{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.5rem}
+button{cursor:pointer;font:inherit;font-weight:650;min-height:48px;padding:.7rem 1rem;border:1px solid var(--line);border-radius:.6rem;flex:1 1 8rem;color:var(--fg);background:var(--card)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+button.outline{background:transparent;border-color:var(--accent);color:var(--accent);flex-basis:100%}
+button.danger{color:var(--danger);border-color:var(--danger)}
+button:hover{filter:brightness(.94)}button:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.scopes{list-style:none;padding:0;margin:.5rem 0}.scopes li{margin:.75rem 0}.chip{display:inline-block;padding:.15rem .6rem;background:var(--target);border:1px solid var(--line);border-radius:2rem;font-weight:650;margin-right:.35rem}
+.status{font-size:2rem}.success{color:var(--accent)}
+</style>
+</head>
+<body><main><header class="brand">opsgate</header><section class="card">{{template "content" .}}</section></main></body>
+</html>

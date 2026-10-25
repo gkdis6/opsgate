@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"encoding/json"
-	"html/template"
+	"fmt"
+	"math"
 	"net/http"
-	"time"
+	"strings"
 
 	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/redact"
+	"github.com/gkdis6/opsgate/internal/ui"
 )
 
 // Routes registers the /approve/ pages when web approval is enabled.
@@ -18,6 +20,9 @@ func (m *Manager) Routes(mux *http.ServeMux) {
 		return
 	}
 	protect := http.NewCrossOriginProtection()
+	protect.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ui.Message(w, http.StatusForbidden, "Approval forbidden", "This request cannot be accepted from another site.")
+	}))
 	for _, method := range []string{"GET", "POST"} {
 		mux.Handle(method+" /approve/{id}", securityHeaders(protect.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			m.mu.Lock()
@@ -25,7 +30,7 @@ func (m *Manager) Routes(mux *http.ServeMux) {
 			exists := validID(r.PathValue("id")) && m.approvals[r.PathValue("id")] != nil
 			m.mu.Unlock()
 			if !exists {
-				http.NotFound(w, r)
+				unavailablePage(w)
 				return
 			}
 			m.browser.RequireUser(m.page).ServeHTTP(w, r)
@@ -39,14 +44,15 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		next.ServeHTTP(w, r)
 	})
 }
 
 func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
-	var decisionEvent *audit.Event
+	var decisionEvent, grantEvent *audit.Event
 	if !validID(r.PathValue("id")) {
-		http.NotFound(w, r)
+		unavailablePage(w)
 		return
 	}
 	p := m.lockApproval(w, r, subject)
@@ -58,7 +64,7 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 		m.mu.Unlock()
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		if err := r.ParseForm(); err != nil {
-			http.Error(w, "invalid form", http.StatusBadRequest)
+			ui.Message(w, http.StatusBadRequest, "Invalid form", "The approval form could not be read.")
 			return
 		}
 		p = m.lockApproval(w, r, subject)
@@ -69,50 +75,66 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 		if len(r.PostForm) != 2 || len(csrf) != 1 || len(decision) != 1 ||
 			subtle.ConstantTimeCompare([]byte(csrf[0]), []byte(p.csrf)) != 1 {
 			m.mu.Unlock()
-			http.Error(w, "forbidden", http.StatusForbidden)
+			ui.Message(w, http.StatusForbidden, "Approval forbidden", "The approval form could not be verified.")
 			return
 		}
-		if decision[0] != "approve" && decision[0] != "reject" {
+		if decision[0] != "approve" && decision[0] != "reject" &&
+			(decision[0] != "approve_window" || !m.windowEligible(p.tool)) {
 			m.mu.Unlock()
-			http.Error(w, "invalid decision", http.StatusBadRequest)
+			ui.Message(w, http.StatusBadRequest, "Invalid decision", "Choose one of the available approval options.")
 			return
 		}
 		if p.decision != "" || p.used {
 			m.mu.Unlock()
-			http.Error(w, "approval already decided", http.StatusConflict)
+			ui.Message(w, http.StatusConflict, "Approval already decided", "This approval already has a decision. Return to your chat.")
 			return
 		}
-		p.decision = "rejected"
-		if decision[0] == "approve" {
-			p.decision = "approved"
+		if decision[0] == "approve_window" {
+			var err error
+			grantEvent, err = m.grantLocked(p.user, p.transport, p.tool, "web")
+			if err != nil {
+				m.mu.Unlock()
+				ui.Message(w, http.StatusServiceUnavailable, "Approval window unavailable", "Too many approval windows are active. Approve this call only, or try again after expiry.")
+				return
+			}
+			p.window = m.window
+		}
+		p.decision = "approved"
+		if decision[0] == "reject" {
+			p.decision = "rejected"
 		}
 		decisionEvent = &audit.Event{Time: m.now(), User: redact.String(p.user), Transport: p.transport,
 			Tool: p.tool, Outcome: p.decision, Approval: "web", Args: map[string]any{"approval_id_prefix": p.id[:8]}}
 	}
-	view := struct {
-		Tool, Summary, Args, User, Transport, Expires, CSRF, Decision string
-		Used                                                          bool
-	}{
-		Tool: p.tool, Summary: p.summary, User: p.user, Transport: p.transport,
-		Expires: p.expires.UTC().Format(time.RFC3339Nano), CSRF: p.csrf,
-		Decision: p.decision, Used: p.used,
+	view := approvalView{
+		PageTitle: "Approve: " + p.title, Tool: p.tool, Lines: planLines(p.summary), User: p.user, Transport: p.transport,
+		Expires: fmt.Sprintf("Expires in %d min (%s UTC)", int(math.Ceil(p.expires.Sub(m.now()).Minutes())), p.expires.UTC().Format("15:04")),
+		CSRF:    p.csrf, Used: p.used,
+	}
+	if m.windowEligible(p.tool) {
+		view.Window = windowLabel(m.window)
+	}
+	if p.decision != "" {
+		view.Status = "Approved"
+		if p.decision == "rejected" {
+			view.Status = "Rejected"
+		} else if p.window != 0 {
+			view.Status = "Allowed for " + windowLabel(p.window)
+		}
+		view.PageTitle = view.Status
 	}
 	argsJSON := p.args
 	m.mu.Unlock()
+	if grantEvent != nil {
+		m.audit.Record(*grantEvent)
+	}
 	if decisionEvent != nil {
 		m.audit.Record(*decisionEvent)
 	}
 	var args bytes.Buffer
 	_ = json.Indent(&args, argsJSON, "", "  ")
 	view.Args = args.String()
-
-	var body bytes.Buffer
-	if err := approvalPage.Execute(&body, view); err != nil {
-		http.Error(w, "cannot render approval", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(body.Bytes())
+	ui.Render(w, http.StatusOK, approvalPage, view)
 }
 
 // lockApproval returns an owned, live approval with m.mu held on success.
@@ -122,26 +144,61 @@ func (m *Manager) lockApproval(w http.ResponseWriter, r *http.Request, subject s
 	p := m.approvals[r.PathValue("id")]
 	if p == nil {
 		m.mu.Unlock()
-		http.NotFound(w, r)
+		unavailablePage(w)
 		return nil
 	}
 	if subject != p.user {
 		m.mu.Unlock()
-		http.Error(w, "forbidden", http.StatusForbidden)
+		ui.Message(w, http.StatusForbidden, "Approval forbidden", "Sign in as the user who requested this approval.")
 		return nil
 	}
 	return p
 }
 
-var approvalPage = template.Must(template.New("approval").Parse(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>opsgate approval</title></head>
-<body><h1>Approve an opsgate action</h1>
-<dl><dt>Tool</dt><dd>{{.Tool}}</dd><dt>Summary</dt><dd><pre>{{.Summary}}</pre></dd>
-<dt>Arguments</dt><dd><pre>{{.Args}}</pre></dd>
-<dt>Requester</dt><dd>{{.User}} via {{.Transport}}</dd><dt>Expires</dt><dd>{{.Expires}}</dd></dl>
-{{if .Used}}<p>Approval already used.</p>
-{{else if .Decision}}<p>Decision: {{.Decision}}. Return to your client to continue.</p>
-{{else}}<form method="post"><input type="hidden" name="csrf" value="{{.CSRF}}">
-<button type="submit" name="decision" value="approve">Approve</button>
-<button type="submit" name="decision" value="reject">Reject</button></form>{{end}}
-</body></html>`))
+func unavailablePage(w http.ResponseWriter) {
+	ui.Message(w, http.StatusNotFound, "Approval unavailable", "This approval is unknown or has expired. Ask your assistant to request a new approval.")
+}
+
+type approvalView struct {
+	PageTitle, Tool, Args, User, Transport, Expires, CSRF, Status, Window string
+	Lines                                                                 []planLine
+	Used                                                                  bool
+}
+
+type planLine struct{ Text, Class string }
+
+func planLines(summary string) []planLine {
+	lines := strings.Split(summary, "\n")
+	out := make([]planLine, 0, len(lines))
+	for _, line := range lines {
+		class := ""
+		switch {
+		case strings.HasPrefix(line, "+"):
+			class = "added"
+		case strings.HasPrefix(line, "-"):
+			class = "removed"
+		case strings.HasPrefix(line, "@@"):
+			class = "hunk"
+		}
+		out = append(out, planLine{line, class})
+	}
+	return out
+}
+
+var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
+{{define "content"}}
+{{if .Status}}<h1 class="status">{{.Status}}</h1><p>Tool: <strong>{{.Tool}}</strong></p>
+{{else}}<h1>{{.PageTitle}}</h1><p>Review the target and planned changes before approving.</p>{{end}}
+<div class="target plan" aria-label="Target and plan">{{range .Lines}}<span class="plan-line {{.Class}}">{{if .Text}}{{.Text}}{{else}} {{end}}</span>{{end}}</div>
+{{if .Status}}
+{{if .Used}}<p class="muted">Approval already used.</p>{{end}}
+<p>Return to your chat — the assistant will continue when you ask it to retry.</p>
+{{else}}
+<dl><dt>Requester</dt><dd>{{.User}} via {{.Transport}}</dd><dt>Expires</dt><dd>{{.Expires}}</dd></dl>
+<details><summary>Arguments</summary><pre>{{.Args}}</pre></details>
+<form method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><div class="actions">
+<button class="secondary" type="submit" name="decision" value="reject">Reject</button>
+<button class="primary" type="submit" name="decision" value="approve">Approve</button>
+{{if .Window}}<button class="primary outline" type="submit" name="decision" value="approve_window">Approve + allow for {{.Window}}</button>{{end}}
+</div>{{if .Window}}<p class="note">The window allows {{.Tool}} with any valid arguments for your user for the next {{.Window}}.</p>{{end}}</form>
+{{end}}{{end}}`)

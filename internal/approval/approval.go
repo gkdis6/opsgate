@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -31,25 +32,29 @@ type BrowserAuth interface {
 
 // Manager implements tool.Confirmer.
 type Manager struct {
-	mu         sync.Mutex
-	audit      *audit.Logger
-	requireWeb bool
-	ttl        time.Duration
-	publicURL  string
-	browser    BrowserAuth
-	approvals  map[string]*pending
-	key        []byte
-	used       map[string]time.Time
-	now        func() time.Time
+	mu          sync.Mutex
+	audit       *audit.Logger
+	requireWeb  bool
+	ttl         time.Duration
+	publicURL   string
+	browser     BrowserAuth
+	approvals   map[string]*pending
+	key         []byte
+	used        map[string]time.Time
+	now         func() time.Time
+	window      time.Duration
+	windowTools []string
+	grants      map[grantKey]time.Time
 }
 
 type pending struct {
-	id, csrf, user, transport, tool, summary string
-	args                                     []byte
-	hash                                     [sha256.Size]byte
-	expires                                  time.Time
-	decision                                 string
-	used                                     bool
+	id, csrf, user, transport, tool, title, summary string
+	args                                            []byte
+	hash                                            [sha256.Size]byte
+	expires                                         time.Time
+	decision                                        string
+	used                                            bool
+	window                                          time.Duration
 }
 
 // New returns a Manager. browser may be nil, which disables web approval.
@@ -58,6 +63,7 @@ func New(cfg config.Approval, publicURL string, browser BrowserAuth, logger *aud
 	m := &Manager{
 		audit: logger, requireWeb: cfg.RequireWeb, ttl: cfg.TTL, publicURL: strings.TrimRight(publicURL, "/"), browser: browser,
 		approvals: make(map[string]*pending), used: make(map[string]time.Time), now: time.Now,
+		window: cfg.Window, windowTools: slices.Clone(cfg.WindowTools), grants: make(map[grantKey]time.Time),
 	}
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err == nil {
@@ -80,7 +86,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 		return "", err
 	}
 	if m.ttl <= 0 || r.Caller.User == "" || len(r.Caller.User) > 1024 ||
-		len(r.Caller.Transport) > 64 || r.Tool == "" || len(r.Tool) > 256 || r.Summary == "" || len(r.Summary) > 16<<10 {
+		len(r.Caller.Transport) > 64 || r.Tool == "" || len(r.Tool) > 256 || r.Summary == "" || len(r.Summary) > 64<<10 {
 		return "", tool.Denied("invalid approval request or TTL")
 	}
 	if r.ApprovalID != "" && !validID(r.ApprovalID) {
@@ -95,6 +101,13 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	}
 	if m.requireWeb && r.Caller.Transport != "http" {
 		return "", tool.Denied("browser approval is required")
+	}
+	m.mu.Lock()
+	m.sweepLocked()
+	granted := m.windowEligible(r.Tool) && m.now().Before(m.grants[grantKey{r.Caller.User, r.Tool}])
+	m.mu.Unlock()
+	if granted {
+		return "window", nil
 	}
 	hash := r.ArgsHash
 	if req != nil && req.Params != nil {
@@ -155,7 +168,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	}
 	p := &pending{
 		id: id, csrf: csrf, user: r.Caller.User, transport: r.Caller.Transport,
-		tool: r.Tool, summary: r.Summary, args: args, hash: hash,
+		tool: r.Tool, title: displayTitle(r), summary: r.Summary, args: args, hash: hash,
 		expires: m.now().Add(m.ttl),
 	}
 	m.approvals[id] = p
@@ -188,6 +201,11 @@ func (m *Manager) sweepLocked() {
 			delete(m.used, nonce)
 		}
 	}
+	for key, expires := range m.grants {
+		if !now.Before(expires) {
+			delete(m.grants, key)
+		}
+	}
 }
 
 func randomToken(size int) (string, error) {
@@ -211,3 +229,12 @@ func validID(id string) bool {
 }
 
 var _ tool.Confirmer = (*Manager)(nil)
+
+// displayTitle names the tool for people: its title when it has one (titles
+// are fixed by the server, not by the client), else its name.
+func displayTitle(r tool.ConfirmRequest) string {
+	if t := strings.TrimSpace(r.Title); t != "" && len(t) <= 128 {
+		return t
+	}
+	return r.Tool
+}

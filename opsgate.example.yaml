@@ -37,6 +37,11 @@ auth:
 approval:
   ttl: 10m # Pending browser approval lifetime.
   web: false # Browser fallback requires builtin auth; stdio uses elicitation only.
+  require_web: false # Require browser decisions (including new windows); denies stdio writes.
+  window: 0s # Optional auto-approval lifetime: 1m..12h; zero disables it.
+  window_tools: [] # path.Match tool-name globs; empty allows none. E.g. [host_service_restart].
+  # A human must opt in. Grants cover the same user/tool with ANY valid arguments,
+  # expire without renewal on use, and are cleared on restart (100 live grants max).
 providers:
   # obsidian: # Markdown vault; no Obsidian app/CLI required.
   #   enabled: false

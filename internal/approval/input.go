@@ -11,6 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/tool"
 )
 
@@ -28,6 +29,7 @@ type inputState struct {
 	ArgsHash    [sha256.Size]byte `json:"args_hash"`
 	SummaryHash [sha256.Size]byte `json:"summary_hash"`
 	Expiry      time.Time         `json:"expiry"`
+	Window      time.Duration     `json:"window,omitempty"`
 }
 
 func (m *Manager) requestInput(r tool.ConfirmRequest, hash [sha256.Size]byte) error {
@@ -41,9 +43,18 @@ func (m *Manager) requestInput(r tool.ConfirmRequest, hash [sha256.Size]byte) er
 	if err != nil {
 		return tool.Denied("cannot create approval")
 	}
+	var window time.Duration
+	properties := map[string]any{"approve": map[string]any{"type": "boolean", "title": "Approve this action"}}
+	if m.windowEligible(r.Tool) {
+		window = m.window
+		properties["allow_window"] = map[string]any{
+			"type": "boolean", "title": fmt.Sprintf("Also auto-approve %s for %s", displayTitle(r), windowLabel(window)),
+		}
+	}
 	payload, err := json.Marshal(inputState{
 		Nonce: nonce, User: r.Caller.User, Transport: r.Caller.Transport, Tool: r.Tool,
 		ArgsHash: hash, SummaryHash: sha256.Sum256([]byte(r.Summary)), Expiry: m.now().Add(m.ttl),
+		Window: window,
 	})
 	if err != nil {
 		return tool.Denied("cannot create approval")
@@ -61,9 +72,7 @@ func (m *Manager) requestInput(r tool.ConfirmRequest, hash [sha256.Size]byte) er
 				r.Summary, r.Caller.User, r.Caller.Transport),
 			RequestedSchema: map[string]any{
 				"type": "object", "required": []string{"approve"},
-				"properties": map[string]any{"approve": map[string]any{
-					"type": "boolean", "title": "Approve this action",
-				}},
+				"properties": properties,
 			},
 		}},
 		State: state,
@@ -71,6 +80,12 @@ func (m *Manager) requestInput(r tool.ConfirmRequest, hash [sha256.Size]byte) er
 }
 
 func (m *Manager) confirmInput(state string, response mcp.InputResponse, r tool.ConfirmRequest, hash [sha256.Size]byte) (string, error) {
+	var grantEvent *audit.Event
+	defer func() {
+		if grantEvent != nil {
+			m.audit.Record(*grantEvent)
+		}
+	}()
 	invalid := tool.Denied("invalid or expired approval")
 	if len(m.key) != 32 || len(state) > maxStateBytes {
 		return "elicitation", invalid
@@ -112,6 +127,23 @@ func (m *Manager) confirmInput(state string, response mcp.InputResponse, r tool.
 	result, ok := response.(*mcp.ElicitResult)
 	if !ok || result == nil || result.Action != "accept" || result.Content["approve"] != true {
 		return "elicitation", tool.Denied("rejected by human")
+	}
+	for key := range result.Content {
+		if key != "approve" && key != "allow_window" {
+			return "elicitation", invalid
+		}
+	}
+	if value, exists := result.Content["allow_window"]; exists {
+		allow, ok := value.(bool)
+		if !ok || p.Window == 0 || p.Window != m.window || !m.windowEligible(r.Tool) || m.requireWeb {
+			return "elicitation", invalid
+		}
+		if allow {
+			grantEvent, err = m.grantLocked(r.Caller.User, r.Caller.Transport, r.Tool, "elicitation")
+			if err != nil {
+				return "elicitation", err
+			}
+		}
 	}
 	return "elicitation", nil
 }

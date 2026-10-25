@@ -40,7 +40,7 @@ type startInput struct {
 	tool.Approval
 	Project string `json:"project" jsonschema:"Exact allowlisted project name from dev_projects."`
 	Agent   string `json:"agent" jsonschema:"Exact configured agent name from dev_projects."`
-	Prompt  string `json:"prompt" jsonschema:"Full requirement, sent on stdin; 1..32768 bytes. MCP arguments and approval summaries have smaller 16 KiB limits. Do not include secrets."`
+	Prompt  string `json:"prompt" jsonschema:"Full requirement, sent on stdin; 1..32768 bytes. Do not include secrets."`
 }
 type startPlan struct {
 	Request devrunner.StartRequest
@@ -65,7 +65,7 @@ func registerTools(s *mcp.Server, env *tool.Env, p *provider) error {
 		}
 		return encode(info)
 	})
-	tool.AddWrite(s, env, tool.WriteSpec{Name: "dev_task_start", Title: "Start coding task", Scope: config.ScopeDev, Description: "After human approval, start a configured coding agent in a new branch and worktree. The agent may edit files and run commands permitted by its account and sandbox." + caution}, tool.WriteHandler[startInput]{Plan: p.plan, Apply: p.apply})
+	tool.AddWrite(s, env, tool.WriteSpec{Name: "dev_task_start", Title: "Start coding task", Scope: config.ScopeDev, MaxArgBytes: 48 << 10, Description: "After human approval, start a configured coding agent in a new branch and worktree. The agent may edit files and run commands permitted by its account and sandbox." + caution}, tool.WriteHandler[startInput]{Plan: p.plan, Apply: p.apply})
 	for _, endpoint := range []struct{ name, title, suffix string }{
 		{"dev_task_status", "Coding task status", ""},
 		{"dev_task_diff", "Coding task diff", "/diff"},

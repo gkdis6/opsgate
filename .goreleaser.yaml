@@ -1,5 +1,10 @@
 version: 2
 project_name: opsgate
+# Before hooks populate dist/third_party; GoReleaser requires its own dist empty.
+dist: dist/release
+before:
+  hooks:
+    - sh scripts/third-party-licenses.sh
 builds:
   - id: opsgate
     main: ./cmd/opsgate
@@ -21,6 +26,8 @@ archives:
       - README*
       - SECURITY.md
       - opsgate.example.yaml
+      - src: dist/third_party/**
+        dst: third_party
 checksum:
   name_template: checksums.txt
   algorithm: sha256
@@ -35,6 +42,8 @@ dockers_v2:
   - id: opsgate
     ids: [opsgate]
     dockerfile: Dockerfile
+    extra_files:
+      - dist/third_party
     images: [ghcr.io/gkdis6/opsgate]
     tags:
       - '{{ .Tag }}'

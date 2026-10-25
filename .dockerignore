@@ -8,3 +8,6 @@
 !internal/
 !internal/**/
 !internal/**/*.go
+!internal/**/*.html
+!scripts/
+!scripts/third-party-licenses.sh

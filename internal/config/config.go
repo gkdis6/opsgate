@@ -60,6 +60,17 @@ type Server struct {
 	MaxOutputBytes int `yaml:"max_output_bytes"`
 	// ToolTimeout bounds a single tool call.
 	ToolTimeout time.Duration `yaml:"tool_timeout"`
+	// Tools decides which tools exist at all. Denied tools are not
+	// registered, so they are absent from tools/list.
+	Tools ToolPolicy `yaml:"tools"`
+}
+
+// ToolPolicy holds path.Match globs over tool names. An empty Allow allows
+// every tool; Deny wins over Allow. Patterns that match no registered tool
+// are a configuration error, so typos cannot silently widen access.
+type ToolPolicy struct {
+	Allow []string `yaml:"allow"`
+	Deny  []string `yaml:"deny"`
 }
 
 // Stdio describes the identity used for the stdio transport, where the
@@ -93,6 +104,9 @@ type Auth struct {
 type User struct {
 	Subject string   `yaml:"subject"`
 	Scopes  []string `yaml:"scopes"`
+	// Tools optionally restricts this user to tools matching these globs,
+	// on top of scopes and the server-wide policy. Empty means no extra limit.
+	Tools []string `yaml:"tools"`
 }
 
 // BuiltinAuth configures the embedded OAuth 2.1 authorization server.
@@ -106,6 +120,20 @@ type BuiltinAuth struct {
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl"`
 	// MaxClients bounds Dynamic Client Registration.
 	MaxClients int `yaml:"max_clients"`
+	// AllowedRedirectHosts lists redirect URI hosts that Dynamic Client
+	// Registration accepts (exact host names; "localhost" also covers
+	// loopback IPs and any port). Empty accepts any host.
+	AllowedRedirectHosts []string `yaml:"allowed_redirect_hosts"`
+	// UnknownRedirectHosts decides what happens to a registration whose
+	// redirect host is not listed: "deny" (default when the list is set) or
+	// "approve" (the client stays pending until an admin approves it at
+	// /admin/clients). Ignored when AllowedRedirectHosts is empty.
+	UnknownRedirectHosts string `yaml:"unknown_redirect_hosts"`
+	// Admins are subjects allowed to approve pending clients.
+	Admins []string `yaml:"admins"`
+	// NotifyURL, if set, receives a JSON POST when a client awaits approval
+	// (e.g. an n8n webhook that forwards it to chat).
+	NotifyURL string `yaml:"notify_url"`
 }
 
 // Upstream is the identity provider that authenticates people.
@@ -140,6 +168,8 @@ type StaticToken struct {
 	// SHA256 is the hex SHA-256 of the token; the token itself is never stored.
 	SHA256 string   `yaml:"sha256"`
 	Scopes []string `yaml:"scopes"`
+	// Tools restricts this token like User.Tools.
+	Tools []string `yaml:"tools"`
 }
 
 // Approval configures human confirmation of write tools.

@@ -212,7 +212,7 @@ func TestOIDCSubjectOwnership(t *testing.T) {
 				}
 				return
 			}
-			if r.StatusCode != 200 || !strings.Contains(string(body), "Identity: "+subject) {
+			if r.StatusCode != 200 || !strings.Contains(string(body), "<dt>Signed in as</dt><dd>"+subject+"</dd>") {
 				t.Fatalf("subject rejected: %d %s", r.StatusCode, body)
 			}
 			if strings.HasPrefix(subject, "oidc:") {

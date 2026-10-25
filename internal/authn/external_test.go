@@ -36,6 +36,7 @@ func TestExternal(t *testing.T) {
 		fallback       bool
 		customAudience bool
 		wantScopes     []string
+		wantTools      []string
 		invalid        bool
 	}{
 		{name: "valid", wantScopes: []string{config.ScopeRead, config.ScopeWrite}},
@@ -48,6 +49,7 @@ func TestExternal(t *testing.T) {
 		{name: "unknown kid", kid: "unknown", invalid: true},
 		{name: "user forbidden", users: []config.User{{Subject: "claim:other", Scopes: []string{config.ScopeRead}}}, invalid: true},
 		{name: "intersection", users: []config.User{{Subject: "claim:alice", Scopes: []string{config.ScopeRead}}}, wantScopes: []string{config.ScopeRead}},
+		{name: "tool restrictions", users: []config.User{{Subject: "claim:alice", Scopes: []string{config.ScopeRead}, Tools: []string{"host_*"}}}, wantScopes: []string{config.ScopeRead}, wantTools: []string{"host_*"}},
 		{name: "no granted scopes", users: []config.User{{Subject: "claim:alice"}}},
 		{name: "fallback", fallback: true, wantScopes: []string{config.ScopeRead, config.ScopeWrite}},
 		{name: "audience override", customAudience: true, wantScopes: []string{config.ScopeRead, config.ScopeWrite}},
@@ -136,6 +138,22 @@ func TestExternal(t *testing.T) {
 			}
 			if info.UserID != "alice" || !slices.Equal(info.Scopes, tt.wantScopes) || time.Until(info.Expiration) < 59*time.Minute {
 				t.Fatalf("unexpected info: %+v", info)
+			}
+			if len(tt.users) > 0 {
+				tools, ok := info.Extra["tools"].([]string)
+				if !ok || !slices.Equal(tools, tt.wantTools) {
+					t.Fatalf("unexpected tools: %v", info.Extra)
+				}
+				if len(tools) > 0 {
+					tools[0] = "*"
+					tt.users[0].Tools[0] = "*"
+					again, err := v(context.Background(), raw, nil)
+					if err != nil || !slices.Equal(again.Extra["tools"].([]string), tt.wantTools) {
+						t.Fatalf("mutable tools: %v %v", again, err)
+					}
+				}
+			} else if _, exists := info.Extra["tools"]; exists {
+				t.Fatalf("tool restrictions without configured users: %v", info.Extra)
 			}
 		})
 	}

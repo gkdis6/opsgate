@@ -25,6 +25,8 @@ type Caller struct {
 	User      string
 	Transport string
 	Scopes    []string
+	// Tools optionally restricts this identity to matching tool-name globs.
+	Tools []string
 }
 
 func (c Caller) Has(scope string) bool { return slices.Contains(c.Scopes, scope) }
@@ -39,6 +41,8 @@ type Env struct {
 	Fallback *Caller
 	// Confirm obtains human approval for write tools. Nil denies all writes.
 	Confirm Confirmer
+	// Policy filters tools during registration. Nil allows every tool.
+	Policy *Policy
 }
 
 // Spec describes a tool. Scope defaults to ops:read.
@@ -68,6 +72,9 @@ func Denied(format string, args ...any) error {
 
 // Add registers h on s with env's guard rails.
 func Add[In any](s *mcp.Server, env *Env, spec Spec, h Handler[In]) {
+	if !env.Policy.register(spec.Name) {
+		return
+	}
 	if spec.Scope == "" {
 		spec.Scope = config.ScopeRead
 	}
@@ -98,6 +105,9 @@ func Add[In any](s *mcp.Server, env *Env, spec Spec, h Handler[In]) {
 			if !ok {
 				return "", Denied("unauthenticated")
 			}
+			if !c.allowsTool(spec.Name) {
+				return "", Denied("tool not allowed for this user")
+			}
 			if !c.Has(spec.Scope) {
 				return "", Denied("missing scope %s", spec.Scope)
 			}
@@ -112,11 +122,11 @@ func Add[In any](s *mcp.Server, env *Env, spec Spec, h Handler[In]) {
 			if errors.Is(err, ErrDenied) {
 				ev.Outcome = "denied"
 			}
-			ev.Error = truncate(redact.String(truncate(err.Error(), env.MaxOutputBytes)), env.MaxOutputBytes)
+			ev.Error = outputText(err.Error(), env.MaxOutputBytes)
 			env.Audit.Record(ev)
-			return errorResult(truncate(ev.Error, env.MaxOutputBytes)), nil, nil
+			return errorResult(ev.Error), nil, nil
 		}
-		text = truncate(redact.String(truncate(text, env.MaxOutputBytes)), env.MaxOutputBytes)
+		text = outputText(text, env.MaxOutputBytes)
 		ev.Outcome, ev.OutputSize = "ok", len(text)
 		env.Audit.Record(ev)
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil
@@ -124,9 +134,17 @@ func Add[In any](s *mcp.Server, env *Env, spec Spec, h Handler[In]) {
 }
 
 func (env *Env) caller(req *mcp.CallToolRequest) (Caller, bool) {
-	if req.Extra != nil && req.Extra.TokenInfo != nil {
+	if req != nil && req.Extra != nil && req.Extra.TokenInfo != nil {
 		ti := req.Extra.TokenInfo
-		return Caller{User: ti.UserID, Transport: "http", Scopes: ti.Scopes}, true
+		var tools []string
+		if raw, exists := ti.Extra["tools"]; exists {
+			var ok bool
+			tools, ok = raw.([]string)
+			if !ok {
+				return Caller{}, false
+			}
+		}
+		return Caller{User: ti.UserID, Transport: "http", Scopes: slices.Clone(ti.Scopes), Tools: slices.Clone(tools)}, true
 	}
 	if env.Fallback != nil {
 		return *env.Fallback, true
@@ -171,4 +189,14 @@ func truncate(s string, max int) string {
 		cut--
 	}
 	return s[:cut] + note
+}
+
+const maxProviderOutputBytes = 4 << 20
+
+func outputText(s string, max int) string {
+	if len(s) > maxProviderOutputBytes {
+		// Discard oversized output: clipping could remove a secret's terminator.
+		s = "[output exceeds 4 MiB limit; omitted by opsgate]"
+	}
+	return truncate(redact.String(s), max)
 }

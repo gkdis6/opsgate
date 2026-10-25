@@ -85,16 +85,20 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	maxArgs := r.MaxArgBytes
+	if maxArgs <= 0 {
+		maxArgs = 16 << 10
+	}
 	if m.ttl <= 0 || r.Caller.User == "" || len(r.Caller.User) > 1024 ||
-		len(r.Caller.Transport) > 64 || r.Tool == "" || len(r.Tool) > 256 || r.Summary == "" || len(r.Summary) > 64<<10 {
+		len(r.Caller.Transport) > 64 || r.Tool == "" || len(r.Tool) > 256 || r.Summary == "" || len(r.Summary) > r.SummaryLimit() {
 		return "", tool.Denied("invalid approval request or TTL")
 	}
 	if r.ApprovalID != "" && !validID(r.ApprovalID) {
 		return "web", tool.Denied("invalid or expired approval")
 	}
 	args, err := json.Marshal(redact.Value(r.Args))
-	if err != nil || len(args) > 64<<10 {
-		return "", tool.Denied("approval arguments must be JSON of at most 64 KiB")
+	if err != nil || len(args) > maxArgs {
+		return "", tool.Denied("approval arguments must be JSON of at most %d KiB", maxArgs>>10)
 	}
 	if redact.String(r.Summary) != r.Summary {
 		return "", tool.Denied("target cannot be shown unambiguously")

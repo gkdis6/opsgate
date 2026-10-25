@@ -160,7 +160,7 @@ func TestAnnotations(t *testing.T) {
 	}
 }
 
-func TestAddTruncatesBeforeRedaction(t *testing.T) {
+func TestAddRedactsBeforeTruncation(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(map[bool]string{false: "output", true: "error"}[fail], func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "audit")
@@ -182,15 +182,19 @@ func TestAddTruncatesBeforeRedaction(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := result.Content[0].(*mcp.TextContent).Text
-			if result.IsError != fail || !strings.Contains(got, redact.Mask) || !strings.Contains(got, "truncated") || strings.Contains(got, "outside-budget") || len(got) > max {
+			if result.IsError != fail || got != "password="+redact.Mask+" outside-budget" || len(got) > max {
 				t.Fatalf("result = %q, error = %v", got, result.IsError)
 			}
 			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if strings.Contains(string(data), "outside-budget") {
-				t.Fatal("audit retained error beyond output budget")
+			var ev audit.Event
+			if err := json.Unmarshal(data, &ev); err != nil {
+				t.Fatal(err)
+			}
+			if fail && ev.Error != got {
+				t.Fatalf("audit error = %q, want %q", ev.Error, got)
 			}
 		})
 	}

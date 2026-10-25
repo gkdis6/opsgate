@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -15,6 +16,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/auth"
 
 	"github.com/gkdis6/opsgate/internal/config"
 )
@@ -78,12 +81,36 @@ func subset(a, b []string) bool {
 	return true
 }
 func (s *Server) user(subject string) ([]string, bool) {
+	u, ok := s.configuredUser(subject)
+	if !ok {
+		return nil, false
+	}
+	return intersection(u.Scopes, config.Scopes), true
+}
+
+func (s *Server) configuredUser(subject string) (config.User, bool) {
 	for _, u := range s.cfg.Users {
 		if subject == u.Subject || !strings.HasPrefix(subject, "oidc:") && !strings.HasPrefix(u.Subject, "oidc:") && strings.EqualFold(subject, u.Subject) {
-			return intersection(u.Scopes, config.Scopes), true
+			return u, true
 		}
 	}
-	return nil, false
+	return config.User{}, false
+}
+
+// VerifyWithTools verifies an access token and attaches the user's tool policy.
+func (s *Server) VerifyWithTools(ctx context.Context, token string, r *http.Request) (*auth.TokenInfo, error) {
+	info, err := s.Verify(ctx, token, r)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.configuredUser(info.UserID)
+	if !ok {
+		return nil, auth.ErrInvalidToken
+	}
+	info.Extra["tools"] = slices.Clone(u.Tools)
+	return info, nil
 }
 func pkceSyntax(v string) bool {
 	if len(v) < 43 || len(v) > 128 {

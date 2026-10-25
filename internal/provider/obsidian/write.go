@@ -20,7 +20,7 @@ const noteArgBytes = 2*maxContentBytes + 16<<10
 type createInput struct {
 	tool.Approval
 	Path    string `json:"path" jsonschema:"Vault-relative note path; .md appended if omitted."`
-	Content string `json:"content" jsonschema:"Full new note text, at most 256 KiB; also subject to the shared 16 KiB JSON argument limit."`
+	Content string `json:"content" jsonschema:"Full new note text, at most 256 KiB; also subject to the tool's JSON argument limit."`
 }
 type appendInput struct {
 	tool.Approval

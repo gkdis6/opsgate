@@ -67,6 +67,8 @@ type ConfirmRequest struct {
 	ArgsHash   [sha256.Size]byte
 	Summary    string
 	ApprovalID string
+	// MaxArgBytes is the tool's argument limit, defaulting to 16 KiB.
+	MaxArgBytes int
 }
 
 // Confirmer obtains a human decision that the model cannot forge. It
@@ -93,6 +95,9 @@ func (e *InputRequired) Error() string { return "human approval input required" 
 // AddWrite registers a write tool on s. Without env.Confirm every call is
 // denied, so writes can never run unconfirmed.
 func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHandler[In]) {
+	if !env.Policy.register(spec.Name) {
+		return
+	}
 	destructive := true
 	scope := spec.Scope
 	if scope == "" {
@@ -100,8 +105,9 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 	}
 	maxArgs := spec.MaxArgBytes
 	if maxArgs <= 0 {
-		maxArgs = 16 << 10
+		maxArgs = maxArgumentBytes
 	}
+	maxSummary := (ConfirmRequest{MaxArgBytes: maxArgs}).SummaryLimit()
 	t := &mcp.Tool{
 		Name: spec.Name, Title: spec.Title, Description: spec.Description,
 		Annotations: &mcp.ToolAnnotations{
@@ -119,7 +125,7 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 		if req == nil || req.Params == nil || len(req.Params.Arguments) > maxArgs {
 			argsErr = Denied("write arguments must be JSON of at most %d KiB", maxArgs>>10)
 		} else {
-			args, argsHash, argsErr = writeArgs(req.Params.Arguments)
+			args, argsHash, argsErr = writeArgs(req.Params.Arguments, maxArgs)
 		}
 		ev := audit.Event{Time: start, Tool: spec.Name, Args: args}
 		c, ok := env.caller(req)
@@ -129,6 +135,9 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 		text, err := func() (string, error) {
 			if !ok {
 				return "", Denied("unauthenticated")
+			}
+			if !c.allowsTool(spec.Name) {
+				return "", Denied("tool not allowed for this user")
 			}
 			if !c.Has(scope) {
 				return "", Denied("missing scope %s", scope)
@@ -145,7 +154,10 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 				err = planCtx.Err()
 			}
 			cancel()
-			ev.Plan = redact.String(plan.Summary)
+			if len(plan.Summary) > maxSummary {
+				return "", Denied("approval summary exceeds %d KiB limit", maxSummary>>10)
+			}
+			ev.Plan = truncate(redact.String(plan.Summary), maxSummary)
 			if err != nil {
 				return "", err
 			}
@@ -159,7 +171,7 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 				return "", err
 			}
 			ev.Approval, err = env.Confirm.Confirm(ctx, req, ConfirmRequest{
-				Caller: c, Tool: spec.Name, Title: spec.Title, Args: args, ArgsHash: argsHash, Summary: ev.Plan, ApprovalID: in.approvalID(),
+				Caller: c, Tool: spec.Name, Title: spec.Title, Args: args, ArgsHash: argsHash, Summary: ev.Plan, ApprovalID: in.approvalID(), MaxArgBytes: maxArgs,
 			})
 			if err != nil {
 				if errors.As(err, &input) && input != nil {
@@ -192,9 +204,9 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 			}
 			text = err.Error()
 		}
-		text = truncate(redact.String(text), env.MaxOutputBytes)
+		text = outputText(text, env.MaxOutputBytes)
 		if err != nil && ev.Outcome != "pending" {
-			ev.Error = redact.String(err.Error())
+			ev.Error = text
 			env.Audit.Record(ev)
 			return errorResult(text), nil, nil
 		}

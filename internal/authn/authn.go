@@ -22,6 +22,7 @@ func Static(tokens []config.StaticToken) (auth.TokenVerifier, error) {
 		hash   []byte
 		name   string
 		scopes []string
+		tools  []string
 	}
 	entries := make([]entry, 0, len(tokens))
 	names := make(map[string]bool)
@@ -34,7 +35,7 @@ func Static(tokens []config.StaticToken) (auth.TokenVerifier, error) {
 		if err != nil || len(t.SHA256) != 64 {
 			return nil, fmt.Errorf("static token SHA256 must be 64 hex characters")
 		}
-		entries = append(entries, entry{hash, t.Name, slices.Clone(t.Scopes)})
+		entries = append(entries, entry{hash, t.Name, slices.Clone(t.Scopes), slices.Clone(t.Tools)})
 	}
 	return func(_ context.Context, token string, _ *http.Request) (*auth.TokenInfo, error) {
 		if token == "" || len(token) > maxTokenBytes {
@@ -51,7 +52,8 @@ func Static(tokens []config.StaticToken) (auth.TokenVerifier, error) {
 			return nil, auth.ErrInvalidToken
 		}
 		e := entries[match]
-		return &auth.TokenInfo{Scopes: slices.Clone(e.scopes), UserID: "static:" + e.name, Expiration: time.Now().Add(time.Hour)}, nil
+		return &auth.TokenInfo{Scopes: slices.Clone(e.scopes), UserID: "static:" + e.name, Expiration: time.Now().Add(time.Hour),
+			Extra: map[string]any{"tools": slices.Clone(e.tools)}}, nil
 	}, nil
 }
 

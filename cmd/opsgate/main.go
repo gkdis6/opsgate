@@ -109,7 +109,7 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 			return fmt.Errorf("oauth: %w", err)
 		}
 		defer as.Close()
-		o.Verifier = as.Verify
+		o.Verifier = as.VerifyWithTools
 		o.AuthorizationServers = []string{cfg.Issuer()}
 		o.Routes = append(o.Routes, as.Routes)
 		browser = as

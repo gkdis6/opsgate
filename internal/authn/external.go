@@ -49,12 +49,14 @@ func External(ctx context.Context, cfg config.ExternalAuth, resource string) (au
 	if claim == "" {
 		claim = "sub"
 	}
-	users := make(map[string][]string, len(cfg.Users))
+	users := make(map[string]config.User, len(cfg.Users))
 	for _, user := range cfg.Users {
 		if _, exists := users[user.Subject]; exists {
 			return nil, fmt.Errorf("external auth users must be unique")
 		}
-		users[user.Subject] = slices.Clone(user.Scopes)
+		user.Scopes = slices.Clone(user.Scopes)
+		user.Tools = slices.Clone(user.Tools)
+		users[user.Subject] = user
 	}
 	return func(ctx context.Context, raw string, _ *http.Request) (*auth.TokenInfo, error) {
 		if len(raw) == 0 || len(raw) > maxTokenBytes {
@@ -76,14 +78,16 @@ func External(ctx context.Context, cfg config.ExternalAuth, resource string) (au
 		if !ok {
 			return nil, auth.ErrInvalidToken
 		}
+		var extra map[string]any
 		if len(users) > 0 {
 			allowed, found := users["claim:"+user]
 			if !found {
 				return nil, auth.ErrInvalidToken
 			}
-			scopes = slices.DeleteFunc(scopes, func(s string) bool { return !slices.Contains(allowed, s) })
+			scopes = slices.DeleteFunc(scopes, func(s string) bool { return !slices.Contains(allowed.Scopes, s) })
+			extra = map[string]any{"tools": slices.Clone(allowed.Tools)}
 		}
-		return &auth.TokenInfo{UserID: user, Scopes: scopes, Expiration: token.Expiry}, nil
+		return &auth.TokenInfo{UserID: user, Scopes: scopes, Expiration: token.Expiry, Extra: extra}, nil
 	}, nil
 }
 

@@ -2,6 +2,7 @@ package tool
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -275,9 +276,10 @@ func TestWriteArgs(t *testing.T) {
 		{name: "unencodable", in: make(chan int), deny: true},
 		{name: "not object", in: []int{1}, deny: true},
 		{name: "null", in: nil, deny: true},
+		{name: "trailing JSON", in: json.RawMessage(`{} {"n":1}`), deny: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			args, _, err := writeArgs(tc.in)
+			args, _, err := writeArgs(tc.in, maxArgumentBytes)
 			if errors.Is(err, ErrDenied) != tc.deny {
 				t.Fatalf("error = %v", err)
 			}
@@ -389,6 +391,85 @@ func TestAddWriteMaxArgBytes(t *testing.T) {
 	}
 }
 
+func TestWriteArgsUsesToolLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		limit      int
+		input      string
+		wantDenied bool
+	}{
+		{"small boundary", 16, `{"value":"aaaa"}`, false},
+		{"small over limit", 16, `{"value":"aaaaa"}`, true},
+		{"default over limit", maxArgumentBytes, `{"value":"` + strings.Repeat("a", maxArgumentBytes) + `"}`, true},
+		{"large document", 256 << 10, `{"value":"` + strings.Repeat("a", 200<<10) + `"}`, false},
+		{"redaction expands beyond limit", 16, `{"password":""}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args, hash, err := writeArgs(json.RawMessage(tc.input), tc.limit)
+			if errors.Is(err, ErrDenied) != tc.wantDenied {
+				t.Fatalf("error = %v", err)
+			}
+			if tc.wantDenied {
+				if args != nil || hash != [sha256.Size]byte{} {
+					t.Fatal("denied arguments retained in audit or approval")
+				}
+			} else {
+				encoded, err := json.Marshal(args)
+				if err != nil || len(encoded) > tc.limit {
+					t.Fatalf("audit argument size = %d, error = %v", len(encoded), err)
+				}
+			}
+		})
+	}
+}
+
+func TestAddWriteBoundsAuditSummary(t *testing.T) {
+	for name, summary := range map[string]string{
+		"oversized":         strings.Repeat("x", 64<<10+1),
+		"redaction expands": strings.Repeat("password=a ", 4000),
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "audit")
+			logger, err := audit.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { logger.Close() })
+			var confirms atomic.Int32
+			cs := connectWrite(t, &Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 1024,
+				Fallback: &Caller{User: "alice", Transport: "stdio", Scopes: config.Scopes},
+				Confirm: confirmFunc(func(context.Context, *mcp.CallToolRequest, ConfirmRequest) (string, error) {
+					confirms.Add(1)
+					return "test", nil
+				}),
+			}, WriteSpec{Name: "change"}, WriteHandler[writeTestInput]{
+				Plan: func(context.Context, Caller, writeTestInput) (Plan, error) {
+					return Plan{Summary: summary}, nil
+				},
+				Apply: func(context.Context, Caller, writeTestInput, Plan) (string, error) {
+					t.Error("applied oversized summary")
+					return "", nil
+				},
+			})
+			res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "change", Arguments: map[string]any{"target": "service", "password": ""}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var ev audit.Event
+			if err := json.Unmarshal(data, &ev); err != nil {
+				t.Fatal(err)
+			}
+			if !res.IsError || confirms.Load() != 0 || len(ev.Plan) > 64<<10 || strings.Contains(ev.Plan, "password=a") || ev.Outcome != "denied" || len(ev.Error) > 1024 {
+				t.Fatalf("result = %+v, confirmations = %d, audit size = %d", res, confirms.Load(), len(data))
+			}
+		})
+	}
+}
+
 func TestWriteArgsHash(t *testing.T) {
 	inputs := []string{
 		`{"target":"glpat-aaaaaaaa","n":9007199254740993,"nested":{"b":2,"a":1}}`,
@@ -398,7 +479,7 @@ func TestWriteArgsHash(t *testing.T) {
 	}
 	var first [32]byte
 	for i, input := range inputs {
-		args, hash, err := writeArgs(json.RawMessage(input))
+		args, hash, err := writeArgs(json.RawMessage(input), maxArgumentBytes)
 		if err != nil || args["target"] != redact.Mask {
 			t.Fatalf("args = %+v; err %v", args, err)
 		}

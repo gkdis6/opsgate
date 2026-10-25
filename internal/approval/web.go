@@ -7,6 +7,9 @@ import (
 	"html/template"
 	"net/http"
 	"time"
+
+	"github.com/gkdis6/opsgate/internal/audit"
+	"github.com/gkdis6/opsgate/internal/redact"
 )
 
 // Routes registers the /approve/ pages when web approval is enabled.
@@ -16,8 +19,17 @@ func (m *Manager) Routes(mux *http.ServeMux) {
 	}
 	protect := http.NewCrossOriginProtection()
 	for _, method := range []string{"GET", "POST"} {
-		h := m.browser.RequireUser(m.page)
-		mux.Handle(method+" /approve/{id}", securityHeaders(protect.Handler(h)))
+		mux.Handle(method+" /approve/{id}", securityHeaders(protect.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			m.mu.Lock()
+			m.sweepLocked()
+			exists := validID(r.PathValue("id")) && m.approvals[r.PathValue("id")] != nil
+			m.mu.Unlock()
+			if !exists {
+				http.NotFound(w, r)
+				return
+			}
+			m.browser.RequireUser(m.page).ServeHTTP(w, r)
+		}))))
 	}
 }
 
@@ -32,6 +44,7 @@ func securityHeaders(next http.Handler) http.Handler {
 }
 
 func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
+	var decisionEvent *audit.Event
 	if !validID(r.PathValue("id")) {
 		http.NotFound(w, r)
 		return
@@ -73,6 +86,8 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 		if decision[0] == "approve" {
 			p.decision = "approved"
 		}
+		decisionEvent = &audit.Event{Time: m.now(), User: redact.String(p.user), Transport: p.transport,
+			Tool: p.tool, Outcome: p.decision, Approval: "web", Args: map[string]any{"approval_id_prefix": p.id[:8]}}
 	}
 	view := struct {
 		Tool, Summary, Args, User, Transport, Expires, CSRF, Decision string
@@ -84,6 +99,9 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 	}
 	argsJSON := p.args
 	m.mu.Unlock()
+	if decisionEvent != nil {
+		m.audit.Record(*decisionEvent)
+	}
 	var args bytes.Buffer
 	_ = json.Indent(&args, argsJSON, "", "  ")
 	view.Args = args.String()

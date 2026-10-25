@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/config"
 	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
@@ -29,14 +31,16 @@ type BrowserAuth interface {
 
 // Manager implements tool.Confirmer.
 type Manager struct {
-	mu        sync.Mutex
-	ttl       time.Duration
-	publicURL string
-	browser   BrowserAuth
-	approvals map[string]*pending
-	key       []byte
-	used      map[string]time.Time
-	now       func() time.Time
+	mu         sync.Mutex
+	audit      *audit.Logger
+	requireWeb bool
+	ttl        time.Duration
+	publicURL  string
+	browser    BrowserAuth
+	approvals  map[string]*pending
+	key        []byte
+	used       map[string]time.Time
+	now        func() time.Time
 }
 
 type pending struct {
@@ -50,9 +54,9 @@ type pending struct {
 
 // New returns a Manager. browser may be nil, which disables web approval.
 // publicURL is the origin used to build approval links.
-func New(cfg config.Approval, publicURL string, browser BrowserAuth) *Manager {
+func New(cfg config.Approval, publicURL string, browser BrowserAuth, logger *audit.Logger) *Manager {
 	m := &Manager{
-		ttl: cfg.TTL, publicURL: strings.TrimRight(publicURL, "/"), browser: browser,
+		audit: logger, requireWeb: cfg.RequireWeb, ttl: cfg.TTL, publicURL: strings.TrimRight(publicURL, "/"), browser: browser,
 		approvals: make(map[string]*pending), used: make(map[string]time.Time), now: time.Now,
 	}
 	key := make([]byte, 32)
@@ -63,7 +67,15 @@ func New(cfg config.Approval, publicURL string, browser BrowserAuth) *Manager {
 }
 
 // Confirm implements tool.Confirmer.
-func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.ConfirmRequest) (string, error) {
+func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.ConfirmRequest) (method string, err error) {
+	// Audit all denied multi round-trip verifications, including malformed input.
+	defer func() {
+		if err != nil && errors.Is(err, tool.ErrDenied) && req != nil && req.Params != nil &&
+			(req.Params.RequestState != "" || len(req.Params.InputResponses) != 0) {
+			m.audit.Record(audit.Event{Time: m.now(), User: redact.String(r.Caller.User), Transport: r.Caller.Transport,
+				Tool: r.Tool, Outcome: "denied", Approval: "elicitation", Error: redact.String(err.Error())})
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -78,9 +90,17 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	if err != nil || len(args) > 64<<10 {
 		return "", tool.Denied("approval arguments must be JSON of at most 64 KiB")
 	}
-	r.Summary = redact.String(r.Summary)
-	hash := sha256.Sum256(args)
+	if redact.String(r.Summary) != r.Summary {
+		return "", tool.Denied("target cannot be shown unambiguously")
+	}
+	if m.requireWeb && r.Caller.Transport != "http" {
+		return "", tool.Denied("browser approval is required")
+	}
+	hash := r.ArgsHash
 	if req != nil && req.Params != nil {
+		if m.requireWeb && (req.Params.RequestState != "" || len(req.Params.InputResponses) != 0) {
+			return "elicitation", tool.Denied("browser approval is required")
+		}
 		if response, ok := req.Params.InputResponses[approvalInputID]; ok {
 			return m.confirmInput(req.Params.RequestState, response, r, hash)
 		}
@@ -93,7 +113,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	if r.ApprovalID != "" {
 		defer m.mu.Unlock()
 		p := m.approvals[r.ApprovalID]
-		if p == nil || p.user != r.Caller.User || p.tool != r.Tool || p.hash != hash ||
+		if p == nil || p.user != r.Caller.User || p.transport != r.Caller.Transport || p.tool != r.Tool || p.hash != hash ||
 			p.summary != r.Summary || p.used {
 			return "web", tool.Denied("invalid or expired approval")
 		}
@@ -109,7 +129,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	}
 	m.mu.Unlock()
 
-	if supportsElicitation(req) {
+	if !m.requireWeb && supportsElicitation(req) {
 		return "elicitation", m.requestInput(r, hash)
 	}
 	if err := ctx.Err(); err != nil {

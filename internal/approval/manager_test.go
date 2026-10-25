@@ -1,6 +1,9 @@
 package approval
 
 import (
+	"os"
+	"path/filepath"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -51,7 +54,7 @@ func TestCanonicalArgs(t *testing.T) {
 	r.Args = map[string]any{"a": map[string]any{"first": "one", "second": "two"}, "z": 2}
 	r.ApprovalID = id
 	decide(t, mux, id, "approve")
-	if method, err := m.Confirm(context.Background(), nil, r); err != nil || method != "web" {
+	if method, err := m.Confirm(context.Background(), nil, hashedRequest(r)); err != nil || method != "web" {
 		t.Errorf("same canonical arguments = %q, %v", method, err)
 	}
 	r.ApprovalID = ""
@@ -59,7 +62,7 @@ func TestCanonicalArgs(t *testing.T) {
 	r.ApprovalID = pendingID(t, m, r)
 	decide(t, mux, r.ApprovalID, "approve")
 	r.Args["n"] = json.Number("9007199254740993")
-	if _, err := m.Confirm(context.Background(), nil, r); !errors.Is(err, tool.ErrDenied) {
+	if _, err := m.Confirm(context.Background(), nil, hashedRequest(r)); !errors.Is(err, tool.ErrDenied) {
 		t.Errorf("distinct integer allowed: %v", err)
 	}
 }
@@ -82,7 +85,7 @@ func TestInvalidRequests(t *testing.T) {
 		{name: "cancelled", ttl: time.Minute, cancel: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := New(config.Approval{TTL: tc.ttl}, "https://ops.example", fakeBrowser{})
+			m := New(config.Approval{TTL: tc.ttl}, "https://ops.example", fakeBrowser{}, nil)
 			r := approvalRequest()
 			if tc.mutate != nil {
 				tc.mutate(&r)
@@ -92,7 +95,7 @@ func TestInvalidRequests(t *testing.T) {
 			if tc.cancel {
 				cancel()
 			}
-			_, err := m.Confirm(ctx, nil, r)
+			_, err := m.Confirm(ctx, nil, hashedRequest(r))
 			if err == nil || len(m.approvals) != 0 {
 				t.Fatalf("invalid request created approval: %v", err)
 			}
@@ -104,7 +107,7 @@ func TestInvalidRequests(t *testing.T) {
 }
 
 func TestWebDisabled(t *testing.T) {
-	m := New(config.Approval{TTL: time.Minute}, "https://ops.example", nil)
+	m := New(config.Approval{TTL: time.Minute}, "https://ops.example", nil, nil)
 	mux := http.NewServeMux()
 	m.Routes(mux)
 	w := webRequest(mux, "GET", strings.Repeat("a", 26), "github:operator", nil, nil)
@@ -124,5 +127,30 @@ func TestCSRFIsPerApproval(t *testing.T) {
 	w := webRequest(mux, "POST", id2, "github:operator", map[string][]string{"csrf": {csrf}, "decision": {"approve"}}, nil)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("another approval's CSRF token accepted: %d", w.Code)
+	}
+}
+
+func TestRequireWebConfig(t *testing.T) {
+	cfg := config.Default()
+	cfg.HTTP.PublicURL = "https://ops.example"
+	cfg.Auth.Mode = config.AuthBuiltin
+	cfg.Approval.RequireWeb = true
+	if err := cfg.ValidateHTTP(); err == nil || !strings.Contains(err.Error(), "require_web requires approval.web") {
+		t.Fatalf("require_web without web: %v", err)
+	}
+	cfg.Approval.Web = true
+	if err := cfg.ValidateHTTP(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRequireWebYAML(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("approval:\n  web: true\n  require_web: true\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil || !cfg.Approval.RequireWeb || !cfg.Approval.Web {
+		t.Fatalf("config = %+v; err %v", cfg.Approval, err)
 	}
 }

@@ -119,9 +119,9 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 
 조회 도구에는 `ops:read`가 필요합니다. 쓰기는 별도 작업 허용 목록, `ops:write`, OS/RBAC 권한 및 사람의 승인이 모두 필요합니다. HTTP 진입에는 `ops:read`도 필요하므로 원격 쓰기 사용자에게 두 범위를 부여하세요. Kubernetes 네임스페이스 허용/거부 규칙은 쓰기에도 적용됩니다. 조회 유닛 목록은 재시작 권한을 부여하지 않습니다.
 
-서버는 입력을 검증하고 부작용 없는 계획을 만든 뒤 확인을 요청합니다. MCP elicitation 지원 클라이언트에는 앱 내 승인 요청을 표시하며 프로토콜 버전에 걸친 여러 차례의 입력 요청을 지원합니다. 미지원 시 builtin 인증과 `approval.web: true`가 있으면 브라우저 승인 링크와 `approval_id`를 반환합니다. 사람은 링크를 열어 동일한 사용자로 upstream에 로그인하고 작업을 검토합니다. 승인 후 정확히 같은 인수에 `approval_id`를 추가하여 재호출하세요. 승인은 만료되며 일회용이고 사용자, 도구, 인수 및 계획에 결합됩니다. 확인 채널이 없으면 쓰기를 거부합니다. stdio는 elicitation만 지원합니다.
+서버는 입력을 검증하고 부작용 없는 계획을 만든 뒤 확인을 요청합니다. MCP elicitation 지원 클라이언트에는 앱 내 승인 요청을 표시하며 프로토콜 버전에 걸친 여러 차례의 입력 요청을 지원합니다. 미지원 시 builtin 인증과 `approval.web: true`가 있으면 브라우저 승인 링크와 `approval_id`를 반환합니다. 사람은 링크를 열어 동일한 사용자로 upstream에 로그인하고 작업을 검토합니다. 승인 후 정확히 같은 인수에 `approval_id`를 추가하여 재호출하세요. 승인은 만료되며 일회용이고 사용자, 도구, 마스킹 전 정규 JSON 인수의 SHA-256(`approval_id` 제외) 및 계획에 결합됩니다. 요약이 마스킹으로 바뀌면 대상을 명확히 표시할 수 없어 쓰기를 거부합니다. Kubernetes 계획에는 대상 UID가 포함되며 실행은 같은 호출의 계획과 식별자/버전 사전 조건을 사용합니다. 확인 채널이 없으면 쓰기를 거부합니다. stdio는 elicitation만 지원합니다.
 
-침해된 클라이언트 UI는 elicitation을 자동 승인할 수 있습니다. 프롬프트 인젝션은 모델이 쓰기를 요청하게 만들 수 있으므로 사람이 요약을 읽어야 합니다. [SECURITY.md](SECURITY.md)를 참고하세요.
+`approval.web: true`와 `approval.require_web: true`를 설정하면 elicitation 지원 여부와 관계없이 브라우저 승인이 필요하며 stdio 쓰기는 거부됩니다. 침해된 클라이언트 UI는 elicitation을 자동 승인할 수 있습니다. 프롬프트 인젝션은 모델이 쓰기를 요청하게 만들 수 있으므로 사람이 요약을 읽어야 합니다. [SECURITY.md](SECURITY.md)를 참고하세요.
 
 ## 설정 참조
 
@@ -174,6 +174,7 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 | `auth.static[].scopes` | `[]` | 토큰 권한; HTTP 접근에 ops:read 필요 |
 | `approval.ttl` | `10m` | 브라우저 승인 대기 수명 |
 | `approval.web` | `false` | 브라우저 대체 승인; builtin 인증 필수 |
+| `approval.require_web` | `false` | 브라우저 승인 필수; `approval.web` 필요, stdio 쓰기 거부 |
 | `providers.host.restart_units` | `[]` | 별도 재시작 유닛 glob 목록; 빈 목록이면 도구 비활성화 |
 | `providers.host.command_prefix` | `[]` | 쓰기 argv 접두사, 예: [/usr/bin/sudo, -n]; 첫 항목은 절대 실행 경로, 나머지는 경로/플래그 |
 | `providers.kubernetes.rollout_restart` | `[]` | namespace/name glob 목록; 빈 목록이면 도구 비활성화 |
@@ -181,7 +182,7 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 | `providers.kubernetes.delete_pod` | `[]` | namespace/name glob 목록; 빈 목록이면 도구 비활성화 |
 | `providers.kubernetes.max_replicas` | `10` | 0 이상의 복제본 상한; 0이면 0개로만 조정 가능 |
 
-로그 상한은 양수로 설정하세요. 네 가지 쓰기 도구는 브라우저 재호출용 선택 인수 `approval_id`를 받습니다. 작업 허용 목록이 비어 있으면 해당 도구는 등록되지 않습니다. 설정 변경 후 재시작해야 합니다.
+로그 상한은 양수로 설정하세요. 쓰기의 원본 인수는 마스킹 및 인수 감사 기록 전에 16 KiB로 제한합니다. 네 가지 쓰기 도구는 브라우저 재호출용 선택 인수 `approval_id`를 받습니다. 작업 허용 목록이 비어 있으면 해당 도구는 등록되지 않습니다. 설정 변경 후 재시작해야 합니다.
 
 ## 감사 형식
 
@@ -191,7 +192,7 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 {"time":"2026-10-24T12:00:00Z","user":"local","transport":"stdio","tool":"host_service_status","args":{"unit":"ssh.service"},"outcome":"ok","duration_ms":12,"output_bytes":120}
 ```
 
-`audit.Event`의 필드: `time`(선택적 소수 초를 포함하는 RFC3339 타임스탬프), `user`, `transport`, `tool`, 선택적 마스킹된 `args`, `outcome`(`ok`, `error`, `denied`, `pending`), 선택적 마스킹된 `error`, `duration_ms`, `output_bytes`(성공 반환 텍스트 크기, 오류 시 0). 쓰기 이벤트에는 선택적 마스킹된 `plan`(사람에게 표시한 요약), `approval`(확인 방법인 `elicitation` 또는 `web`; 거부나 대기 호출에도 포함될 수 있음)이 추가됩니다. `pending`은 브라우저 승인 대기이며 반환 안내 텍스트는 `output_bytes`에 포함됩니다. 계획과 실행에는 각각 제한 시간이 적용되며 사람의 확인은 더 오래 걸릴 수 있습니다. 도구 출력 본문은 저장하지 않습니다. 기록 실패는 도구 호출을 실패시키지 않고 stderr로 보고하며 감사는 위변조 방지를 보장하지 않습니다. 민감한 정보가 남을 수 있으므로 로그를 보호하고 순환 관리하세요.
+`audit.Event`의 필드: `time`(선택적 소수 초를 포함하는 RFC3339 타임스탬프), `user`, `transport`, `tool`, 선택적 마스킹된 `args`, `outcome`(`ok`, `error`, `denied`, `pending`), 선택적 마스킹된 `error`, `duration_ms`, `output_bytes`(성공 반환 텍스트 크기, 오류 시 0). 쓰기 이벤트에는 선택적 마스킹된 `plan`(사람에게 표시한 요약), `approval`(확인 방법인 `elicitation` 또는 `web`; 거부나 대기 호출에도 포함될 수 있음)이 추가됩니다. `pending`은 브라우저 승인 대기이며 반환 안내 텍스트는 `output_bytes`에 포함됩니다. 계획과 실행에는 각각 제한 시간이 적용되며 사람의 확인은 더 오래 걸릴 수 있습니다. 브라우저 결정은 `approved` 또는 `rejected` 결과, 사용자, 도구 및 승인 ID 앞 8자(`args.approval_id_prefix`)만 포함하는 별도 감사 이벤트로 기록합니다. 거부된 다중 왕복 승인 검증도 요청 상태 없이 `denied`로 기록합니다. 도구 출력 본문은 저장하지 않습니다. 기록 실패는 도구 호출을 실패시키지 않고 stderr로 보고하며 감사는 위변조 방지를 보장하지 않습니다. 민감한 정보가 남을 수 있으므로 로그를 보호하고 순환 관리하세요.
 
 ## 개발 및 라이선스
 

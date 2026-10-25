@@ -82,7 +82,7 @@ func TestAddWriteInputRequired(t *testing.T) {
 		Plan: func(context.Context, Caller, writeTestInput) (Plan, error) {
 			return Plan{Summary: "restart service"}, nil
 		},
-		Apply: func(context.Context, Caller, writeTestInput) (string, error) {
+		Apply: func(context.Context, Caller, writeTestInput, Plan) (string, error) {
 			applies.Add(1)
 			return "changed", nil
 		},
@@ -162,7 +162,7 @@ func TestAddWrite(t *testing.T) {
 			if !tc.nilConfirm {
 				env.Confirm = confirmFunc(func(ctx context.Context, req *mcp.CallToolRequest, r ConfirmRequest) (string, error) {
 					confirms.Add(1)
-					if r.Tool != "change" || r.Caller.User != "operator" || r.Summary != "restart target password="+redact.Mask || r.ApprovalID != "test-approval" {
+					if r.Tool != "change" || r.Caller.User != "operator" || r.Summary != "restart target" || r.ApprovalID != "test-approval" {
 						t.Errorf("confirmation = %+v", r)
 					}
 					if _, exists := r.Args["approval_id"]; exists || r.Args["password"] != redact.Mask || r.Args["target"] != "service" {
@@ -188,9 +188,9 @@ func TestAddWrite(t *testing.T) {
 					if tc.planTimeout {
 						<-ctx.Done()
 					}
-					return Plan{Summary: "restart target password=hidden"}, tc.planErr
+					return Plan{Summary: "restart target"}, tc.planErr
 				},
-				Apply: func(ctx context.Context, c Caller, in writeTestInput) (string, error) {
+				Apply: func(ctx context.Context, c Caller, in writeTestInput, p Plan) (string, error) {
 					applies.Add(1)
 					if _, ok := ctx.Deadline(); !ok || ctx.Err() != nil {
 						t.Error("apply must receive a fresh bounded context")
@@ -230,7 +230,7 @@ func TestAddWrite(t *testing.T) {
 			if event.Outcome != tc.outcome || event.Approval != tc.method || event.Tool != "change" {
 				t.Errorf("audit = %+v", event)
 			}
-			if tc.wantPlan > 0 && event.Plan != "restart target password="+redact.Mask {
+			if tc.wantPlan > 0 && event.Plan != "restart target" {
 				t.Errorf("audit plan = %q", event.Plan)
 			}
 			if _, ok := event.Args["approval_id"]; ok || event.Args["password"] != redact.Mask || strings.Contains(string(data), "hidden") || strings.Contains(string(data), "input-secret") {
@@ -277,7 +277,7 @@ func TestWriteArgs(t *testing.T) {
 		{name: "null", in: nil, deny: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			args, err := writeArgs(tc.in)
+			args, _, err := writeArgs(tc.in)
 			if errors.Is(err, ErrDenied) != tc.deny {
 				t.Fatalf("error = %v", err)
 			}
@@ -285,5 +285,170 @@ func TestWriteArgs(t *testing.T) {
 				t.Errorf("integer lost precision: %v", args)
 			}
 		})
+	}
+}
+
+func TestAddWriteRejectsAmbiguousTarget(t *testing.T) {
+	for _, target := range []string{"glpat-aaaaaaaa", "glpat-bbbbbbbb"} {
+		t.Run(target, func(t *testing.T) {
+			var confirms, applies atomic.Int32
+			env := &Env{Timeout: time.Second, MaxOutputBytes: 1024,
+				Fallback: &Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeWrite}},
+				Confirm: confirmFunc(func(context.Context, *mcp.CallToolRequest, ConfirmRequest) (string, error) {
+					confirms.Add(1)
+					return "elicitation", nil
+				}),
+			}
+			cs := connectWrite(t, env, WriteSpec{Name: "change"}, WriteHandler[writeTestInput]{
+				Plan: func(_ context.Context, _ Caller, in writeTestInput) (Plan, error) {
+					return Plan{Summary: "Restart deployment prod/" + in.Target}, nil
+				},
+				Apply: func(context.Context, Caller, writeTestInput, Plan) (string, error) {
+					applies.Add(1)
+					return "changed", nil
+				},
+			})
+			result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "change", Arguments: map[string]any{"target": target, "password": ""}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "target cannot be shown unambiguously") || confirms.Load() != 0 || applies.Load() != 0 {
+				t.Fatalf("result = %+v; confirms %d applies %d", result, confirms.Load(), applies.Load())
+			}
+		})
+	}
+}
+
+func TestAddWriteRawArgumentLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit")
+	logger, err := audit.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { logger.Close() })
+	var plans atomic.Int32
+	cs := connectWrite(t, &Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 1024,
+		Fallback: &Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeWrite}},
+	}, WriteSpec{Name: "change"}, WriteHandler[writeTestInput]{
+		Plan: func(context.Context, Caller, writeTestInput) (Plan, error) {
+			plans.Add(1)
+			return Plan{Summary: "change service"}, nil
+		},
+		Apply: func(context.Context, Caller, writeTestInput, Plan) (string, error) { return "changed", nil },
+	})
+	// Escapes shrink on decoding, so only a raw-size check catches this input.
+	raw := json.RawMessage(`{"target":"service","password":"` + strings.Repeat(`\u0061`, 3000) + `"}`)
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "change", Arguments: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ev audit.Event
+	if err := json.Unmarshal(data, &ev); err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "16 KiB") || plans.Load() != 0 || ev.Args != nil || ev.Outcome != "denied" {
+		t.Fatalf("result = %+v; plans %d; audit %s", result, plans.Load(), data)
+	}
+}
+
+func TestWriteArgsHash(t *testing.T) {
+	inputs := []string{
+		`{"target":"glpat-aaaaaaaa","n":9007199254740993,"nested":{"b":2,"a":1}}`,
+		`{ "nested": {"a":1,"b":2}, "n":9007199254740993,"target":"glpat-aaaaaaaa","approval_id":"ignored" }`,
+		`{"target":"glpat-bbbbbbbb","n":9007199254740993,"nested":{"b":2,"a":1}}`,
+		`{"target":"glpat-aaaaaaaa","n":9007199254740992,"nested":{"b":2,"a":1}}`,
+	}
+	var first [32]byte
+	for i, input := range inputs {
+		args, hash, err := writeArgs(json.RawMessage(input))
+		if err != nil || args["target"] != redact.Mask {
+			t.Fatalf("args = %+v; err %v", args, err)
+		}
+		if i == 0 {
+			first = hash
+		} else if (hash == first) != (i == 1) {
+			t.Errorf("input %d: hash equality = %v", i, hash == first)
+		}
+	}
+}
+
+func TestAddWritePassesInvocationPlan(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit")
+	logger, err := audit.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { logger.Close() })
+	firstConfirm, release := make(chan struct{}), make(chan struct{})
+	var plans, confirms atomic.Int32
+	type privatePlan struct {
+		ID     int32
+		Secret string
+	}
+	env := &Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 1024,
+		Fallback: &Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeWrite}},
+		Confirm: confirmFunc(func(ctx context.Context, _ *mcp.CallToolRequest, _ ConfirmRequest) (string, error) {
+			if confirms.Add(1) == 1 {
+				close(firstConfirm)
+				select {
+				case <-release:
+				case <-ctx.Done():
+					return "", ctx.Err()
+				}
+			}
+			return "elicitation", nil
+		}),
+	}
+	cs := connectWrite(t, env, WriteSpec{Name: "change"}, WriteHandler[writeTestInput]{
+		Plan: func(context.Context, Caller, writeTestInput) (Plan, error) {
+			return Plan{Summary: "Change service", Data: privatePlan{plans.Add(1), "private-plan-data"}}, nil
+		},
+		Apply: func(_ context.Context, _ Caller, _ writeTestInput, p Plan) (string, error) {
+			data, ok := p.Data.(privatePlan)
+			if !ok {
+				return "", errors.New("invocation plan missing")
+			}
+			return fmt.Sprint(data.ID), nil
+		},
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	params := &mcp.CallToolParams{Name: "change", Arguments: map[string]any{"target": "service", "password": ""}}
+	first := make(chan *mcp.CallToolResult, 1)
+	callErr := make(chan error, 1)
+	go func() {
+		result, err := cs.CallTool(ctx, params)
+		callErr <- err
+		first <- result
+	}()
+	select {
+	case <-firstConfirm:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	second, err := cs.CallTool(ctx, params)
+	close(release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-callErr; err != nil {
+		t.Fatal(err)
+	}
+	for i, result := range []*mcp.CallToolResult{<-first, second} {
+		if result.IsError || result.Content[0].(*mcp.TextContent).Text != fmt.Sprint(i+1) {
+			t.Fatalf("invocation %d got %+v", i+1, result)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(Plan{Summary: "preview", Data: make(chan int)})
+	if err != nil || strings.Contains(string(encoded), "Data") || strings.Contains(string(data), "private-plan-data") {
+		t.Fatalf("private plan serialized: %s; audit %s; err %v", encoded, data, err)
 	}
 }

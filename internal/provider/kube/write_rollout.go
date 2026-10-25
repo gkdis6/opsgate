@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -48,27 +48,45 @@ func (p *provider) planRollout(ctx context.Context, _ tool.Caller, in rolloutInp
 			images = append(images, fmt.Sprintf("%q", image))
 		}
 	}
-	return tool.Plan{Summary: redact.String(fmt.Sprintf("Rollout restart %s %s/%s (replicas %d, ready %d, images %v)", in.Kind, in.Namespace, in.Name, desiredCount, ready, images))}, nil
+	metadata, err := meta.Accessor(obj)
+	if err != nil {
+		return tool.Plan{}, err
+	}
+	templateMeta, _ := template["metadata"].(map[string]any)
+	annotations, _ := templateMeta["annotations"].(map[string]any)
+	summary := fmt.Sprintf("Rollout restart %s %s/%s (UID %q; replicas %d, ready %d, images %v)", in.Kind, in.Namespace, in.Name, metadata.GetUID(), desiredCount, ready, images)
+	return identityPlan(metadata.GetUID(), metadata.GetResourceVersion(), summary, annotations != nil)
 }
 
-func (p *provider) applyRollout(ctx context.Context, _ tool.Caller, in rolloutInput) (string, error) {
+func (p *provider) applyRollout(ctx context.Context, _ tool.Caller, in rolloutInput, plan tool.Plan) (string, error) {
 	if _, err := writeKind(in.Kind, true); err != nil {
 		return "", err
 	}
 	if err := p.writeAllowed(in.Namespace, in.Name, p.cfg.RolloutRestart); err != nil {
 		return "", err
 	}
-	body, err := json.Marshal(map[string]any{"spec": map[string]any{"template": map[string]any{"metadata": map[string]any{"annotations": map[string]string{"kubectl.kubernetes.io/restartedAt": time.Now().UTC().Format(time.RFC3339)}}}}})
+	identity, err := plannedIdentity(plan)
+	if err != nil {
+		return "", err
+	}
+	ops := []map[string]any{{"op": "test", "path": "/metadata/uid", "value": identity.uid}}
+	if !identity.hasAnnotations {
+		// Avoid overwriting annotations added by another writer since planning.
+		ops = append(ops, map[string]any{"op": "test", "path": "/metadata/resourceVersion", "value": identity.version},
+			map[string]any{"op": "add", "path": "/spec/template/metadata/annotations", "value": map[string]string{}})
+	}
+	ops = append(ops, map[string]any{"op": "add", "path": "/spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt", "value": time.Now().UTC().Format(time.RFC3339)})
+	body, err := json.Marshal(ops)
 	if err != nil {
 		return "", err
 	}
 	switch in.Kind {
 	case "deployment":
-		_, err = p.client.AppsV1().Deployments(in.Namespace).Patch(ctx, in.Name, types.StrategicMergePatchType, body, metav1.PatchOptions{})
+		_, err = p.client.AppsV1().Deployments(in.Namespace).Patch(ctx, in.Name, types.JSONPatchType, body, metav1.PatchOptions{})
 	case "statefulset":
-		_, err = p.client.AppsV1().StatefulSets(in.Namespace).Patch(ctx, in.Name, types.StrategicMergePatchType, body, metav1.PatchOptions{})
+		_, err = p.client.AppsV1().StatefulSets(in.Namespace).Patch(ctx, in.Name, types.JSONPatchType, body, metav1.PatchOptions{})
 	case "daemonset":
-		_, err = p.client.AppsV1().DaemonSets(in.Namespace).Patch(ctx, in.Name, types.StrategicMergePatchType, body, metav1.PatchOptions{})
+		_, err = p.client.AppsV1().DaemonSets(in.Namespace).Patch(ctx, in.Name, types.JSONPatchType, body, metav1.PatchOptions{})
 	}
 	if err != nil {
 		return "", err

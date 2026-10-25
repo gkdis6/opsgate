@@ -119,9 +119,9 @@ OAuth GET routes reject request bodies; POST body reads have a 10-second deadlin
 
 Read tools require `ops:read`. Writes require their own action allowlist, `ops:write`, underlying OS/RBAC permission and human confirmation. HTTP access additionally requires `ops:read`, so remote writers need both scopes. Namespace allow/deny rules still apply to Kubernetes writes. Read unit allowlists do not authorize restarts.
 
-The server validates inputs and builds a side-effect-free plan before confirmation. Clients supporting MCP elicitation show an in-client approval prompt, including multi round-trip input requests across protocol versions. Otherwise, `approval.web: true` with builtin auth returns an approval link and `approval_id`. The human opens it, signs in upstream as the same user and reviews the exact operation. After approval, retry the same tool with exactly the same arguments plus `approval_id`. Approvals expire, are single-use and bind the user, tool, arguments and plan. Without a confirmation channel, writes are denied; stdio supports elicitation only.
+The server validates inputs and builds a side-effect-free plan before confirmation. Clients supporting MCP elicitation show an in-client approval prompt, including multi round-trip input requests across protocol versions. Otherwise, `approval.web: true` with builtin auth returns an approval link and `approval_id`. The human opens it, signs in upstream as the same user and reviews the exact operation. After approval, retry the same tool with exactly the same arguments plus `approval_id`. Approvals expire, are single-use and bind the user, tool, SHA-256 of canonical unredacted arguments (excluding `approval_id`) and plan. Writes are denied if redaction changes the summary, so the human sees an unambiguous target. Kubernetes plans include the target UID; execution uses that invocation’s plan and identity/version preconditions. Without a confirmation channel, writes are denied; stdio supports elicitation only.
 
-A compromised client UI can auto-approve elicitation. Prompt injection can still make a model request writes: humans must read the summary before approving. See [SECURITY.md](SECURITY.md).
+Set `approval.require_web: true` with `approval.web: true` to require browser approval even when the client supports elicitation; this denies writes over stdio. A compromised client UI can auto-approve elicitation. Prompt injection can still make a model request writes: humans must read the summary before approving. See [SECURITY.md](SECURITY.md).
 
 ## Configuration reference
 
@@ -174,6 +174,7 @@ Defaults below come from `config.Default()`. YAML is loaded over defaults with s
 | `auth.static[].scopes` | `[]` | Token grants; include ops:read for HTTP access |
 | `approval.ttl` | `10m` | Pending browser approval lifetime |
 | `approval.web` | `false` | Browser fallback; requires builtin authentication |
+| `approval.require_web` | `false` | Require browser approval; requires `approval.web`; denies stdio writes |
 | `providers.host.restart_units` | `[]` | Separate restart unit glob allowlist; empty disables tool |
 | `providers.host.command_prefix` | `[]` | Write argv prefix, e.g. [/usr/bin/sudo, -n]; first element absolute executable, remaining paths/flags |
 | `providers.kubernetes.rollout_restart` | `[]` | namespace/name globs; empty disables tool |
@@ -181,7 +182,7 @@ Defaults below come from `config.Default()`. YAML is loaded over defaults with s
 | `providers.kubernetes.delete_pod` | `[]` | namespace/name globs; empty disables tool |
 | `providers.kubernetes.max_replicas` | `10` | Scale maximum; nonnegative, zero permits only zero replicas |
 
-Log limits are provider caps; keep them positive. All four write tools accept optional `approval_id` for the browser retry. Write tools are registered only with nonempty action allowlists. Configuration changes require a restart.
+Log limits are provider caps; keep them positive. Raw write arguments are capped at 16 KiB before redaction and argument auditing. All four write tools accept optional `approval_id` for the browser retry. Write tools are registered only with nonempty action allowlists. Configuration changes require a restart.
 
 ## Audit format
 
@@ -191,7 +192,7 @@ The shared wrapper writes one JSON object per handled tool call, appended to `se
 {"time":"2026-10-24T12:00:00Z","user":"local","transport":"stdio","tool":"host_service_status","args":{"unit":"ssh.service"},"outcome":"ok","duration_ms":12,"output_bytes":120}
 ```
 
-Fields of `audit.Event`: `time` (RFC3339 timestamp with optional fractional seconds), `user`, `transport`, `tool`, optional redacted `args`, `outcome` (`ok`, `error`, `denied`, `pending`), optional redacted `error`, `duration_ms`, and `output_bytes` (returned success text size; zero on error). Write events additionally include optional redacted `plan` (the summary shown to the human) and `approval` (the confirmation method, `elicitation` or `web`; may also be present on a refusal or pending call). `pending` means browser approval is outstanding; its returned instruction text is counted in `output_bytes`. Planning and applying each receive a separate tool timeout; human confirmation may take longer. Tool output bodies are not stored. Audit write failures are reported to stderr without failing the tool call; audit is not tamper-proof. Protect and rotate logs, which may still contain sensitive information.
+Fields of `audit.Event`: `time` (RFC3339 timestamp with optional fractional seconds), `user`, `transport`, `tool`, optional redacted `args`, `outcome` (`ok`, `error`, `denied`, `pending`), optional redacted `error`, `duration_ms`, and `output_bytes` (returned success text size; zero on error). Write events additionally include optional redacted `plan` (the summary shown to the human) and `approval` (the confirmation method, `elicitation` or `web`; may also be present on a refusal or pending call). `pending` means browser approval is outstanding; its returned instruction text is counted in `output_bytes`. Planning and applying each receive a separate tool timeout; human confirmation may take longer. Web decisions emit separate audit events with `outcome` `approved` or `rejected`, user, tool and only an eight-character `args.approval_id_prefix`. Denied multi round-trip approval verifications emit `denied` events without request state. Tool output bodies are not stored. Audit write failures are reported to stderr without failing the tool call; audit is not tamper-proof. Protect and rotate logs, which may still contain sensitive information.
 
 ## Development and license
 

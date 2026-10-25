@@ -2,6 +2,7 @@ package tool
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"time"
 
@@ -37,6 +38,8 @@ type WriteSpec struct {
 // human approver verbatim, so it must name the exact target and effect.
 type Plan struct {
 	Summary string
+	// Data belongs to this invocation and is never shown or serialized.
+	Data any `json:"-"`
 }
 
 // WriteHandler splits a write into a side-effect-free Plan (input
@@ -44,16 +47,17 @@ type Plan struct {
 // after Plan succeeded and a human confirmed the plan's summary.
 type WriteHandler[In WriteInput] struct {
 	Plan  func(ctx context.Context, c Caller, in In) (Plan, error)
-	Apply func(ctx context.Context, c Caller, in In) (string, error)
+	Apply func(ctx context.Context, c Caller, in In, p Plan) (string, error)
 }
 
 // ConfirmRequest is what a Confirmer needs to obtain human approval.
 type ConfirmRequest struct {
 	Caller Caller
 	Tool   string
-	// Args are the redacted call arguments without approval_id; an approval
-	// is bound to exactly these arguments.
+	// Args are redacted arguments for display only, without approval_id.
+	// ArgsHash binds the canonical unredacted arguments, without approval_id.
 	Args       map[string]any
+	ArgsHash   [sha256.Size]byte
 	Summary    string
 	ApprovalID string
 }
@@ -93,7 +97,15 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 	mcp.AddTool(s, t, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
 		var input *InputRequired
-		args, argsErr := writeArgs(in)
+		var args map[string]any
+		var argsHash [sha256.Size]byte
+		var argsErr error
+		// Check the wire size before redaction or adding arguments to the audit.
+		if req == nil || req.Params == nil || len(req.Params.Arguments) > 16<<10 {
+			argsErr = Denied("write arguments must be JSON of at most 16 KiB")
+		} else {
+			args, argsHash, argsErr = writeArgs(req.Params.Arguments)
+		}
 		ev := audit.Event{Time: start, Tool: spec.Name, Args: args}
 		c, ok := env.caller(req)
 		if ok {
@@ -122,6 +134,9 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 			if err != nil {
 				return "", err
 			}
+			if ev.Plan != plan.Summary {
+				return "", Denied("target cannot be shown unambiguously")
+			}
 			if env.Confirm == nil {
 				return "", Denied("no human confirmation channel is available")
 			}
@@ -129,7 +144,7 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 				return "", err
 			}
 			ev.Approval, err = env.Confirm.Confirm(ctx, req, ConfirmRequest{
-				Caller: c, Tool: spec.Name, Args: args, Summary: ev.Plan, ApprovalID: in.approvalID(),
+				Caller: c, Tool: spec.Name, Args: args, ArgsHash: argsHash, Summary: ev.Plan, ApprovalID: in.approvalID(),
 			})
 			if err != nil {
 				if errors.As(err, &input) && input != nil {
@@ -142,7 +157,7 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 			if err := applyCtx.Err(); err != nil {
 				return "", err
 			}
-			return h.Apply(applyCtx, c, in)
+			return h.Apply(applyCtx, c, in, plan)
 		}()
 
 		ev.DurationMS = time.Since(start).Milliseconds()

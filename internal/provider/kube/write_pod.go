@@ -4,16 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func podKey(c tool.Caller, in deletePodInput) writeKey {
-	return writeKey{user: c.User, transport: c.Transport, action: "delete-pod", namespace: in.Namespace, name: in.Name}
-}
-
-func (p *provider) planDeletePod(ctx context.Context, c tool.Caller, in deletePodInput) (tool.Plan, error) {
+func (p *provider) planDeletePod(ctx context.Context, _ tool.Caller, in deletePodInput) (tool.Plan, error) {
 	if err := p.writeAllowed(in.Namespace, in.Name, p.cfg.DeletePod); err != nil {
 		return tool.Plan{}, err
 	}
@@ -27,14 +22,14 @@ func (p *provider) planDeletePod(ctx context.Context, c tool.Caller, in deletePo
 		effect = fmt.Sprintf("controller owner %q/%q", owner.Kind, owner.Name)
 	}
 	summary := fmt.Sprintf("Delete pod %s/%s (UID %q; %s)", in.Namespace, in.Name, pod.UID, effect)
-	return p.writes.remember(podKey(c, in), pod.UID, pod.ResourceVersion, redact.String(summary))
+	return identityPlan(pod.UID, pod.ResourceVersion, summary, false)
 }
 
-func (p *provider) applyDeletePod(ctx context.Context, c tool.Caller, in deletePodInput) (string, error) {
+func (p *provider) applyDeletePod(ctx context.Context, _ tool.Caller, in deletePodInput, plan tool.Plan) (string, error) {
 	if err := p.writeAllowed(in.Namespace, in.Name, p.cfg.DeletePod); err != nil {
 		return "", err
 	}
-	snapshot, err := p.writes.take(podKey(c, in))
+	snapshot, err := plannedIdentity(plan)
 	if err != nil {
 		return "", err
 	}

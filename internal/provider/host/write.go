@@ -82,7 +82,7 @@ func (p *provider) planRestart(ctx context.Context, _ tool.Caller, in restartInp
 	return tool.Plan{Summary: fmt.Sprintf("Restart systemd unit %s on host %s (currently %s)", unit, hostname, state)}, nil
 }
 
-func (p *provider) applyRestart(ctx context.Context, _ tool.Caller, in restartInput) (string, error) {
+func (p *provider) applyRestart(ctx context.Context, _ tool.Caller, in restartInput, _ tool.Plan) (string, error) {
 	unit, err := p.restartUnit(in.Unit)
 	if err != nil {
 		return "", err

@@ -31,7 +31,7 @@ func TestRestart(t *testing.T) {
 			if len(calls) != 1 || !reflect.DeepEqual(calls[0], []string{"systemctl", "show", "--no-pager", "--property=" + basicProperties, "--", "nginx.service"}) {
 				t.Fatalf("Plan commands: %v", calls)
 			}
-			out, err := p.applyRestart(context.Background(), tool.Caller{}, in)
+			out, err := p.applyRestart(context.Background(), tool.Caller{}, in, plan)
 			if err != nil || !strings.Contains(out, "active/running") {
 				t.Fatalf("%s %v", out, err)
 			}
@@ -66,7 +66,7 @@ func TestRestartDenials(t *testing.T) {
 			if err == nil || tc.denied && !errors.Is(err, tool.ErrDenied) {
 				t.Fatal(err)
 			}
-			_, err = p.applyRestart(context.Background(), tool.Caller{}, restartInput{Unit: tc.unit})
+			_, err = p.applyRestart(context.Background(), tool.Caller{}, restartInput{Unit: tc.unit}, tool.Plan{})
 			if err == nil {
 				t.Fatal("Apply accepted denied input")
 			}
@@ -95,7 +95,7 @@ func TestRestartFailures(t *testing.T) {
 			}
 			continue
 		}
-		if _, err := p.applyRestart(context.Background(), tool.Caller{}, restartInput{Unit: "nginx"}); err == nil {
+		if _, err := p.applyRestart(context.Background(), tool.Caller{}, restartInput{Unit: "nginx"}, tool.Plan{}); err == nil {
 			t.Fatal("failure ignored")
 		}
 	}

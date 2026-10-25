@@ -9,10 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func scaleKey(c tool.Caller, in scaleInput) writeKey {
-	return writeKey{user: c.User, transport: c.Transport, action: "scale", kind: in.Kind, namespace: in.Namespace, name: in.Name, replicas: in.Replicas}
-}
-
 func (p *provider) checkScale(in scaleInput) error {
 	if _, err := writeKind(in.Kind, false); err != nil {
 		return err
@@ -33,7 +29,7 @@ func (p *provider) getScale(ctx context.Context, in scaleInput) (*autoscalingv1.
 	return p.client.AppsV1().StatefulSets(in.Namespace).GetScale(ctx, in.Name, metav1.GetOptions{})
 }
 
-func (p *provider) planScale(ctx context.Context, c tool.Caller, in scaleInput) (tool.Plan, error) {
+func (p *provider) planScale(ctx context.Context, _ tool.Caller, in scaleInput) (tool.Plan, error) {
 	if err := p.checkScale(in); err != nil {
 		return tool.Plan{}, err
 	}
@@ -42,14 +38,14 @@ func (p *provider) planScale(ctx context.Context, c tool.Caller, in scaleInput) 
 		return tool.Plan{}, err
 	}
 	summary := fmt.Sprintf("Scale %s %s/%s: %d → %d replicas (UID %q, resourceVersion %q)", in.Kind, in.Namespace, in.Name, scale.Spec.Replicas, in.Replicas, scale.UID, scale.ResourceVersion)
-	return p.writes.remember(scaleKey(c, in), scale.UID, scale.ResourceVersion, summary)
+	return identityPlan(scale.UID, scale.ResourceVersion, summary, false)
 }
 
-func (p *provider) applyScale(ctx context.Context, c tool.Caller, in scaleInput) (string, error) {
+func (p *provider) applyScale(ctx context.Context, _ tool.Caller, in scaleInput, plan tool.Plan) (string, error) {
 	if err := p.checkScale(in); err != nil {
 		return "", err
 	}
-	snapshot, err := p.writes.take(scaleKey(c, in))
+	snapshot, err := plannedIdentity(plan)
 	if err != nil {
 		return "", err
 	}

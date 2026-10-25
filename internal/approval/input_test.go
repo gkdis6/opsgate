@@ -1,6 +1,8 @@
 package approval
 
 import (
+	"path/filepath"
+
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/config"
 	"github.com/gkdis6/opsgate/internal/tool"
 )
@@ -79,7 +82,7 @@ func TestInputStateSecurity(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := New(config.Approval{TTL: time.Minute}, "https://ops.example", nil)
+			m := New(config.Approval{TTL: time.Minute}, "https://ops.example", nil, nil)
 			var now atomic.Int64
 			now.Store(time.Now().UnixNano())
 			m.now = func() time.Time { return time.Unix(0, now.Load()) }
@@ -98,7 +101,7 @@ func TestInputStateSecurity(t *testing.T) {
 				now.Add(int64(time.Minute))
 			}
 			if tc.newManager {
-				m = New(config.Approval{TTL: time.Minute}, "https://ops.example", nil)
+				m = New(config.Approval{TTL: time.Minute}, "https://ops.example", nil, nil)
 			}
 			r := approvalRequest()
 			if tc.binding != nil {
@@ -131,7 +134,7 @@ func inputRequest(t *testing.T, m *Manager, r tool.ConfirmRequest) string {
 	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{
 		Meta: mcp.Meta{mcp.MetaKeyClientCapabilities: map[string]any{"elicitation": map[string]any{}}},
 	}}
-	method, err := m.Confirm(context.Background(), req, r)
+	method, err := m.Confirm(context.Background(), req, hashedRequest(r))
 	var input *tool.InputRequired
 	if method != "elicitation" || !errors.As(err, &input) {
 		t.Fatalf("Confirm = %s, %v", method, err)
@@ -142,7 +145,7 @@ func inputRequest(t *testing.T, m *Manager, r tool.ConfirmRequest) string {
 func confirmResponse(m *Manager, state string, response mcp.InputResponse, r tool.ConfirmRequest) (string, error) {
 	return m.Confirm(context.Background(), &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{
 		RequestState: state, InputResponses: mcp.InputResponseMap{approvalInputID: response},
-	}}, r)
+	}}, hashedRequest(r))
 }
 
 func TestInputNonceConsumedOnEveryDecision(t *testing.T) {
@@ -160,7 +163,7 @@ func TestInputNonceConsumedOnEveryDecision(t *testing.T) {
 		{name: "binding mismatch", binding: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := New(config.Approval{TTL: time.Minute}, "", nil)
+			m := New(config.Approval{TTL: time.Minute}, "", nil, nil)
 			r := approvalRequest()
 			state := inputRequest(t, m, r)
 			if tc.binding {
@@ -178,7 +181,7 @@ func TestInputNonceConsumedOnEveryDecision(t *testing.T) {
 }
 
 func TestInputConcurrentConsume(t *testing.T) {
-	m := New(config.Approval{TTL: time.Minute}, "", nil)
+	m := New(config.Approval{TTL: time.Minute}, "", nil, nil)
 	r := approvalRequest()
 	state := inputRequest(t, m, r)
 	approved := &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}
@@ -202,7 +205,7 @@ func TestInputConcurrentConsume(t *testing.T) {
 func TestInputCanonicalArgs(t *testing.T) {
 	for _, changed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "canonical", true: "distinct integer"}[changed], func(t *testing.T) {
-			m := New(config.Approval{TTL: time.Minute}, "", nil)
+			m := New(config.Approval{TTL: time.Minute}, "", nil, nil)
 			r := approvalRequest()
 			r.Args = map[string]any{"z": json.Number("9007199254740992"), "a": map[string]any{"second": "two", "first": "one"}}
 			state := inputRequest(t, m, r)
@@ -210,7 +213,7 @@ func TestInputCanonicalArgs(t *testing.T) {
 			if changed {
 				r.Args["z"] = json.Number("9007199254740993")
 			}
-			_, err := confirmResponse(m, state, &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}, r)
+			_, err := confirmResponse(m, state, &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}, hashedRequest(r))
 			if errors.Is(err, tool.ErrDenied) != changed || !changed && err != nil {
 				t.Errorf("Confirm = %v", err)
 			}
@@ -219,7 +222,7 @@ func TestInputCanonicalArgs(t *testing.T) {
 }
 
 func TestInputCapacityAndExpiry(t *testing.T) {
-	m := New(config.Approval{TTL: time.Minute}, "", nil)
+	m := New(config.Approval{TTL: time.Minute}, "", nil, nil)
 	now := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 	m.now = func() time.Time { return now }
 	r := approvalRequest()
@@ -245,7 +248,7 @@ func TestInputCapacityAndExpiry(t *testing.T) {
 	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{
 		Meta: mcp.Meta{mcp.MetaKeyClientCapabilities: map[string]any{"elicitation": map[string]any{}}},
 	}}
-	if _, err := m.Confirm(context.Background(), req, r); !errors.Is(err, tool.ErrDenied) {
+	if _, err := m.Confirm(context.Background(), req, hashedRequest(r)); !errors.Is(err, tool.ErrDenied) {
 		t.Errorf("issuing state at capacity = %v", err)
 	}
 	now = now.Add(time.Minute)
@@ -255,5 +258,48 @@ func TestInputCapacityAndExpiry(t *testing.T) {
 	}
 	if _, err := confirmResponse(m, states[0], approved, r); !errors.Is(err, tool.ErrDenied) {
 		t.Errorf("expired replay after sweep = %v", err)
+	}
+}
+
+func TestDeniedInputVerificationAudit(t *testing.T) {
+	for _, failure := range []string{"tampered", "binding", "rejected", "unexpected response"} {
+		t.Run(failure, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "audit")
+			logger, err := audit.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { logger.Close() })
+			m := New(config.Approval{TTL: time.Minute}, "", nil, logger)
+			r := approvalRequest()
+			state := inputRequest(t, m, r)
+			original := state
+			response := mcp.InputResponseMap{approvalInputID: &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}}
+			switch failure {
+			case "tampered":
+				state = flipStateByte(t, state, 1)
+			case "binding":
+				r.Tool = "different"
+			case "rejected":
+				response[approvalInputID] = &mcp.ElicitResult{Action: "decline"}
+			case "unexpected response":
+				response = mcp.InputResponseMap{"other": &mcp.ElicitResult{Action: "accept"}}
+			}
+			_, err = m.Confirm(context.Background(), &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{RequestState: state, InputResponses: response}}, r)
+			if !errors.Is(err, tool.ErrDenied) {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var ev audit.Event
+			if err := json.Unmarshal(data, &ev); err != nil {
+				t.Fatal(err)
+			}
+			if ev.Outcome != "denied" || ev.Approval != "elicitation" || ev.User != r.Caller.User || ev.Tool != r.Tool || ev.Error == "" || strings.Contains(string(data), state) || strings.Contains(string(data), original) {
+				t.Fatalf("audit = %s", data)
+			}
+		})
 	}
 }

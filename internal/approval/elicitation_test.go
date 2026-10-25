@@ -1,8 +1,12 @@
 package approval
 
 import (
+	"errors"
+	"net/http"
+
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -19,10 +23,10 @@ import (
 )
 
 func approvalRequest() tool.ConfirmRequest {
-	return tool.ConfirmRequest{
+	return hashedRequest(tool.ConfirmRequest{
 		Caller: tool.Caller{User: "github:operator", Transport: "http", Scopes: []string{config.ScopeWrite}},
 		Tool:   "restart", Summary: "Restart nginx.service", Args: map[string]any{"unit": "nginx.service"},
-	}
+	})
 }
 
 func connectApproval(t *testing.T, s *mcp.Server, opts *mcp.ClientOptions, versions ...string) *mcp.ClientSession {
@@ -63,7 +67,7 @@ func newApprovalTool(t *testing.T, m *Manager, r tool.ConfirmRequest) (*mcp.Serv
 		Plan: func(context.Context, tool.Caller, restartInput) (tool.Plan, error) {
 			return tool.Plan{Summary: r.Summary}, nil
 		},
-		Apply: func(context.Context, tool.Caller, restartInput) (string, error) {
+		Apply: func(context.Context, tool.Caller, restartInput, tool.Plan) (string, error) {
 			applies.Add(1)
 			return "restarted", nil
 		},
@@ -106,7 +110,7 @@ func TestElicitation(t *testing.T) {
 					if tc.web {
 						browser = fakeBrowser{}
 					}
-					m := New(config.Approval{TTL: time.Minute}, "https://ops.example", browser)
+					m := New(config.Approval{TTL: time.Minute}, "https://ops.example", browser, nil)
 					var elicited atomic.Int32
 					opts := &mcp.ClientOptions{}
 					if !tc.noCapability {
@@ -202,6 +206,95 @@ func TestElicitation(t *testing.T) {
 						t.Errorf("final audit = %+v", last)
 					}
 				})
+			}
+		})
+	}
+}
+
+// hashedRequest models AddWrite's binding of unredacted fixture arguments.
+func hashedRequest(r tool.ConfirmRequest) tool.ConfirmRequest {
+	b, _ := json.Marshal(r.Args)
+	r.ArgsHash = sha256.Sum256(b)
+	return r
+}
+
+func TestRequireWeb(t *testing.T) {
+	for _, transport := range []string{"http", "stdio"} {
+		t.Run(transport, func(t *testing.T) {
+			var browser BrowserAuth
+			if transport == "http" {
+				browser = fakeBrowser{}
+			}
+			m := New(config.Approval{TTL: time.Minute, Web: true, RequireWeb: true}, "https://ops.example", browser, nil)
+			r := approvalRequest()
+			r.Caller.Transport = transport
+			s, applies, _ := newApprovalTool(t, m, r)
+			var elicited atomic.Int32
+			cs := connectApproval(t, s, &mcp.ClientOptions{ElicitationHandler: func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+				elicited.Add(1)
+				return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}, nil
+			}})
+			result := approvalCall(t, cs, &mcp.CallToolParams{Name: "restart", Arguments: map[string]any{"unit": "nginx.service"}})
+			text := result.Content[0].(*mcp.TextContent).Text
+			if applies.Load() != 0 || elicited.Load() != 0 || result.NeedsInput() {
+				t.Fatalf("result = %+v; applies %d elicited %d", result, applies.Load(), elicited.Load())
+			}
+			if transport == "http" {
+				if result.IsError || !strings.Contains(text, "/approve/") {
+					t.Fatal(text)
+				}
+				mux := http.NewServeMux()
+				m.Routes(mux)
+				id := linkID.FindStringSubmatch(text)[1]
+				decide(t, mux, id, "approve")
+				result = approvalCall(t, cs, &mcp.CallToolParams{Name: "restart", Arguments: map[string]any{"unit": "nginx.service", "approval_id": id}})
+				if result.IsError || applies.Load() != 1 || elicited.Load() != 0 {
+					t.Fatalf("approved result = %+v; applies %d elicited %d", result, applies.Load(), elicited.Load())
+				}
+			} else if !result.IsError || !strings.Contains(text, "browser approval is required") {
+				t.Fatal(text)
+			}
+		})
+	}
+}
+
+func TestRequireWebRejectsInputState(t *testing.T) {
+	m := New(config.Approval{TTL: time.Minute, Web: true}, "https://ops.example", fakeBrowser{}, nil)
+	r := approvalRequest()
+	state := inputRequest(t, m, r)
+	m.requireWeb = true
+	_, err := confirmResponse(m, state, &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}, r)
+	if !errors.Is(err, tool.ErrDenied) || !strings.Contains(err.Error(), "browser approval is required") {
+		t.Fatal(err)
+	}
+}
+
+func TestRedactedArgumentBinding(t *testing.T) {
+	for _, method := range []string{"web", "elicitation"} {
+		t.Run(method, func(t *testing.T) {
+			m, mux := newWebManager(t)
+			s, applies, _ := newApprovalTool(t, m, approvalRequest())
+			var opts *mcp.ClientOptions
+			if method == "elicitation" {
+				opts = manualInputOptions()
+			}
+			cs := connectApproval(t, s, opts, "2026-07-28")
+			first := approvalCall(t, cs, &mcp.CallToolParams{Name: "restart", Arguments: map[string]any{"unit": "glpat-aaaaaaaa"}})
+			params := &mcp.CallToolParams{Name: "restart", Arguments: map[string]any{"unit": "glpat-bbbbbbbb"}}
+			if method == "web" {
+				id := linkID.FindStringSubmatch(first.Content[0].(*mcp.TextContent).Text)[1]
+				decide(t, mux, id, "approve")
+				params.Arguments = map[string]any{"unit": "glpat-bbbbbbbb", "approval_id": id}
+			} else {
+				if !first.NeedsInput() {
+					t.Fatalf("initial result = %+v", first)
+				}
+				params.RequestState = first.RequestState
+				params.InputResponses = mcp.InputResponseMap{approvalInputID: &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}}
+			}
+			result := approvalCall(t, cs, params)
+			if !result.IsError || result.NeedsInput() || applies.Load() != 0 {
+				t.Fatalf("colliding target accepted: %+v; applies %d", result, applies.Load())
 			}
 		})
 	}

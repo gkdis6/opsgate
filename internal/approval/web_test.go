@@ -1,6 +1,10 @@
 package approval
 
 import (
+	"bytes"
+	"encoding/json"
+	"os"
+
 	"context"
 	"errors"
 	"net/http"
@@ -36,7 +40,7 @@ var (
 
 func newWebManager(t *testing.T) (*Manager, *http.ServeMux) {
 	t.Helper()
-	m := New(config.Approval{TTL: time.Minute, Web: true}, "https://ops.example/", fakeBrowser{})
+	m := New(config.Approval{TTL: time.Minute, Web: true}, "https://ops.example/", fakeBrowser{}, nil)
 	mux := http.NewServeMux()
 	m.Routes(mux)
 	return m, mux
@@ -44,7 +48,7 @@ func newWebManager(t *testing.T) (*Manager, *http.ServeMux) {
 
 func pendingID(t *testing.T, m *Manager, r tool.ConfirmRequest) string {
 	t.Helper()
-	method, err := m.Confirm(context.Background(), nil, r)
+	method, err := m.Confirm(context.Background(), nil, hashedRequest(r))
 	if method != "web" || !errors.Is(err, tool.ErrApprovalPending) {
 		t.Fatalf("Confirm = %q, %v", method, err)
 	}
@@ -116,7 +120,7 @@ func TestWebEndToEnd(t *testing.T) {
 		Plan: func(context.Context, tool.Caller, restartInput) (tool.Plan, error) {
 			return tool.Plan{Summary: "Restart nginx.service"}, nil
 		},
-		Apply: func(context.Context, tool.Caller, restartInput) (string, error) {
+		Apply: func(context.Context, tool.Caller, restartInput, tool.Plan) (string, error) {
 			applies.Add(1)
 			return "restarted", nil
 		},
@@ -183,7 +187,7 @@ func TestWebBindingAndDecisions(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(&r)
 			}
-			method, err := m.Confirm(context.Background(), nil, r)
+			method, err := m.Confirm(context.Background(), nil, hashedRequest(r))
 			if method != "web" || (err == nil) != tc.allowed || errors.Is(err, tool.ErrApprovalPending) != tc.pending ||
 				(!tc.allowed && !tc.pending && !errors.Is(err, tool.ErrDenied)) {
 				t.Errorf("Confirm = %q, %v", method, err)
@@ -198,8 +202,9 @@ func TestWebBindingAndDecisions(t *testing.T) {
 func TestWebPageSecurity(t *testing.T) {
 	m, mux := newWebManager(t)
 	r := approvalRequest()
-	r.Summary = "Restart <script>alert(1)</script> password=secret"
+	r.Summary = "Restart <script>alert(1)</script>"
 	r.Args["extra"] = "<script>args</script>"
+	r.Args["password"] = "secret"
 	id := pendingID(t, m, r)
 	csrf := readCSRF(t, mux, id)
 	w := webRequest(mux, http.MethodGet, id, r.Caller.User, nil, nil)
@@ -243,7 +248,7 @@ func TestWebPageSecurity(t *testing.T) {
 				t.Error("wrong user received approval details")
 			}
 			r.ApprovalID = id
-			if _, err := m.Confirm(context.Background(), nil, r); !errors.Is(err, tool.ErrApprovalPending) {
+			if _, err := m.Confirm(context.Background(), nil, hashedRequest(r)); !errors.Is(err, tool.ErrApprovalPending) {
 				t.Errorf("invalid POST changed approval: %v", err)
 			}
 		})
@@ -264,7 +269,7 @@ func TestWebConcurrentConsume(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 20 {
 		wg.Go(func() {
-			_, err := m.Confirm(context.Background(), nil, r)
+			_, err := m.Confirm(context.Background(), nil, hashedRequest(r))
 			if err == nil {
 				successes.Add(1)
 			} else if !errors.Is(err, tool.ErrDenied) {
@@ -275,5 +280,72 @@ func TestWebConcurrentConsume(t *testing.T) {
 	wg.Wait()
 	if successes.Load() != 1 {
 		t.Errorf("approval consumed %d times", successes.Load())
+	}
+}
+
+type countingBrowser struct{ calls atomic.Int32 }
+
+func (b *countingBrowser) RequireUser(next func(http.ResponseWriter, *http.Request, string)) http.Handler {
+	b.calls.Add(1)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next(w, r, "github:operator")
+	})
+}
+
+func TestUnknownApprovalDoesNotStartLogin(t *testing.T) {
+	browser := new(countingBrowser)
+	m := New(config.Approval{TTL: time.Minute, Web: true}, "https://ops.example", browser, nil)
+	mux := http.NewServeMux()
+	m.Routes(mux)
+	id := pendingID(t, m, approvalRequest())
+	m.now = func() time.Time { return time.Now().Add(time.Hour) }
+	for _, target := range []string{"invalid", strings.Repeat("a", 26), id} {
+		for _, method := range []string{"GET", "POST"} {
+			w := webRequest(mux, method, target, "", nil, nil)
+			if w.Code != http.StatusNotFound || browser.calls.Load() != 0 {
+				t.Errorf("%s %s = %d; login calls %d", method, target, w.Code, browser.calls.Load())
+			}
+		}
+	}
+}
+
+func TestApprovalDecisionAudit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit")
+	logger, err := audit.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { logger.Close() })
+	m := New(config.Approval{TTL: time.Minute, Web: true}, "https://ops.example", fakeBrowser{}, logger)
+	mux := http.NewServeMux()
+	m.Routes(mux)
+	var ids []string
+	for _, decision := range []string{"approve", "reject"} {
+		id := pendingID(t, m, approvalRequest())
+		ids = append(ids, id)
+		csrf := readCSRF(t, mux, id)
+		decide(t, mux, id, decision)
+		// A duplicate POST must not create another decision event.
+		w := webRequest(mux, "POST", id, "github:operator", url.Values{"csrf": {csrf}, "decision": {decision}}, nil)
+		if w.Code != http.StatusConflict {
+			t.Fatal(w.Code)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
+	if len(lines) != 2 {
+		t.Fatalf("audit = %s", data)
+	}
+	for i, outcome := range []string{"approved", "rejected"} {
+		var ev audit.Event
+		if err := json.Unmarshal(lines[i], &ev); err != nil {
+			t.Fatal(err)
+		}
+		if ev.Outcome != outcome || ev.User != "github:operator" || ev.Tool != "restart" || ev.Approval != "web" || ev.Args["approval_id_prefix"] != ids[i][:8] || strings.Contains(string(data), ids[i]) {
+			t.Fatalf("audit = %s", data)
+		}
 	}
 }

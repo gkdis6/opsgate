@@ -136,6 +136,8 @@ type Approval struct {
 	// Web enables browser approval links for clients without elicitation.
 	// Requires auth.mode builtin (the approver signs in upstream).
 	Web bool `yaml:"web"`
+	// RequireWeb disables in-client elicitation, including for stdio.
+	RequireWeb bool `yaml:"require_web"`
 }
 
 type Providers struct {
@@ -303,6 +305,9 @@ func (c Config) ValidateHTTP() error {
 		return fmt.Errorf("auth.mode is required for the HTTP transport (listen %s)", host)
 	default:
 		return fmt.Errorf("auth.mode: unknown mode %q", c.Auth.Mode)
+	}
+	if c.Approval.RequireWeb && !c.Approval.Web {
+		return fmt.Errorf("approval.require_web requires approval.web")
 	}
 	if c.Approval.Web && c.Auth.Mode != AuthBuiltin {
 		return fmt.Errorf("approval.web requires auth.mode builtin")

@@ -75,7 +75,7 @@ func run(cfgPath, transport string) error {
 	switch transport {
 	case "stdio":
 		env.Fallback = &tool.Caller{User: cfg.Stdio.User, Transport: "stdio", Scopes: cfg.Stdio.Scopes}
-		env.Confirm = approval.New(cfg.Approval, "", nil) // elicitation only
+		env.Confirm = approval.New(cfg.Approval, "", nil, al) // elicitation only
 		s, err := server.New(cfg, env)
 		if err != nil {
 			return err
@@ -123,7 +123,7 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 	if !cfg.Approval.Web {
 		browser = nil
 	}
-	am := approval.New(cfg.Approval, cfg.HTTP.PublicURL, browser)
+	am := approval.New(cfg.Approval, cfg.HTTP.PublicURL, browser, env.Audit)
 	env.Confirm = am
 	o.Routes = append(o.Routes, am.Routes)
 

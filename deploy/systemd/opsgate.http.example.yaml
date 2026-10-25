@@ -1,3 +1,5 @@
+# Read-only HTTP starting point. Replace placeholders and provision credentials.
+# See opsgate.example.yaml for all settings; write opt-ins are commented below.
 server:
   name: opsgate
   audit_log: /var/log/opsgate/audit.jsonl
@@ -13,6 +15,10 @@ auth:
     access_token_ttl: 1h
     refresh_token_ttl: 720h
     max_clients: 25
+    allowed_redirect_hosts: [] # Set reviewed exact hosts before public exposure.
+    unknown_redirect_hosts: deny # Empty host list accepts any otherwise valid host.
+    admins: [] # Allowed user subjects; required if unknown hosts need approval.
+    notify_url: "" # Optional pending-client JSON POST.
     upstream:
       provider: oidc
       issuer: https://accounts.google.com
@@ -20,19 +26,22 @@ auth:
       client_secret_file: /etc/opsgate/google-client-secret
     users:
       - subject: email:operator@example.com
-        scopes: [ops:read, ops:write]
+        scopes: [ops:read]
+        tools: [] # Optional tool-name globs; empty adds no limit.
 approval:
   ttl: 10m
   web: true
+  require_web: false
+  window: 0s
+  window_tools: [] # Never include dev_task_start.
 providers:
   host:
     enabled: true
     units: [myapp.service]
     disk_paths: [/]
     max_log_lines: 200
-    # Optional: requires the systemd drop-in and exact sudoers rule in deploy.md.
-    restart_units: [myapp.service]
-    command_prefix: [/usr/bin/sudo, -n]
+    restart_units: []
+    command_prefix: []
   kubernetes:
     enabled: true
     kubeconfig: /etc/opsgate/kubeconfig
@@ -42,7 +51,26 @@ providers:
     allow_logs: true
     show_configmap_data: false
     max_log_lines: 200
-    rollout_restart: [apps/myapp]
-    scale: [apps/myapp]
+    rollout_restart: []
+    scale: []
     delete_pod: []
     max_replicas: 3
+  obsidian:
+    enabled: false # Optional experimental vault provider.
+    allow_write: false
+  dev:
+    enabled: false # Optional experimental coding tasks; separate runner required.
+
+# ---- OPTIONAL WRITE OPT-INS (merge into the existing sections) ----
+# Grant selected users ops:read + ops:write, then enable only exact target actions:
+# providers:
+#   host:
+#     restart_units: [myapp.service]
+#     command_prefix: [/usr/bin/sudo, -n]
+#   kubernetes:
+#     rollout_restart: [apps/myapp]
+#     scale: [apps/myapp]
+# Host restarts need the exact sudoers rule and systemd drop-in in docs/deploy.md.
+# Kubernetes writes need narrowly scoped RBAC. Keep approval windows off by default.
+# approval:
+#   require_web: true # With web=true: require browser confirmation, deny stdio writes.

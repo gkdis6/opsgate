@@ -1,6 +1,6 @@
 # Connecting clients
 
-opsgate supports stdio and authenticated Streamable HTTP at `<public_url>/mcp`. Stages 1–4 are implemented and pre-release; third-party security review is pending. Use [deployment](deploy.md) to configure TLS, authentication and upstream callbacks.
+opsgate supports stdio and authenticated Streamable HTTP at `<public_url>/mcp`. The documented features are implemented for the first public release; third-party security review is pending. Use [deployment](deploy.md) to configure TLS, authentication and upstream callbacks.
 
 For stdio, the client launches the binary and exchanges MCP messages through stdin/stdout. Use absolute executable/config paths. Keep stdout free of banners; diagnostics and the default audit destination use stderr.
 
@@ -77,9 +77,9 @@ Set up host-key verification and noninteractive SSH authentication first. Do not
 
 ## claude.ai and ChatGPT over HTTP
 
-Add a custom connector in the client's connector/integration settings, select OAuth, and enter the full MCP URL, for example `https://mcp.example.com/mcp`. The client uses Protected Resource Metadata and authorization-server discovery; builtin mode supports OAuth Dynamic Client Registration (DCR), so no manual MCP client ID or secret provisioning is needed. The upstream Google/GitHub application credentials belong only on the server. Sign in upstream as an allowlisted user and inspect the consent screen's client, redirect destination and scopes before granting access. Connector availability and setting names depend on the client/account.
+Add a custom connector in the client's connector/integration settings, select OAuth, and enter the full MCP URL, for example `https://mcp.example.com/mcp`. The client uses Protected Resource Metadata and authorization-server discovery; builtin mode supports OAuth Dynamic Client Registration (DCR), so no manual MCP client ID or secret provisioning is needed. A configured redirect-host policy may reject the client or hold it pending review at `/admin/clients`; `notify_url` can notify an administrator. An empty host list accepts any otherwise valid redirect host. The upstream Google/GitHub application credentials belong only on the server. Sign in upstream as an allowlisted user and inspect the consent screen's client, redirect destination and scopes before granting access. Connector availability and setting names depend on the client/account.
 
-Register `<public_url>/oauth/callback` at the upstream identity provider, not the MCP URL. The proxy must forward `/mcp`, `/.well-known/*`, `/oauth/*` and `/approve/*` and support streaming. External mode depends on the external authorization server's client registration support; static mode does not supply OAuth/DCR.
+Register `<public_url>/oauth/callback` at the upstream identity provider, not the MCP URL. The proxy must forward `/mcp`, `/.well-known/*`, `/oauth/*`, `/approve/*` and `/admin/clients` and support streaming. Preserve the public Host, including any explicit port; other hosts receive 421 except local-loopback requests on a loopback listener. The SDK localhost check is replaced by this validation. External mode depends on the external authorization server's client registration support; static mode does not supply OAuth/DCR.
 
 ## Claude Code over HTTP
 
@@ -109,6 +109,8 @@ Start with `opsgate -transport http -config /path/opsgate.yaml`. Configure a loc
 
 ## Approving writes
 
-Writes are registered only when the provider and corresponding action allowlist are enabled. They also need `ops:write`, OS/RBAC permission and human confirmation; HTTP users need `ops:read` too. Clients supporting MCP elicitation display the plan in an in-client prompt, using multi round-trip input requests across protocol versions.
+Host/Kubernetes writes are registered only with their provider and action allowlist; note writes need the vault provider and `allow_write`. They also need `ops:write`, OS/RBAC permission and human confirmation; HTTP users need `ops:read` too. Clients supporting MCP elicitation display the plan in an in-client prompt, using multi round-trip input requests across protocol versions.
 
 Otherwise, builtin auth with `approval.web: true` returns a browser approval link and `approval_id`. Open the link, sign in as the same upstream user and read the exact summary. After approval, the client retries the same tool and arguments plus `approval_id`. Approval is expiring, single-use and bound to the exact operation. Static/external clients without elicitation cannot write; stdio also requires elicitation. A compromised UI can auto-approve elicitation, and prompt injection can request writes: humans must read the summary.
+
+Dev tools instead require `dev:run`; task starts need approval and owned-task cancellation does not. Runner admins may cancel any task. HTTP still requires `ops:read`. Approval windows are off by default; when enabled and selected by a human, a grant covers a user/tool pair across clients and targets. Do not enable windows for `dev_task_start`. See [dev setup](dev.md) and [the trust model](../SECURITY.md).

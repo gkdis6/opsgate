@@ -5,12 +5,11 @@ inspection. The distroless image contains no shell, sudo, systemctl or journalct
 the host provider does not represent a node when run inside a pod. Darwin builds
 are provided for local clients; the systemd deployment requires Linux.
 
-The HTTP, OAuth, approval and write-tool packages in this checkout are still
-stubs. These manifests describe the intended deployment once those slices land.
-Do not publish an HTTP release until authentication, approval, `/healthz` and
-end-to-end proxy checks pass. The upstream callback path is not yet specified by
-the exported OAuth contract; confirm it against the completed implementation
-before configuring Google.
+Streamable HTTP, OAuth, authentication, human approval and write tools are
+implemented. This checkout is preparing for its first public release; third-party
+security review is pending. The optional Obsidian and dev providers are
+experimental. Verify authentication, approval and proxy behavior before exposure.
+The upstream login callback is exactly `<public_url>/oauth/callback`.
 
 ## Verify a release before installing
 
@@ -63,24 +62,41 @@ Create a Google OIDC web application, use issuer `https://accounts.google.com`,
 and register the exact upstream callback URL **`<public_url>/oauth/callback`**
 (for example, `https://mcp.example.com/oauth/callback`) at the identity provider.
 Set the client ID and an explicit allowlist of
-verified email subjects (`email:operator@example.com`). Store the client secret
-in a file or Kubernetes Secret, never directly in YAML, a command argument, or
+verified email subjects (`email:operator@example.com`) or exact `oidc:<sub>` subjects.
+Google email identities require Gmail/Googlemail or a Workspace `hd` claim
+matching the email domain; other Google accounts must use `oidc:<sub>`. Store
+the client secret in a file or Kubernetes Secret, never directly in YAML, a command argument, or
 source control. Give `ops:write` only to operators who need it. Each write also
 requires an allowed target, OS/RBAC permissions and human approval.
 
 On a host, bind opsgate to `127.0.0.1:8787` and terminate TLS at a local reverse
-proxy. Proxy `/mcp`, `/.well-known/*`, `/oauth/*` and `/approve/*` without changing
-the path, query, Host, Authorization, Origin or MCP headers. Preserve response
+proxy. Proxy `/mcp`, `/.well-known/*`, `/oauth/*`, `/approve/*` and
+`/admin/clients` without changing the path, query, Host, Authorization, Origin or MCP headers. Preserve response
 headers, cookies and redirects. Support GET, POST, DELETE and streaming responses;
 disable buffering and caching, and allow long-lived MCP connections. Do not log
 authorization headers, cookies, OAuth query strings, request bodies or approval
 URLs. Keep the backend port inaccessible from untrusted networks.
 
+opsgate replaces the MCP SDK's localhost check with its own Host validation.
+Public requests must use the host from `http.public_url`, including any explicit
+port (comparison is case-insensitive); mismatches receive HTTP 421. Binding to
+`127.0.0.1` behind a proxy that preserves the public Host therefore works. A
+loopback listener also accepts loopback Host values for local probes. On a
+wildcard listener, loopback Host values receive no such exception, even when the
+connection arrives on loopback. Forwarded-Host headers do not replace Host.
+
+Restrict builtin registration with `allowed_redirect_hosts`; an empty list
+accepts any otherwise valid redirect host. With a nonempty list,
+`unknown_redirect_hosts: deny` rejects other hosts; `approve` holds them pending
+review at `/admin/clients` by subjects in `admins` (also present in `users`).
+`notify_url` can send a best-effort JSON notification for pending clients. Review
+client destinations and never treat a self-reported client name as verified.
+
 For example, Caddy obtains TLS certificates and streams responses with:
 
 ```caddyfile
 mcp.example.com {
-    @opsgate path /mcp /.well-known/* /oauth/* /approve/*
+    @opsgate path /mcp /.well-known/* /oauth/* /approve/* /admin/clients
     reverse_proxy @opsgate 127.0.0.1:8787 {
         flush_interval -1
     }
@@ -118,8 +134,8 @@ The host example also enables Kubernetes: provision `/etc/opsgate/kubeconfig`
 credentials. The service hides home directories, so do not rely on `~/.kube`.
 Set `providers.kubernetes.enabled: false` if Kubernetes is unused. Namespace
 allowlists supplement RBAC; the provided `rbac-readonly.yaml` grants cluster-wide
-reads. Narrow its bindings where possible. Its permissions do not authorize the
-sample write allowlists; add only the required namespace-scoped permissions if
+reads. Narrow its bindings where possible. Its permissions do not authorize optional
+write actions; add only the required namespace-scoped permissions if
 writes are needed.
 
 ```sh
@@ -136,7 +152,7 @@ read and, if enabled, one approved write against a disposable allowed target.
 ### Optional host service restarts
 
 The default unit has `NoNewPrivileges=yes` and an empty capability bounding set.
-The sample `restart_units: [myapp.service]` and
+The optional `restart_units: [myapp.service]` and
 `command_prefix: [/usr/bin/sudo, -n]` require an explicit privilege change to work.
 Leave `restart_units: []` if restarts are unnecessary.
 
@@ -176,7 +192,8 @@ must not share the state file. A default StorageClass is required, or set one
 explicitly on the PVC. Protect the PVC and its backups as credentials.
 
 Edit the manifest's Google client ID, HTTPS origin, identity and namespace
-allowlists. Replace its illustrative image tag with the verified image digest.
+allowlists. Replace its illustrative image tag with the verified image digest,
+and add the public Host header to every HTTP probe as described below.
 Create the namespace and provision the Secret from a protected local file:
 
 ```sh
@@ -192,7 +209,12 @@ The Secret is required and mounted read-only; no client secret is embedded in
 the manifest. Restrict Secret RBAC and enable encryption at rest. Logs go to
 stderr for your cluster log collector. Configure a TLS ingress/reverse proxy to
 Service `opsgate:8787`, preserving the routes and streaming behavior above.
-Probes use the internal `/healthz` endpoint.
+Probes use the internal `/healthz` endpoint. The manifest binds to `0.0.0.0`, so
+its supplied HTTP probes need `httpHeaders: [{name: Host, value: mcp.example.com}]`
+under **each** `httpGet` (use your public host, including an explicit port).
+Without that change, the kubelet uses the Pod IP as Host and receives 421. The
+manifest in this checkout does not yet include those headers; adjust it before
+applying. The same requirement applies to direct Service/Pod-IP health checks.
 
 For disposable development only, replace the `state` volume's
 `persistentVolumeClaim` with `emptyDir: {}` and omit the PVC document. Pod
@@ -222,8 +244,8 @@ short outage. Confirm probes, discovery, login and policy checks before resuming
 traffic. A rollback may require restoring state compatible with the old version.
 
 `make docker VERSION=dev` builds locally from Go 1.26 into a nonroot distroless
-image. `make snapshot` requires GoReleaser v2.14 or newer, Syft and Docker with
-Buildx; release signing requires cosign and publishing requires registry/GitHub credentials.
+image. `make snapshot` uses GoReleaser v2 (the release workflow pins v2.19.0),
+Syft and Docker with Buildx; release signing requires cosign and publishing requires registry/GitHub credentials.
 Snapshots skip publishing and signing. Tagged `v*` releases run race tests and
 vulnerability scanning before building archives, SBOMs and multi-architecture
 images, signing checksums/images, and attaching GitHub build provenance.

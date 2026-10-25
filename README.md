@@ -1,41 +1,45 @@
 # opsgate
 
-[한국어](README.ko.md) · [Client setup](docs/clients.md) · [Security](SECURITY.md)
+opsgate gives MCP clients constrained access to Linux and Kubernetes, with explicit policy, human approval for changes, and audit records.
 
-opsgate is an open-source Go MCP server that lets AI clients inspect Linux and Kubernetes and request narrowly authorized operations. Providers start disabled, allowlists start empty, and writes require both explicit policy and human approval. Run with an unprivileged OS account and narrow Kubernetes RBAC. There is no shell or arbitrary command tool; internal commands use fixed argv with exec.CommandContext. Configuration and credentials must remain under trusted ownership.
+[한국어](README.ko.md) · [Client setup](docs/clients.md) · [Configuration](docs/configuration.md) · [Tools](docs/tools.md) · [Security](SECURITY.md)
 
-Features include stdio and Streamable HTTP, Protected Resource Metadata, builtin OAuth 2.1 with GitHub/OIDC login, external JWT or static-token authentication, read tools, four approved write tools, redaction and JSONL auditing. Release infrastructure provides GoReleaser archives, cosign keyless signatures, SBOMs, provenance attestations, a container image and hardened systemd/Kubernetes deployment templates. See [deployment](docs/deploy.md).
+An open-source Go MCP server for clients such as Claude, ChatGPT and Cursor. It supports stdio and authenticated Streamable HTTP, builtin OAuth with GitHub/OIDC login, external JWT verification and static bearer tokens. Linux host and Kubernetes inspection are the core providers. Obsidian vault access and coding tasks through a separate dev runner are optional, experimental providers.
 
-**Development status:** stages 1–4 are implemented and pre-release; they have not yet been security-reviewed by third parties. Logs and events are attacker-controlled data and may contain prompt injection. Redaction is best effort.
+Providers start disabled. Host/Kubernetes action allowlists start empty, vault writes are off, and coding task starts require explicit dev enablement and `dev:run`. Nine tools use human approval: `host_service_restart`, `k8s_rollout_restart`, `k8s_scale`, `k8s_delete_pod`, `obsidian_create`, `obsidian_append`, `obsidian_replace`, `obsidian_trash`, and `dev_task_start`. Each is registered only when its provider/action gate permits it, subject to server tool policy. `dev_task_cancel` is an explicit low-risk exception that stops an owned task without another approval (runner admins may stop any task).
+
+**Release status:** these features are implemented and preparing for the first public release; third-party security review is pending. Redaction is best effort, and tool output can contain prompt injection. Read [the trust model](SECURITY.md) before deploying.
 
 ## Stdio quick start
 
-Host inspection requires Linux with systemd/journald and /proc. Kubernetes uses client-go and restricted credentials. Stdio trusts the launching OS account.
+Build with Go 1.26+:
 
 ```sh
 go install github.com/gkdis6/opsgate/cmd/opsgate@latest
-# Or build from a checkout (Go 1.26+):
+# Or from a checkout:
 make build
 ```
 
+Save this as `/path/opsgate.yaml`:
+
 ```yaml
 stdio:
-  scopes: ["ops:read"]
+  scopes: [ops:read]
 providers:
   host:
     enabled: true
-    units: ["ssh.service", "nginx*"]
+    units: [ssh.service, "nginx*"]
 ```
 
 ```sh
 claude mcp add opsgate -- /path/to/opsgate -config /path/opsgate.yaml
 ```
 
-Save the YAML as `/path/opsgate.yaml` and replace binary/config paths with absolute paths. A source build writes `bin/opsgate`. Without a config, both providers are disabled. See [opsgate.example.yaml](opsgate.example.yaml) for every setting and [client setup](docs/clients.md) for Desktop, Cursor and SSH.
+Replace paths with absolute paths. A source build writes `bin/opsgate`. Host inspection uses Linux systemd/journald and `/proc`; stdio trusts the launching OS account. Run unprivileged and protect configuration ownership. Without configuration, all providers are disabled. See [client setup](docs/clients.md) for Desktop, Cursor and SSH, and [the complete read-only example](opsgate.example.yaml).
 
 ## HTTP quick start with Google
 
-Create a Google OIDC web application and register **`https://mcp.example.com/oauth/callback`** as its exact redirect URI. Replace the origin, client ID and verified email below. Provision the secret file and a private writable state directory before starting.
+Create a Google OIDC web application with the exact redirect URI `https://mcp.example.com/oauth/callback`. Replace the origin, client ID and verified Workspace email below (Gmail/Googlemail or an immutable `oidc:<sub>` identity also work). Provision the private writable state directory and protected client-secret file first.
 
 ```yaml
 http:
@@ -66,190 +70,18 @@ opsgate -transport http -config /etc/opsgate/opsgate.yaml
 claude mcp add --transport http opsgate https://mcp.example.com/mcp
 ```
 
-Terminate TLS at a reverse proxy forwarding `/mcp`, `/.well-known/*`, `/oauth/*` and `/approve/*`. Connect claude.ai or ChatGPT with a custom OAuth connector pointing to `https://mcp.example.com/mcp`; DCR registers the client automatically. See [clients](docs/clients.md) and [deployment](docs/deploy.md).
+Terminate TLS at a trusted reverse proxy preserving Host and forwarding `/mcp`, `/.well-known/*`, `/oauth/*`, `/approve/*` and `/admin/clients`. The public Host must match `public_url` (including any explicit port); other hosts receive 421, with a local-loopback exception for loopback listeners. The SDK localhost check is replaced by this check, so a loopback backend behind a Host-preserving proxy works. See [deployment](docs/deploy.md) for probes and templates. Claude/ChatGPT OAuth connectors can use builtin Dynamic Client Registration; configure redirect-host policy before public exposure. This minimal example leaves the host list empty, accepting any otherwise valid redirect host.
 
-## Tool contract
+## Policy and approval
 
-Host and Kubernetes read tools require `ops:read`; dev tools require `dev:run`. Tools are registered only when their provider is enabled. Host units and Kubernetes namespaces are filtered by configuration; namespace denies win. Kubernetes has no Secrets tool. Read-only metadata and logs can still disclose sensitive information.
+One instance is one trust group: `ops:read` grants read access across every enabled provider, including servers, cluster resources and notes. `server.tools` controls which tools exist; user/token `tools` globs narrow calls further. Use separate instances and OS accounts for production operations, personal notes and coding agents with different trust levels. Kubernetes namespace rules supplement RBAC and do not restrict Nodes or PersistentVolumes. No Secrets tool or arbitrary shell/command tool is exposed; configured dev agents can run commands within their own permissions and sandbox.
 
-| Tool | Purpose | Main arguments, defaults and limits |
-| --- | --- | --- |
-| `host_overview` | Host metrics and configured disk paths | None |
-| `host_services` | Allowlisted systemd units | None |
-| `host_service_status` | Allowlisted unit status | Required `unit`; missing suffix becomes `.service`; normalized name at most 256 bytes |
-| `host_logs` | Allowlisted journald logs | Required `unit` (same rules as status); `lines=100`, clamped to 1–`max_log_lines` (default cap 500); `since=""` (no time filter), positive duration including `d` (at most 128 bytes) or RFC3339; `priority=""` (no filter), emerg/alert/crit/err/warning/notice/info/debug or 0–7; `grep=""`, literal case-insensitive substring, at most 4096 bytes |
-| `host_top_processes` | Process usage from /proc, sampled over 500ms; names only, no argv or environment | `sort="cpu"` (cpu or mem); `limit=15`, clamped to 1–50 |
-| `k8s_overview` | Node health and allowed namespace workloads/events | None |
-| `k8s_list` | List supported resources | Required `kind`; `namespace=""` (all allowed namespaces); `label_selector=""` (no filter), Kubernetes label selector syntax; `limit=100`, clamped to 1–500 |
-| `k8s_get` | Sanitized object YAML and up to 50 related events from the last hour | Required `kind`, `name`; `namespace` required for namespaced kinds, omitted for cluster-scoped kinds |
-| `k8s_logs` | Pod logs; registered only with `allow_logs=true` | Required `namespace`, `pod`; `container` may be omitted only if exactly one regular/init/ephemeral container exists; `tail=200`, clamped to 1–`max_log_lines` (default cap 500); `since=""` (no time filter), positive Go duration up to 168h; `previous=false`; `grep=""`, literal case-insensitive substring; stream capped at 1 MiB |
-| `k8s_events` | Namespace events | `namespace=""` (all allowed namespaces); `warnings_only=true`; `since="1h"`, positive Go duration up to 168h; `limit=50`, clamped to 1–500 |
-| `host_service_restart` | Restart an allowed systemd unit | Required `unit` (same normalization and 256-byte limit as status); `restart_units` gate |
-| `k8s_rollout_restart` | Restart a workload by updating its pod template | Required `kind` (deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` gate |
-| `k8s_scale` | Set workload replicas | Required `kind` (deployment/statefulset), `namespace`, `name`, `replicas` (0–`max_replicas`, default cap 10); `scale` gate |
-| `k8s_delete_pod` | Delete a specific pod with UID precondition | Required `namespace`, `name`; `delete_pod` gate |
-| `obsidian_search` | Literal note content/filename search with snippets and scanned counts | Required `query`; optional `folder`, `tag`, `case_sensitive=false`; `limit=20`, max 100 |
-| `obsidian_read` | Note text and file/line metadata | Required `path`, `.md` optional; `offset_line=1`, `max_lines=400`, max 2000 |
-| `obsidian_list` | Folders first, then .md/.canvas/.base files | `folder=""` (vault root), `recursive=false`, `limit=200`, max 1000; reports truncation |
-| `obsidian_recent` | Notes ordered by modification time | `limit=20`, max 100; `days=7`, max 365 |
-| `obsidian_links` | Outgoing wikilinks/embeds/relative Markdown links and backlinks | Required `path`; exact path or unique basename resolution; reports unresolved targets |
-| `obsidian_tags` | Frontmatter/inline tag counts or matching notes | Optional `tag`; includes nested tags; ignores fenced code and headings |
-| `obsidian_create` | Create a note and missing parent folders | Required `path`, `content`; `allow_write=true`, ops:write and human approval required |
-| `obsidian_append` | Append at end or under a unique exact heading | Required `path`, `content`; optional `heading`; same write gate |
-| `obsidian_replace` | Exact substring replacement | Required `path`, nonempty `old_text`, `new_text`; `expected_count=1` must match; same write gate |
-| `obsidian_trash` | Retain a note in local .trash with collision suffixes | Required `path`; same write gate; never permanently deletes |
-| `dev_projects` | Coding projects and agent allowlists (`dev:run`) | None; includes runner limits |
-| `dev_task_start` | Start an agent after human approval (`dev:run`) | Required `project`, `agent`, `prompt`; optional `approval_id`; prompt up to 32 KiB (MCP arguments 48 KiB, approval summary 64 KiB) |
-| `dev_task_status` | Task state and final message (`dev:run`) | Required `id` |
-| `dev_task_log` | Untrusted task log page (`dev:run`) | Required `id`; `offset=0`, `limit=65536`, maximum 262144 bytes; raw `next_offset` |
-| `dev_task_diff` | Untrusted stat and patch against pinned base (`dev:run`) | Required `id`; maximum 256 KiB before MCP output cap |
-| `dev_task_list` | Retained tasks newest first (`dev:run`) | `limit=20`, range 1..100; final messages omitted |
-| `dev_task_cancel` | Cancel a task without new approval (`dev:run`) | Required `id`; changes state, terminates running process group |
+Host/Kubernetes and vault writes need `ops:write` plus their provider action gate and OS/RBAC permission. All dev tools need `dev:run`; HTTP additionally requires `ops:read`. The server plans an operation before requesting human approval. Elicitation uses the client UI; builtin browser approval signs in the same user and binds a single-use decision to the exact arguments and plan. Set `approval.require_web: true` with `approval.web: true` to require browser approval; this denies stdio writes. A compromised client can accept its own elicitation prompts.
 
-Obsidian paths use vault-relative forward slashes, preserve Unicode bytes, and are limited to 1024 bytes. Excluded paths behave as missing. Note text is untrusted data. Obsidian numeric inputs outside the documented ranges are rejected. Safe in-vault symlinks are supported with cycle prevention. Scans are bounded to 100000 entries and 128 directory levels; links/backlinks each return at most 1000 results. Write previews include a diff (full content for create), current hash and resulting hash, with explicit truncation near 8 KiB. Apply rechecks the approved hash, size and modification time. Creates publish atomically without overwriting racing creators; updates use a synced temporary file and rename. Trash publishes a durable copy before removing the source. Existing trailing-newline policy is preserved. Content/replacement inputs are capped at 256 KiB, but the shared 16 KiB JSON argument cap currently limits MCP calls further.
+Approval windows are off by default. An opt-in window covers a user/tool pair across clients and targets until expiry and lives only in memory. Do not enable windows for `dev_task_start`. Worktrees are not a sandbox; task ownership relies on the trusted socket peer's asserted user. Large note previews are truncated with an omitted-line count, and an external edit between a vault update's optimistic check and rename can be overwritten.
 
-For read-tool numeric limits, zero selects the default; other out-of-range values are clamped. Write replica counts are validated, not clamped. All returned text is subject to `server.max_output_bytes` (default 65536) and calls have cooperative deadlines (`server.tool_timeout`, default 30s).
-
-Kubernetes namespace inputs must be DNS-1123 labels; object `name`, `pod` and `container` inputs are validated as DNS-1123 subdomains.
-
-Supported `kind` values for `k8s_list` and `k8s_get` are case-insensitive (aliases in parentheses): pods (po, pod), deployments (deploy, deployment), statefulsets (sts, statefulset), daemonsets (ds, daemonset), replicasets (rs, replicaset), jobs (job), cronjobs (cronjob), services (svc, service), ingresses (ing, ingress), configmaps (cm, configmap), persistentvolumeclaims (pvc, persistentvolumeclaim), persistentvolumes (pv, persistentvolume), nodes (no, node), namespaces (ns, namespace).
-
-Nodes, PersistentVolumes and Namespaces are cluster-scoped: omit `namespace`. Namespace allow/deny rules filter Namespace objects by name, but do not restrict Nodes or PersistentVolumes, including nodes shown by `k8s_overview`. Namespaced resources and events are filtered by namespace; empty allowlists allow none. Use RBAC to constrain cluster-scoped access.
-
-Use [read-only RBAC](deploy/kubernetes/rbac-readonly.yaml) as a starting point and review its effective permissions before deployment. It creates a ServiceAccount in the pre-existing `opsgate` namespace, a ClusterRole and a ClusterRoleBinding granting cluster-wide get/list/watch for supported resources, events and pod logs, excluding Secrets. Use namespace RoleBindings for narrower access.
-
-Kubeconfig `exec` and `auth-provider` credential plugins are rejected; use credentials that do not require plugins, such as a short-lived ServiceAccount token. Protect kubeconfig ownership and permissions.
-
-## Redaction and object sanitization
-
-The shared `internal/redact` layer masks PEM private keys, Authorization/Proxy-Authorization headers, Basic/Bearer credentials, JWT-shaped tokens, URL passwords, and recognized token patterns for AWS access key IDs, GitHub, GitLab, Slack, Stripe live keys, OpenAI/Anthropic-style keys, Google API keys and Telegram bots. Sensitive `:`/`=` assignments and structured argument keys include password/passwd/pwd, secret/client_secret, token/access_token/refresh_token, api_key/apikey/access_key/secret_key/private_key, credential/credentials, auth_token, session_id, cookie and set-cookie, including underscore-prefixed variants such as `db_password` (key matching is case-insensitive). Structured argument maps and slices are traversed recursively. Success text, errors and audit arguments are redacted. This is **best effort**: unfamiliar formats and secrets embedded in arbitrary data can escape.
-
-`k8s_get` additionally removes `managedFields` and `kubectl.kubernetes.io/last-applied-configuration` from metadata, including templates. ConfigMap `data` and `binaryData` retain keys but replace values with byte-count placeholders unless `show_configmap_data=true`. Literal environment `value` fields are replaced with `[REDACTED]` when the variable name contains pass, secret, token, key, credential, auth, dsn, private, cert or database_url (case-insensitive). This applies to regular, init and ephemeral containers in Pods and supported workload templates, including CronJobs. Other literal values remain visible unless matched by shared redaction; `valueFrom` references remain visible and are not resolved.
-
-## Authentication and human approval
-
-`builtin` delegates login to GitHub or OIDC (including Google), then issues opaque MCP tokens. It supports authorization code with PKCE S256 only, Dynamic Client Registration (DCR), per-client consent, refresh rotation and reuse revocation. The issuer is `http.public_url`; the resource is `<public_url>/mcp`. Optional state persistence retains client registrations and token hashes across restarts; protect its directory and backups, and use one process per state file.
-
-Builtin OIDC users may match a verified `email:<address>` or an exact, case-sensitive immutable `oidc:<sub>` from the configured issuer. If both match, `oidc:<sub>` takes precedence and needs no email claim. Google email subjects require `gmail.com`/`googlemail.com`, or an `hd` claim matching the email domain (Google Workspace); `email_verified` alone is insufficient for other Google addresses. For the Google example above, use a Workspace address or configure `oidc:<sub>`.
-
-OAuth GET routes reject request bodies; POST body reads have a 10-second deadline. Authorization errors stay on a local page before consent; Deny on the consent page may redirect. At DCR capacity, registrations older than 10 minutes that never issued tokens and have no outstanding authorization are evicted oldest first. Pending authorizations are limited to 20 per client and 1000 overall, evicting the oldest affected entry; browser approval logins have a separate pool of 100.
-
-`external` validates JWT signatures using issuer discovery and JWKS, with issuer, audience, expiry and allowed algorithm checks. Issuer, discovery and JWKS URLs require HTTPS, except loopback HTTP. Audience defaults to the MCP resource URL. Scopes come from `scope` or `scp`; an optional `claim:<value>` user allowlist further restricts identities and intersects their scopes. `static` accepts pre-shared bearer tokens configured by SHA-256 digest; generate a token and digest with `opsgate -gen-token`. Store the raw token only in the client's secret storage. Static mode provides no DCR or OAuth login.
-
-Read tools require `ops:read`. Writes require their own action allowlist, `ops:write`, underlying OS/RBAC permission and human confirmation. HTTP access additionally requires `ops:read`, so remote writers need both scopes. Namespace allow/deny rules still apply to Kubernetes writes. Read unit allowlists do not authorize restarts.
-
-The server validates inputs and builds a side-effect-free plan before confirmation. Clients supporting MCP elicitation show an in-client approval prompt, including multi round-trip input requests across protocol versions. Otherwise, `approval.web: true` with builtin auth returns an approval link and `approval_id`. The human opens it, signs in upstream as the same user and reviews the exact operation. After approval, retry the same tool with exactly the same arguments plus `approval_id`. Approvals expire, are single-use and bind the user, tool, SHA-256 of canonical unredacted arguments (excluding `approval_id`) and plan. Writes are denied if redaction changes the summary, so the human sees an unambiguous target. Kubernetes plans include the target UID; execution uses that invocation’s plan and identity/version preconditions. Without a confirmation channel, writes are denied; stdio supports elicitation only.
-
-Optional time-window approvals require both `approval.window` (1m–12h; `0s` disables the feature) and `approval.window_tools` (a `path.Match` glob allowlist; empty allows no tools). For example, `window: 30m` and `window_tools: [host_service_restart]` let a human choose **Approve + allow for 30m** in the browser, or the optional **Also auto-approve host_service_restart for 30m** checkbox in elicitation. The grant covers that exact user and tool, including later calls with different arguments or targets. It does not grant scopes, bypass action allowlists, skip input validation or skip planning. Grants live only in memory, expire without renewal on use, are capped at 100, and disappear on restart. Each call still has its own audit record with `approval: window`; grant creation emits a separate `window_granted` event with the source (`web` or `elicitation`), duration and expiry. With `require_web`, only the browser can obtain a grant and stdio writes remain denied.
-
-Approval pages show the plan with diff highlighting, requester, transport, expiry and collapsed arguments. After deciding, return to the chat and ask the assistant to retry; there is no automatic redirect. Approval summaries are capped at 64 KiB. Raw JSON arguments default to 16 KiB, while `dev_task_start` allows 48 KiB to accommodate its 32 KiB prompt; JSON escaping counts toward the wire limit.
-
-Set `approval.require_web: true` with `approval.web: true` to require browser approval even when the client supports elicitation; this denies writes over stdio. A compromised client UI can auto-approve elicitation. Prompt injection can still make a model request writes: humans must read the summary before approving. See [SECURITY.md](SECURITY.md).
-
-## Dev provider
-
-Run coding tasks through a separate, unprivileged `opsgate dev-runner` account.
-Its own configuration allowlists projects and fixed agent commands; the HTTP
-server supplies only names and a prompt. All dev tools require `dev:run`; task
-starts also require human approval. HTTP access additionally requires `ops:read`.
-Tasks use new branches/worktrees and never merge, push or deploy automatically.
-Agent output and diffs are untrusted data. Worktrees are not an OS sandbox;
-configure the agent sandbox and keep the runner account free of privileged
-credentials. See [setup, limits and risks](docs/dev.md) and the
-[runner configuration](deploy/dev-runner.example.yaml).
-
-The runner uses a separate YAML file; these keys are not nested under `providers`:
-
-| Runner YAML key | Default | Meaning |
-| --- | --- | --- |
-| `socket` / `socket_group` | Required | Absolute Unix socket path and allowed peer group |
-| `work_dir` | Required | Absolute private state/worktree directory |
-| `projects` | `[]` | Allowlist of unique lowercase `name`, absolute `path`, and `base_ref` (default `HEAD`) |
-| `agents` | `{}` | Agent names mapped to fixed `command` argv and optional `env` KEY=VALUE pairs; executable path must be absolute |
-| `timeout` | `1h` | Positive task timeout |
-| `max_concurrent` | `1` | FIFO worker count, 1..8 |
-| `max_tasks` | `100` | Positive retained-task cap; remove oldest finished worktrees/records, keep branches |
-
-## Configuration reference
-
-Defaults below come from `config.Default()`. YAML is loaded over defaults with strict known-field checking; unknown keys fail. HTTP, authentication and approval settings are included below. Empty slices are shown as `[]` (some are nil in Go).
-
-| YAML key | Default | Meaning |
-| --- | --- | --- |
-| `server.name` | `opsgate` | MCP server name |
-| `server.audit_log` | `""` | Empty writes to stderr; otherwise JSONL path |
-| `server.max_output_bytes` | `65536` | Tool output byte limit; must be positive |
-| `server.tool_timeout` | `30s` | Per-call timeout; must be positive |
-| `stdio.user` | `local` | Audit identity label; OS user is the trust boundary |
-| `stdio.scopes` | `[ops:read]` | Accepted scopes: ops:read, ops:write, dev:run; write does not enable actions |
-| `providers.host.enabled` | `false` | Enable host provider |
-| `providers.host.units` | `[]` | Unit glob allowlist; empty allows none |
-| `providers.host.disk_paths` | `[/]` | Mount points for overview |
-| `providers.host.max_log_lines` | `500` | Journal lines per call cap |
-| `providers.kubernetes.enabled` | `false` | Enable Kubernetes provider |
-| `providers.kubernetes.kubeconfig` | `""` | Empty: in-cluster, then $KUBECONFIG, then ~/.kube/config |
-| `providers.kubernetes.context` | `""` | Context override; empty uses selected context |
-| `providers.kubernetes.namespaces` | `[]` | Namespace glob allowlist; empty allows none; * allows all |
-| `providers.kubernetes.deny_namespaces` | `[]` | Deny globs override allow globs |
-| `providers.kubernetes.allow_logs` | `false` | Enable pod logs |
-| `providers.kubernetes.show_configmap_data` | `false` | False exposes keys only, hides values |
-| `providers.kubernetes.max_log_lines` | `500` | Pod log lines per call cap |
-| `http.listen` | `127.0.0.1:8787` | Backend TCP address |
-| `http.public_url` | `""` | Required HTTP origin; HTTPS except loopback HTTP; resource is origin + /mcp |
-| `auth.mode` | `""` | Required for HTTP: builtin, external or static |
-| `auth.builtin.state_file` | `""` | Optional 0600 persistence for clients and token hashes; empty loses state on restart |
-| `auth.builtin.users` | `[]` | Allowed upstream users; empty denies everyone |
-| `auth.builtin.users[].subject` | `""` | github:login, email:verified-email or oidc:sub (exact OIDC subject) |
-| `auth.builtin.users[].scopes` | `[]` | Grants: ops:read and optionally ops:write |
-| `auth.builtin.upstream.provider` | `""` | github or oidc |
-| `auth.builtin.upstream.issuer` | `""` | Required OIDC issuer, e.g. https://accounts.google.com |
-| `auth.builtin.upstream.client_id` | `""` | Upstream application client ID |
-| `auth.builtin.upstream.client_secret_file` | `""` | Secret file; use this or client_secret_env |
-| `auth.builtin.upstream.client_secret_env` | `""` | Environment variable name containing the secret |
-| `auth.builtin.access_token_ttl` | `1h` | Access token lifetime |
-| `auth.builtin.refresh_token_ttl` | `720h` | Refresh token lifetime |
-| `auth.builtin.max_clients` | `100` | Dynamic Client Registration capacity |
-| `auth.external.issuer` | `""` | Trusted issuer for discovery and JWKS |
-| `auth.external.audience` | `""` | Empty resolves to public_url + /mcp |
-| `auth.external.user_claim` | `sub` | String claim identifying the user |
-| `auth.external.users` | `[]` | Empty trusts token scopes; otherwise restrict users and intersect token/granted scopes |
-| `auth.external.users[].subject` | `""` | claim:value for the configured user_claim |
-| `auth.external.users[].scopes` | `[]` | Maximum permitted scopes for this identity |
-| `auth.static` | `[]` | Configured bearer tokens; no OAuth login in this mode |
-| `auth.static[].name` | `""` | Token identity/audit label |
-| `auth.static[].sha256` | `""` | Hex SHA-256 digest, never the raw token |
-| `auth.static[].scopes` | `[]` | Token grants; include ops:read for HTTP access |
-| `approval.ttl` | `10m` | Pending browser approval lifetime |
-| `approval.web` | `false` | Browser fallback; requires builtin authentication |
-| `approval.require_web` | `false` | Require browser approval; requires `approval.web`; denies stdio writes |
-| `approval.window` | `0s` | Optional user/tool auto-approval lifetime; 1m–12h when enabled |
-| `approval.window_tools` | `[]` | `path.Match` tool-name globs eligible for windows; empty allows none |
-| `providers.host.restart_units` | `[]` | Separate restart unit glob allowlist; empty disables tool |
-| `providers.host.command_prefix` | `[]` | Write argv prefix, e.g. [/usr/bin/sudo, -n]; first element absolute executable, remaining paths/flags |
-| `providers.kubernetes.rollout_restart` | `[]` | namespace/name globs; empty disables tool |
-| `providers.kubernetes.scale` | `[]` | namespace/name globs; empty disables tool |
-| `providers.kubernetes.delete_pod` | `[]` | namespace/name globs; empty disables tool |
-| `providers.kubernetes.max_replicas` | `10` | Scale maximum; nonnegative, zero permits only zero replicas |
-| `providers.obsidian.enabled` | `false` | Enable the Markdown vault provider; no Obsidian app or CLI needed |
-| `providers.obsidian.vault` | `""` | Absolute existing vault directory; all access confined with os.Root |
-| `providers.obsidian.exclude` | `[]` | Additional vault-relative path.Match globs matching a path or any parent; dot-prefixed segments and sync-conflict copies always excluded |
-| `providers.obsidian.allow_write` | `false` | Register four note write tools; each requires ops:write and human approval |
-| `providers.obsidian.max_note_bytes` | `1048576` | Positive per-note size limit for reads/writes; oversized notes skipped in content scans |
-| `providers.dev.enabled` | `false` | Enable dev provider; all tools require dev:run |
-| `providers.dev.runner_socket` | `""` | Absolute Unix socket path of the separate dev-runner |
-
-Log limits are provider caps; keep them positive. Raw write arguments are capped at 16 KiB (48 KiB for `dev_task_start`) before redaction and argument auditing; approval summaries are capped at 64 KiB. All four write tools accept optional `approval_id` for the browser retry. Write tools are registered only with nonempty action allowlists. Configuration changes require a restart.
-
-## Audit format
-
-The shared wrapper writes one JSON object per handled tool call, appended to `server.audit_log`, or stderr when empty. New files are created with mode 0600 (subject to umask); existing permissions are retained. Symlinks, non-regular files and group/world-writable files are rejected. Stdout is reserved for MCP messages.
-
-```json
-{"time":"2026-10-24T12:00:00Z","user":"local","transport":"stdio","tool":"host_service_status","args":{"unit":"ssh.service"},"outcome":"ok","duration_ms":12,"output_bytes":120}
-```
-
-Fields of `audit.Event`: `time` (RFC3339 timestamp with optional fractional seconds), `user`, `transport`, `tool`, optional redacted `args`, `outcome` (`ok`, `error`, `denied`, `pending`), optional redacted `error`, `duration_ms`, and `output_bytes` (returned success text size; zero on error). Write events additionally include optional redacted `plan` (the summary shown to the human) and `approval` (the confirmation method, `elicitation`, `web` or `window`; may also be present on a refusal or pending call). `pending` means browser approval is outstanding; its returned instruction text is counted in `output_bytes`. Planning and applying each receive a separate tool timeout; human confirmation may take longer. Web decisions emit separate audit events with `outcome` `approved` or `rejected`, user, tool and only an eight-character `args.approval_id_prefix`. Denied multi round-trip approval verifications emit `denied` events without request state. Tool output bodies are not stored. Audit write failures are reported to stderr without failing the tool call; audit is not tamper-proof. Protect and rotate logs, which may still contain sensitive information.
+Arguments default to 16 KiB; note content tools allow 528 KiB of JSON with 256 KiB per content/replacement input, and `dev_task_start` allows 48 KiB with a 32 KiB prompt. Summaries allow `max(64 KiB, argument limit + 16 KiB)`. Provider output above 4 MiB is omitted; other output is redacted before truncation to the configured cap (default 64 KiB). Calls and write phases have cooperative deadlines, and audit records include denials and approvals. See [tools](docs/tools.md), [configuration and audit reference](docs/configuration.md), [dev setup](docs/dev.md) and [security limitations](SECURITY.md).
 
 ## Development and license
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under [Apache-2.0](LICENSE), copyright 2026 The opsgate Authors.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [deployment and release verification](docs/deploy.md), and [the roadmap](docs/roadmap.md). Licensed under [Apache-2.0](LICENSE), copyright 2026 The opsgate Authors.

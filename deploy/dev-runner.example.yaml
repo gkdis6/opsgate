@@ -1,4 +1,8 @@
 # Separate file: root-owned, readable by opsdev, never writable by opsgate.
+# Optional experimental provider; worktrees are not a sandbox.
+# Socket peers are trusted to assert caller identities.
+admins: [] # Exact subjects allowed to read/cancel ALL tasks; others access only their own.
+# Example admin: github:operator or static:local-client.
 socket: /run/opsgate-dev/runner.sock
 socket_group: opsgate
 work_dir: /var/lib/opsgate-dev
@@ -8,6 +12,7 @@ projects:
     base_ref: main
 agents:
   codex:
+    # Configure and verify the agent sandbox under the runner account.
     # Workspace edits and sandboxed commands; approval is for the entire task.
     # The requirement is read from stdin, never a command-line argument.
     command: [/usr/local/bin/codex, exec, -C, "{workdir}", -s, workspace-write, --skip-git-repo-check, -o, "{output}", "-"]

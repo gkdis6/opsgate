@@ -1,5 +1,7 @@
 # Coding tasks through the dev provider
 
+This optional provider is implemented and experimental.
+
 `opsgate dev-runner` runs configured coding agents under a separate Linux account.
 The internet-facing MCP server connects through a Unix socket and can select only
 runner-configured project and agent names. Each task gets an `opsgate/<id>` branch
@@ -71,6 +73,15 @@ providers:
 Grant intended users `dev:run`; HTTP access also currently requires `ops:read`.
 Starting a task needs human approval through the existing elicitation/browser
 flow. Read and cancellation tools require `dev:run` but no new approval.
+Tasks are owned by their requester. Ordinary users see and cancel only their
+own tasks; exact subjects in the runner's `admins` list can see and cancel all
+tasks. Use the exact caller identity: builtin subject, `static:<token-name>`,
+external user-claim value, or stdio user label. This list is separate from builtin
+OAuth client-registration admins.
+The permitted socket peer asserts `X-Opsgate-User`; the runner trusts that
+assertion and does not authenticate end-user tokens. Any permitted peer can
+impersonate a task owner or admin. Protect socket membership accordingly.
+Do not enable approval windows for `dev_task_start`; review each task separately.
 A runner outage is reported by dev tool calls; it does not prevent MCP startup.
 For foreground troubleshooting use:
 
@@ -115,10 +126,10 @@ global/system Git configuration, and commit signing are disabled for runner Git
 commands; diff disables external commands and text conversion. Repository local
 Git configuration must remain trusted, including any configured filters.
 
-Prompts are 1..32 KiB and requested identities at most 256 bytes. dev_task_start
-accepts up to 48 KiB of MCP arguments and approval summaries up to 64 KiB, so a
-full 32 KiB requirement fits with JSON and summary overhead. Logs cap at 20 MiB per task, with excess output drained
-and discarded. Log pages and diffs cap at 256 KiB before JSON encoding/redaction;
+Prompts contain 1 byte to 32 KiB; requester identities are at most 256 bytes. dev_task_start
+accepts up to 48 KiB of MCP arguments and approval summaries up to 64 KiB, but JSON
+escaping counts toward the wire limit, so heavily escaped prompts may fit less.
+Logs cap at 20 MiB per task, with excess output drained and discarded. Log pages and diffs cap at 256 KiB before JSON encoding/redaction;
 MCP applies its own output cap afterwards. Final output files are read up to
 256 KiB; without a readable regular output file, the last 8 KiB of log is used.
 

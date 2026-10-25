@@ -1,73 +1,134 @@
-# Complete key reference; provider/write allowlists deny everything by default.
-# This file loads for stdio. Configure auth.mode and upstream before HTTP use.
+# Complete server key reference, loaded over config.Default(). Unknown keys fail.
+# READ-ONLY: all providers disabled, no write allowlists, no approval windows.
+# This loads for stdio. Configure public_url, auth.mode and credentials for HTTP.
+# One instance is one trust group: ops:read covers ALL enabled read providers.
 server:
-  name: opsgate # MCP name.
-  audit_log: "" # stderr; otherwise a protected JSONL path.
-  max_output_bytes: 65536 # Positive response byte limit.
-  tool_timeout: 30s # Cooperative deadline; separate plan/apply deadlines for writes.
+  name: opsgate
+  audit_log: "" # stderr; otherwise a protected JSONL file path.
+  max_output_bytes: 65536 # Positive; redaction precedes output truncation.
+  tool_timeout: 30s # Cooperative; separate plan/apply deadlines for writes.
+  tools:
+    allow: [] # Empty permits every offered tool; path.Match tool-name globs.
+    deny: [] # Deny wins; excluded tools are absent from tools/list.
+    # Each server policy pattern must match an offered tool or startup fails.
 stdio:
   user: local # Audit label; launching OS account is the trust boundary.
-  scopes: [ops:read] # Add ops:write only with reviewed write policy and elicitation.
+  scopes: [ops:read]
 http:
-  listen: 127.0.0.1:8787 # Keep backend private behind TLS proxy.
-  public_url: "" # Required HTTP origin, e.g. https://mcp.example.com (no /mcp).
+  listen: 127.0.0.1:8787 # Private backend behind a Host-preserving TLS proxy.
+  public_url: "" # Required origin for HTTP, e.g. https://mcp.example.com; no /mcp.
 auth:
   mode: "" # Required for HTTP: builtin, external or static.
   builtin:
     state_file: "" # Optional private state path, e.g. /var/lib/opsgate/oauth.json.
-    users: [] # Default denies all; entries: {subject: 'email:operator@example.com', scopes: [ops:read]}.
-    # GitHub subjects use github:login; OIDC requires a verified email.
+    users: [] # Empty denies all. Read-only entry shape below.
+    # - subject: email:operator@example.com
+    #   scopes: [ops:read]
+    #   tools: [] # Empty adds no restriction; optional tool-name globs.
+    # GitHub: github:login. OIDC: verified email:address or exact oidc:sub.
+    # Google email needs Gmail/Googlemail or matching Workspace hd; otherwise use oidc:sub.
     upstream:
       provider: "" # github or oidc; Google uses oidc.
-      issuer: "" # OIDC: https://accounts.google.com.
-      client_id: "" # Upstream application ID; register <public_url>/oauth/callback.
+      issuer: "" # Required for OIDC; Google: https://accounts.google.com.
+      client_id: "" # Register exact <public_url>/oauth/callback upstream.
       client_secret_file: "" # Protected secret file; never put secrets in YAML.
-      client_secret_env: "" # Alternative: environment variable NAME, not its value.
+      client_secret_env: "" # Alternative variable NAME, not its secret value.
     access_token_ttl: 1h
-    refresh_token_ttl: 720h # Rotation and reuse detection.
-    max_clients: 100 # DCR capacity; lower for small deployments.
+    refresh_token_ttl: 720h # Refresh rotation and reuse detection.
+    max_clients: 100
+    allowed_redirect_hosts: [] # Empty accepts any otherwise valid redirect host.
+    # For public deployment set exact hosts, without ports; localhost covers
+    # loopback IPs and any port. Private schemes use entries such as 'cursor:'.
+    # Example: [claude.ai, chatgpt.com, localhost, 'cursor:']; review client URIs.
+    unknown_redirect_hosts: deny # With a host list: deny, or approve (admin review).
+    admins: [] # Exact allowed user subjects who manage /admin/clients.
+    # approve requires admins present in users; pending clients cannot authorize.
+    notify_url: "" # Optional pending-client JSON POST; HTTPS or loopback HTTP.
+    # Notifications are best effort; review client names/redirect hosts as untrusted.
   external:
-    issuer: "" # Trusted issuer supporting discovery and JWKS.
+    issuer: "" # Trusted discovery/JWKS issuer; HTTPS except loopback HTTP.
     audience: "" # Empty defaults to <public_url>/mcp.
-    user_claim: sub # String identity claim.
-    users: [] # Optional entries: {subject: 'claim:operator', scopes: [ops:read]}.
-    # Empty users trusts token scopes; entries intersect token and configured scopes.
-  static: [] # Entries: {name: local-client, sha256: 'HEX_DIGEST', scopes: [ops:read]}.
-  # Generate digest with opsgate -gen-token; raw token belongs only in client storage.
+    user_claim: sub
+    users: [] # Empty trusts token scopes; otherwise map claim:<value> identities.
+    # - subject: claim:operator
+    #   scopes: [ops:read] # Intersected with token scopes.
+    #   tools: [] # Optional tool-name globs; empty adds no limit.
+  static: [] # Generate digest with opsgate -gen-token; keep raw token in client storage.
+  # - name: local-client
+  #   sha256: REPLACE_WITH_64_HEX_DIGEST
+  #   scopes: [ops:read]
+  #   tools: [] # Optional tool-name globs; identity is static:local-client.
 approval:
-  ttl: 10m # Pending browser approval lifetime.
-  web: false # Browser fallback requires builtin auth; stdio uses elicitation only.
-  require_web: false # Require browser decisions (including new windows); denies stdio writes.
-  window: 0s # Optional auto-approval lifetime: 1m..12h; zero disables it.
-  window_tools: [] # path.Match tool-name globs; empty allows none. E.g. [host_service_restart].
-  # A human must opt in. Grants cover the same user/tool with ANY valid arguments,
-  # expire without renewal on use, and are cleared on restart (100 live grants max).
+  ttl: 10m # Pending approval/input lifetime.
+  web: false # Requires builtin auth; stdio supports elicitation only.
+  require_web: false # Requires web; uses browser approval and denies stdio writes.
+  window: 0s # Off; opt-in duration must be 1m..12h.
+  window_tools: [] # Empty permits no grants; tool-name path.Match globs.
+  # Windows cover user+tool across clients and targets; in memory, 100 max.
+  # Never include dev_task_start: approve every coding task separately.
 providers:
-  # obsidian: # Markdown vault; no Obsidian app/CLI required.
-  #   enabled: false
-  #   vault: /absolute/path/to/vault # Must already exist; os.Root confines access.
-  #   exclude: [] # Extra path.Match globs; dot paths and sync conflicts always hidden.
-  #   allow_write: false # Requires ops:write and human approval for each note change.
-  #   max_note_bytes: 1048576 # Positive read/write limit; oversized notes skip scans.
   host:
     enabled: false
-    units: [] # Read status/log glob allowlist, e.g. [myapp.service].
+    units: [] # Read status/log unit globs, e.g. [myapp.service]; empty allows none.
     disk_paths: [/]
-    max_log_lines: 500 # Keep positive.
-    restart_units: [] # Separate write glob allowlist; empty disables restart tool.
-    command_prefix: [] # Optional [/usr/bin/sudo, -n]; exact sudoers rule required.
+    max_log_lines: 500 # Positive cap.
+    restart_units: [] # Separate action globs; empty disables restart tool.
+    command_prefix: [] # Trusted write argv prefix; first element absolute executable.
   kubernetes:
     enabled: false
     kubeconfig: "" # In-cluster, then $KUBECONFIG, then ~/.kube/config; no exec/auth-provider.
-    context: "" # Empty uses selected context.
-    namespaces: [] # Glob allowlist, e.g. [apps]; empty denies all.
-    deny_namespaces: [] # Denies win; consider [kube-system, kube-public, kube-node-lease].
+    context: "" # Override for file-based config; empty uses selected context.
+    namespaces: [] # Namespace globs; empty denies all namespaced resources.
+    deny_namespaces: [] # Deny wins, e.g. [kube-system, kube-public, kube-node-lease].
+    # Nodes and PersistentVolumes are not restricted by namespace rules; use RBAC.
     allow_logs: false
-    show_configmap_data: false # Hide values, expose keys only.
-    max_log_lines: 500 # Keep positive.
-    rollout_restart: [] # namespace/name globs, e.g. [apps/myapp].
-    scale: [] # Separate namespace/name globs.
-    delete_pod: [] # Separate namespace/name globs; prefer exact pod names.
-    max_replicas: 10 # Nonnegative scale ceiling; zero allows only zero replicas.
-# Both user lists accept subject and scopes; static entries accept name, sha256, scopes.
-# HTTP writers need ops:read + ops:write, action allowlists, OS/RBAC and human approval.
+    show_configmap_data: false # Hide data/binaryData values, expose keys.
+    max_log_lines: 500
+    rollout_restart: [] # namespace/name globs; empty disables tool.
+    scale: []
+    delete_pod: []
+    max_replicas: 10 # Nonnegative; zero allows only scaling to zero.
+  obsidian: # Optional experimental Markdown vault provider; no Obsidian app needed.
+    enabled: false
+    vault: "" # Absolute existing directory when enabled; access confined with os.Root.
+    exclude: [] # Additional vault-relative path.Match globs; dot paths/conflicts hidden.
+    allow_write: false # Registers four note write tools; still needs approval + ops:write.
+    max_note_bytes: 1048576 # Positive read/write cap; oversized notes skipped by scans.
+  dev: # Optional experimental provider; separate trusted runner/account required.
+    enabled: false
+    runner_socket: "" # Absolute Unix socket path, e.g. /run/opsgate-dev/runner.sock.
+
+# ---- OPTIONAL WRITE OPT-INS (merge into existing sections; not enabled above) ----
+# Review narrow OS/RBAC permissions and human confirmation first. HTTP also needs ops:read.
+# stdio:
+#   scopes: [ops:read, ops:write] # Requires an elicitation-capable client.
+# auth:
+#   builtin:
+#     users:
+#       - subject: oidc:REPLACE_WITH_EXACT_SUBJECT
+#         scopes: [ops:read, ops:write]
+#         tools: [host_service_status, host_service_restart]
+# approval:
+#   web: true # builtin auth only.
+#   require_web: true # Browser decisions only; stdio writes denied.
+# providers:
+#   host:
+#     enabled: true
+#     restart_units: [myapp.service]
+#     command_prefix: [/usr/bin/sudo, -n] # Exact sudoers rule + service drop-in required.
+#   kubernetes:
+#     enabled: true
+#     namespaces: [apps]
+#     rollout_restart: [apps/myapp]
+#     scale: [apps/myapp]
+#     delete_pod: [apps/REPLACE_WITH_EXACT_POD]
+#     max_replicas: 3
+#   obsidian:
+#     enabled: true
+#     vault: /absolute/path/to/vault
+#     allow_write: true # Use sync version history; check/rename has an external-edit race.
+# To enable coding tasks: providers.dev.enabled=true, configure runner_socket,
+# and grant selected users [ops:read, dev:run]. Each start requires human approval.
+# Worktrees are not a sandbox; no automatic push/merge/deploy is implemented.
+# An optional approval.window/window_tools grant skips later individual prompts
+# for that user/tool across targets. Keep it off for coding task starts.

@@ -1,8 +1,16 @@
 # Security policy
 
-opsgate stages 1–4 are implemented and pre-release, including remote HTTP, authentication and human-approved writes. It has not yet been security-reviewed by third parties. Review the implementation you deploy.
+opsgate implements remote HTTP, authentication and human-approved writes and is preparing for its first public release. The optional Obsidian and dev providers are experimental. It has not yet been security-reviewed by third parties. Review the implementation you deploy.
 
 ## Threat model
+
+**One opsgate instance is one trust group.** `ops:read` reads every enabled read
+provider: servers, cluster resources and notes. Provider allowlists constrain
+resources; `server.tools` and per-user/token `tools` globs can narrow tool access.
+They are not separate credential or process boundaries. For different trust
+levels run separate instances and accounts, for example production operations,
+personal notes and coding agents. Keep each instance's credentials and reachable
+data appropriate for its entire trust group.
 
 The intended boundary is a constrained MCP interface with read tools and explicitly approved write actions: explicit provider opt-in, unit and namespace allowlists, namespace denies, scope checks, bounded calls and output, best-effort redaction and per-call audit records. No arbitrary shell or exec interface is exposed. Kubernetes Secrets are excluded; ConfigMap values are hidden by default. These controls reduce accidental disclosure and the operations a client can request through opsgate.
 
@@ -10,19 +18,24 @@ They do not make untrusted output safe. Logs, events, annotations and resource n
 
 Over-broad RBAC or kubeconfig permissions expand the consequences of bugs and compromise. Use dedicated credentials with only required read and optional write permissions, and review the supplied RBAC manifests. Kubeconfig `exec` and `auth-provider` credential plugins are rejected. Keep kubeconfig files and config paths under trusted ownership. Namespace allow/deny rules filter namespaced resources and Namespace objects by name; they do not restrict Nodes or PersistentVolumes, including nodes in `k8s_overview`. Omit `namespace` for cluster-scoped kinds. The supplied ClusterRoleBinding grants cluster-wide reads; prefer namespace RoleBindings where possible. Providers and their credentials must not be attacker-controlled. Running as root is discouraged; use an unprivileged account with only the journal and cluster access required.
 
-The [README](README.md#redaction-and-object-sanitization) details the implemented text patterns and object sanitization. ConfigMap data and binaryData values are hidden by default. Pod and workload literal environment values are masked for case-insensitive name substrings pass, secret, token, key, credential, auth, dsn, private, cert and database_url; other values may remain visible. `valueFrom` references are visible and are not resolved. Redaction is best effort, not a guarantee that secrets cannot escape. Logs, metadata and process information can contain credentials in unexpected formats. Avoid collecting secret material in the first place. Protect audit logs too: arguments and errors can retain sensitive information. Auditing is not a tamper-proof ledger and does not guarantee durable delivery when writes fail. Context deadlines require handlers and dependencies to cooperate; output limits do not eliminate all resource exhaustion risks.
+The [tool reference](docs/tools.md#redaction-and-object-sanitization) details the implemented text patterns and object sanitization. ConfigMap data and binaryData values are hidden by default. Pod and workload literal environment values are masked for case-insensitive name substrings pass, secret, token, key, credential, auth, dsn, private, cert and database_url; other values may remain visible. `valueFrom` references are visible and are not resolved. Redaction is best effort, not a guarantee that secrets cannot escape. Logs, metadata and process information can contain credentials in unexpected formats. Avoid collecting secret material in the first place. Protect audit logs too: arguments and errors can retain sensitive information. Auditing is not a tamper-proof ledger and does not guarantee durable delivery when writes fail. Context deadlines require handlers and dependencies to cooperate; output limits do not eliminate all resource exhaustion risks.
 
 opsgate does not defend against a compromised host, kernel, server binary, dependency, administrator or credential store. It does not sandbox the client or revoke the launching user's permissions. It does not protect against stolen bearer tokens used within their lifetime, denial of service at the network edge, or disclosure by an authorized client.
 
 ## Remote exposure and authorization
 
-HTTP exposes `/mcp` with Protected Resource Metadata. Authentication is mandatory; HTTPS is required for the public origin except loopback development. Terminate TLS at a trusted proxy, keep the backend private and forward the discovery, OAuth and approval routes described in [deployment](docs/deploy.md). Do not log bearer tokens, cookies, authorization codes, client secrets or approval URLs. CORS and MCP annotations are not authorization boundaries.
+HTTP exposes `/mcp` with Protected Resource Metadata. Authentication is mandatory; HTTPS is required for the public origin except loopback development. Terminate TLS at a trusted proxy, keep the backend private and forward the discovery, OAuth and approval routes described in [deployment](docs/deploy.md). Do not log bearer tokens, cookies, authorization codes, client secrets or approval URLs. The Host check replaces the SDK's localhost check: public requests must match
+`public_url`'s host, including any explicit port, or receive 421. Loopback
+listeners additionally accept loopback Host values for probes. A Host-preserving
+reverse proxy works with a loopback backend; wildcard listeners have no local
+exception. CORS and MCP annotations are not authorization boundaries.
 
 Builtin OAuth addresses these threats:
 
 - Authorization-code interception: PKCE S256 is mandatory; no implicit or password grant.
 - Redirect theft: exact registered redirect URI matching on authorization and code redemption.
 - DCR abuse: bounded bodies, metadata and client capacity, registration rate limiting, restricted grants and authentication methods, HTTPS redirects or loopback HTTP and supported native URI schemes. At capacity, unused registrations older than 10 minutes are evicted oldest first, excluding clients with tokens or outstanding authorizations. Registration does not grant tool access.
+- Registration policy: `allowed_redirect_hosts` limits redirect destinations. With a nonempty list, `unknown_redirect_hosts: deny` rejects unknown hosts; `approve` keeps clients pending until a configured administrator reviews `/admin/clients`. Admins must be allowed users. `notify_url` optionally receives a best-effort JSON notification for pending registrations. An empty host list accepts any otherwise valid redirect host and ignores the unknown-host policy. Registration approval does not grant user access or skip consent.
 - Phishing through DCR: the consent screen shows the requesting client, redirect destination and scopes. Client names are untrusted; consent is not proof of client ownership. Humans must inspect the destination and requested permissions. Before consent, authorization errors are rendered locally; Deny after the consent screen may redirect.
 - Code and refresh replay: single-use codes, refresh rotation, reuse detection and revocation of descendant token families.
 - Login CSRF: upstream login state is tied to the browser; consent and browser approval use CSRF protection. OIDC also validates identity tokens.
@@ -32,13 +45,30 @@ OAuth responses are sent after releasing the shared state lock. OAuth GET routes
 
 Builtin login accepts only configured GitHub logins, verified OIDC email identities or exact, case-sensitive `oidc:<sub>` identities from the configured issuer. Google email identities additionally require a Gmail/Googlemail domain or an `hd` claim matching the email domain; other Google addresses must use an immutable subject. GitHub login renames can change who matches a login allowlist: prefer verified email via OIDC or keep the GitHub allowlist current. External mode verifies JWT signatures via discovered JWKS and checks issuer, audience, expiry and allowed signing algorithms. Issuer, discovery and JWKS URLs require HTTPS, except loopback HTTP. Optional external user entries restrict identities and scopes. Static mode stores only SHA-256 token digests; it has no interactive OAuth flow.
 
-Writes need a separate action allowlist, `ops:write`, OS/RBAC permission and human confirmation. HTTP also requires `ops:read`. Planning validates the target and produces the summary before execution. Elicitation obtains an in-client decision through MCP input requests. With builtin auth and `approval.web: true`, clients without elicitation receive a browser approval link; the approver signs in upstream as the same user. The approval expires, is single-use and binds the SHA-256 of canonical unredacted arguments (excluding `approval_id`) and the exact plan. A summary changed by redaction is denied because its target cannot be shown unambiguously. Kubernetes summaries include the UID, and Apply receives the plan from the same invocation; rollout uses a JSON patch UID test, scale retains resourceVersion, and pod deletion retains a UID precondition. A retry with changed arguments cannot reuse it. Without confirmation, writes are denied.
+Host/Kubernetes writes need a separate action allowlist; note writes need `allow_write`. These tools need `ops:write`, OS/RBAC permission and human confirmation. Dev tools use `dev:run`; task starts need human confirmation, while cancellation is an explicit low-risk exception that needs no new approval. HTTP also requires `ops:read`. Planning validates the target and produces the summary before execution. Elicitation obtains an in-client decision through MCP input requests. With builtin auth and `approval.web: true`, clients without elicitation receive a browser approval link; the approver signs in upstream as the same user. The approval expires, is single-use and binds the SHA-256 of canonical unredacted arguments (excluding `approval_id`) and the exact plan. A summary changed by redaction is denied because its target cannot be shown unambiguously. Kubernetes summaries include the UID, and Apply receives the plan from the same invocation; rollout uses a JSON patch UID test, scale retains resourceVersion, and pod deletion retains a UID precondition. A retry with changed arguments cannot reuse it. Without confirmation, writes are denied.
 
-Time-window approvals are off by default. Enabling them requires `approval.window` between 1m and 12h and explicit tool-name `path.Match` globs in `approval.window_tools`; an empty allowlist allows none. A human can opt in while approving an eligible call through the browser or elicitation. A grant applies to one exact user/tool pair and deliberately allows later valid calls with different arguments and targets until expiry. Use narrow tool allowlists and short windows. Grants do not bypass scope checks, provider policy, planning, argument limits or summary redaction checks. They are held only in memory, capped at 100 live grants, never extended by use, and cleared on restart. Creation emits a separate `window_granted` audit event (source method, duration and expiry), and every use is audited by the write wrapper with `approval: window`. `require_web` still requires the browser to obtain a grant and denies stdio writes. Compromised clients can opt into elicitation windows just as they can accept individual elicitation prompts.
+Time-window approvals are off by default. Enabling them requires `approval.window` between 1m and 12h and explicit tool-name `path.Match` globs in `approval.window_tools`; an empty allowlist allows none. A human can opt in while approving an eligible call through the browser or elicitation. A grant applies to one exact user/tool pair, not a client or target, and deliberately allows later valid calls from other clients with different arguments and targets until expiry. Do not enable windows for `dev_task_start`; review every task separately. Use narrow tool allowlists and short windows. Grants do not bypass scope checks, provider policy, planning, argument limits or summary redaction checks. They are held only in memory, capped at 100 live grants, never extended by use, and cleared on restart. Creation emits a separate `window_granted` audit event (source method, duration and expiry), and every use is audited by the write wrapper with `approval: window`. `require_web` still requires the browser to obtain a grant and denies stdio writes. Compromised clients can opt into elicitation windows just as they can accept individual elicitation prompts.
 
-Approval summaries are capped at 64 KiB; display arguments remain capped at 64 KiB after redaction. Raw write JSON defaults to 16 KiB, with a 48 KiB cap for `dev_task_start` and its independent 32 KiB prompt limit. Approval and consent pages share escaped HTML templates, inline CSS, no scripts or external assets, and retain their CSRF, cross-origin, CSP and cache protections. Approval links and CSRF tokens are not included in grant audit events.
+Raw write JSON defaults to 16 KiB; note create/append/replace allow 528 KiB (256 KiB per content/replacement input), and `dev_task_start` allows 48 KiB with an independent 32 KiB prompt limit. JSON escaping counts toward the wire limit. Approval summaries allow `max(64 KiB, argument limit + 16 KiB)`; redacted display arguments must fit the tool argument limit. Provider output above 4 MiB is omitted entirely; other output is redacted before truncation to the configured response cap (default 64 KiB). Approval and consent pages share escaped HTML templates, inline CSS, no scripts or external assets, and retain their CSRF, cross-origin, CSP and cache protections. Approval links and CSRF tokens are not included in grant audit events.
 
 Set `approval.require_web: true` with `approval.web: true` to require browser approval and deny stdio writes. A compromised client UI can auto-approve elicitation; the server cannot establish that a real person clicked a client-controlled prompt. Prompt injection can still cause the model to *request* writes. Humans must read the summary and target before approving. Approval does not make an operation safe or guarantee the target's state remains unchanged; OS privileges, RBAC and narrow allowlists remain essential. Audit records include plans, approval methods, pending outcomes, web decisions (with only an approval ID prefix) and denied multi round-trip verifications, but audit delivery is not a prerequisite for execution.
+
+## Vault provider
+
+Vault access is confined with `os.Root`, excludes dot paths and sync-conflict
+copies, and applies configured exclusions. Safe in-vault symlinks are supported.
+Note text and filenames are untrusted. Write plans show target/current/result
+hashes and a content preview or diff. Previews are bounded near 8 KiB; large
+creates are truncated too and explicitly report omitted lines. Approval of a
+truncated preview does not mean the human has seen every byte.
+
+Apply rechecks the approved file identity, hash, size and modification time.
+Updates then publish a synced temporary file with rename. This is an optimistic
+check, not a transaction against external editors: a concurrent external edit
+between the check and rename can be overwritten. Use version history in sync
+tools and backups. Creates publish without overwriting a racing creator; trash
+retains a copy locally rather than permanently deleting a note. Protect the
+vault and its backups with filesystem permissions.
 
 ## Dev provider
 
@@ -49,6 +79,11 @@ separate, trusted configuration is the sole authority for project paths, base
 refs, executable paths, argv and environment. Clients submit only configured
 names and a bounded prompt on stdin. The Unix socket has mode 0660 and a
 configured group; each connection checks SO_PEERCRED and account group membership.
+Tasks belong to the requester: ordinary users can list, inspect, read logs/diffs
+and cancel only their own tasks; exact subjects in runner `admins` can access
+and cancel all tasks. The socket peer is trusted to assert the user through
+`X-Opsgate-User`; SO_PEERCRED authenticates the peer account, not the end user.
+Any permitted socket peer can impersonate another user or runner admin.
 Give the HTTP account search access to the socket directory, but no runner
 configuration, state, credentials or repository write access.
 

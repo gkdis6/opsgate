@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
@@ -32,6 +33,10 @@ type Server struct {
 	codes             map[string]*authorizationCode
 	pending           map[string]*pendingAuth
 	sessions          map[string]*browserSession
+	passkey           *webauthn.WebAuthn // non-nil when the upstream is "passkey"
+	passkeys          map[string]*passkeyUser
+	registrations     map[string]*passkeyRegistration
+	invites           map[string]*passkeyInvite
 	upstream          oauth2.Config
 	verifier          *oidc.IDTokenVerifier
 	httpClient        *http.Client
@@ -74,7 +79,9 @@ func newServer(cfg config.BuiltinAuth, issuer, resource string, transport http.R
 		}
 	}
 	var secret string
-	if cfg.Upstream.ClientSecretFile != "" {
+	if cfg.Upstream.Provider == "passkey" {
+		// No external identity provider: nothing to read.
+	} else if cfg.Upstream.ClientSecretFile != "" {
 		b, e := os.ReadFile(cfg.Upstream.ClientSecretFile)
 		if e != nil {
 			return nil, fmt.Errorf("cannot read upstream secret file")
@@ -83,19 +90,25 @@ func newServer(cfg config.BuiltinAuth, issuer, resource string, transport http.R
 	} else if cfg.Upstream.ClientSecretEnv != "" {
 		secret = strings.TrimSpace(os.Getenv(cfg.Upstream.ClientSecretEnv))
 	}
-	if secret == "" || cfg.Upstream.ClientID == "" {
+	if cfg.Upstream.Provider != "passkey" && (secret == "" || cfg.Upstream.ClientID == "") {
 		return nil, fmt.Errorf("upstream client ID and secret are required")
 	}
 	if cfg.AccessTokenTTL <= 0 || cfg.RefreshTokenTTL <= 0 || cfg.MaxClients <= 0 {
 		return nil, fmt.Errorf("token TTLs and max clients must be positive")
 	}
-	s := &Server{cfg: cfg, issuer: issuer, resource: resource, clients: map[string]*client{}, access: map[string]*accessToken{}, refresh: map[string]*refreshToken{}, families: map[string]time.Time{}, codes: map[string]*authorizationCode{}, pending: map[string]*pendingAuth{}, sessions: map[string]*browserSession{}, registrationLimit: rate.NewLimiter(rate.Every(3*time.Second), 5), now: time.Now, githubUserURL: "https://api.github.com/user", stop: make(chan struct{}), done: make(chan struct{})}
+	s := &Server{cfg: cfg, issuer: issuer, resource: resource, clients: map[string]*client{}, access: map[string]*accessToken{}, refresh: map[string]*refreshToken{}, families: map[string]time.Time{}, codes: map[string]*authorizationCode{}, pending: map[string]*pendingAuth{}, sessions: map[string]*browserSession{}, passkeys: map[string]*passkeyUser{}, registrations: map[string]*passkeyRegistration{}, invites: map[string]*passkeyInvite{}, registrationLimit: rate.NewLimiter(rate.Every(3*time.Second), 5), now: time.Now, githubUserURL: "https://api.github.com/user", stop: make(chan struct{}), done: make(chan struct{})}
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
 	s.httpClient = &http.Client{Timeout: 15 * time.Second, Transport: boundedTransport{base: transport}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	s.upstream = oauth2.Config{ClientID: cfg.Upstream.ClientID, ClientSecret: secret, RedirectURL: issuer + "/oauth/callback"}
 	switch cfg.Upstream.Provider {
+	case "passkey":
+		rp, e := newPasskeyRP(issuer)
+		if e != nil {
+			return nil, fmt.Errorf("passkey relying party: %w", e)
+		}
+		s.passkey = rp
 	case "github":
 		s.upstream.Endpoint = github.Endpoint
 		s.upstream.Scopes = []string{"read:user"}
@@ -125,6 +138,9 @@ func newServer(cfg config.BuiltinAuth, issuer, resource string, transport http.R
 	if err := s.save(); err != nil {
 		return nil, err
 	}
+	if s.passkey != nil {
+		s.bootstrapInvites()
+	}
 	go s.sweepLoop()
 	return s, nil
 }
@@ -139,6 +155,9 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /oauth/token", s.token)
 	mux.HandleFunc("POST /oauth/revoke", s.revoke)
 	s.adminRoutes(mux)
+	if s.passkey != nil {
+		s.passkeyRoutes(mux)
+	}
 }
 
 // Verify implements auth.TokenVerifier for access tokens issued by s.

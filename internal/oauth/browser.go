@@ -113,6 +113,9 @@ func (s *Server) startLogin(p *pendingAuth) response {
 	p.CSRF = random()
 	p.Expires = s.now().Add(10 * time.Minute)
 	s.pending[hash(id)] = p
+	if s.passkey != nil {
+		return redirectResponse("/oauth/passkey").withCookie(pendingCookie, id, 600)
+	}
 	opts := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(p.Verifier)}
 	if s.verifier != nil {
 		opts = append(opts, oidc.Nonce(p.Nonce))

@@ -37,6 +37,27 @@ claude mcp add opsgate -- /path/to/opsgate -config /path/opsgate.yaml
 
 Replace paths with absolute paths. A source build writes `bin/opsgate`. Host inspection uses Linux systemd/journald and `/proc`; stdio trusts the launching OS account. Run unprivileged and protect configuration ownership. Without configuration, all providers are disabled. See [client setup](docs/clients.md) for Desktop, Cursor and SSH, and [the complete read-only example](opsgate.example.yaml).
 
+## HTTP quick start with passkeys (no identity provider)
+
+The simplest remote setup needs no Google, GitHub or other identity provider: people sign in with a passkey (Face ID, Touch ID, Windows Hello, a phone or a security key).
+
+```yaml
+http:
+  listen: 127.0.0.1:8787
+  public_url: https://mcp.example.com
+auth:
+  mode: builtin
+  builtin:
+    state_file: /var/lib/opsgate/oauth.json
+    upstream:
+      provider: passkey
+    users:
+      - subject: passkey:alice
+        scopes: [ops:read]
+```
+
+On first start opsgate logs a one-time setup link (valid 24 hours) for every user without a passkey. Open it on your phone or computer and press **Create passkey**. Later links come from `sudo -u opsgate opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`. Connecting a client then shows **Sign in with passkey** instead of an external login.
+
 ## HTTP quick start with Google
 
 Create a Google OIDC web application with the exact redirect URI `https://mcp.example.com/oauth/callback`. Replace the origin, client ID and verified Workspace email below (Gmail/Googlemail or an immutable `oidc:<sub>` identity also work). Provision the private writable state directory and protected client-secret file first.

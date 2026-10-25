@@ -27,9 +27,9 @@ Defaults below come from `config.Default()`. YAML is loaded over defaults with s
 | `auth.mode` | `""` | Required for HTTP: builtin, external or static |
 | `auth.builtin.state_file` | `""` | Optional 0600 persistence for clients and token hashes; empty loses state on restart |
 | `auth.builtin.users` | `[]` | Allowed upstream users; empty denies everyone |
-| `auth.builtin.users[].subject` | `""` | github:login, email:verified-email or oidc:sub (exact OIDC subject) |
+| `auth.builtin.users[].subject` | `""` | passkey:name, github:login, email:verified-email or oidc:sub (exact OIDC subject) |
 | `auth.builtin.users[].scopes` | `[]` | Grants: ops:read, ops:write, dev:run |
-| `auth.builtin.upstream.provider` | `""` | github or oidc |
+| `auth.builtin.upstream.provider` | `""` | passkey (no identity provider; needs no client ID or secret), github or oidc |
 | `auth.builtin.upstream.issuer` | `""` | Required OIDC issuer, e.g. https://accounts.google.com |
 | `auth.builtin.upstream.client_id` | `""` | Upstream application client ID |
 | `auth.builtin.upstream.client_secret_file` | `""` | Secret file; use this or client_secret_env |
@@ -84,7 +84,7 @@ See [the complete example](../opsgate.example.yaml) for a read-only starting poi
 
 The upstream application callback is exactly `<public_url>/oauth/callback`. See [deployment](deploy.md) for Host-preserving proxies and local probe rules.
 
-`builtin` delegates login to GitHub or OIDC (including Google), then issues opaque MCP tokens. It supports authorization code with PKCE S256 only, Dynamic Client Registration (DCR), per-client consent, refresh rotation and reuse revocation. The issuer is `http.public_url`; the resource is `<public_url>/mcp`. Optional state persistence retains client registrations and token hashes across restarts; protect its directory and backups, and use one process per state file.
+`builtin` signs people in with passkeys or delegates login to GitHub or OIDC (including Google), then issues opaque MCP tokens. With passkeys, registration needs a one-time invite: opsgate logs one per user without a passkey at startup (24h), and `opsgate passkey invite -config <file> -subject <user> [-ttl 24h]` issues more; run it as the server account because invites are files next to the state file. It supports authorization code with PKCE S256 only, Dynamic Client Registration (DCR), per-client consent, refresh rotation and reuse revocation. The issuer is `http.public_url`; the resource is `<public_url>/mcp`. Optional state persistence retains client registrations and token hashes across restarts; protect its directory and backups, and use one process per state file.
 
 Builtin OIDC users may match a verified `email:<address>` or an exact, case-sensitive immutable `oidc:<sub>` from the configured issuer. If both match, `oidc:<sub>` takes precedence and needs no email claim. Google email subjects require `gmail.com`/`googlemail.com`, or an `hd` claim matching the email domain (Google Workspace); `email_verified` alone is insufficient for other Google addresses. For the Google example in the README, use a Workspace address or configure `oidc:<sub>`.
 

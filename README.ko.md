@@ -37,6 +37,27 @@ claude mcp add opsgate -- /path/to/opsgate -config /path/opsgate.yaml
 
 경로는 절대 경로로 바꾸세요. 소스 빌드는 `bin/opsgate`를 생성합니다. 호스트 조회는 Linux의 systemd/journald와 `/proc`를 사용하며, stdio는 실행한 OS 계정을 신뢰합니다. 비특권 계정으로 실행하고 설정 파일의 소유권을 보호하세요. 설정이 없으면 모든 provider가 비활성화됩니다. Desktop, Cursor, SSH는 [클라이언트 설정](docs/clients.md)을, 전체 설정은 [읽기 전용 예제](opsgate.example.yaml)를 참고하세요.
 
+## 패스키를 사용하는 HTTP 빠른 시작 (IdP 불필요)
+
+가장 간단한 원격 구성은 Google, GitHub 같은 외부 IdP가 필요 없습니다. 사용자는 패스키(Face ID, Touch ID, Windows Hello, 휴대폰, 보안 키)로 로그인합니다.
+
+```yaml
+http:
+  listen: 127.0.0.1:8787
+  public_url: https://mcp.example.com
+auth:
+  mode: builtin
+  builtin:
+    state_file: /var/lib/opsgate/oauth.json
+    upstream:
+      provider: passkey
+    users:
+      - subject: passkey:alice
+        scopes: [ops:read]
+```
+
+처음 시작하면 패스키가 없는 사용자마다 24시간 동안 유효한 일회용 설정 링크를 로그에 출력합니다. 휴대폰이나 컴퓨터에서 열고 **Create passkey**를 누르세요. 이후 링크는 `sudo -u opsgate opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`로 발급합니다. 클라이언트를 연결하면 외부 로그인 대신 **Sign in with passkey** 화면이 나옵니다.
+
 ## Google을 사용하는 HTTP 빠른 시작
 
 정확한 리디렉션 URI가 `https://mcp.example.com/oauth/callback`인 Google OIDC 웹 애플리케이션을 만드세요. 아래 origin, 클라이언트 ID, 검증된 Workspace 이메일을 바꾸세요(Gmail/Googlemail 또는 불변 `oidc:<sub>` 식별자도 사용 가능합니다). 먼저 비공개 쓰기 가능 상태 디렉터리와 보호된 클라이언트 비밀 파일을 준비하세요.

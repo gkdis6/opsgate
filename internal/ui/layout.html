@@ -34,7 +34,8 @@ button.danger{color:var(--danger);border-color:var(--danger)}
 button:hover{filter:brightness(.94)}button:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .scopes{list-style:none;padding:0;margin:.5rem 0}.scopes li{margin:.75rem 0}.chip{display:inline-block;padding:.15rem .6rem;background:var(--target);border:1px solid var(--line);border-radius:2rem;font-weight:650;margin-right:.35rem}
 .status{font-size:2rem}.success{color:var(--accent)}
+.error{color:var(--danger,#b42318)}[hidden]{display:none}
 </style>
 </head>
-<body><main><header class="brand">opsgate</header><section class="card">{{template "content" .}}</section></main></body>
+<body><main><header class="brand">opsgate</header><section class="card">{{template "content" .}}</section></main>{{block "scripts" .}}{{end}}</body>
 </html>

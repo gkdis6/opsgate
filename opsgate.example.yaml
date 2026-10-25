@@ -25,10 +25,10 @@ auth:
     # - subject: email:operator@example.com
     #   scopes: [ops:read]
     #   tools: [] # Empty adds no restriction; optional tool-name globs.
-    # GitHub: github:login. OIDC: verified email:address or exact oidc:sub.
+    # Passkey: passkey:name. GitHub: github:login. OIDC: verified email:address or exact oidc:sub.
     # Google email needs Gmail/Googlemail or matching Workspace hd; otherwise use oidc:sub.
     upstream:
-      provider: "" # github or oidc; Google uses oidc.
+      provider: "" # passkey (no identity provider), github or oidc; Google uses oidc.
       issuer: "" # Required for OIDC; Google: https://accounts.google.com.
       client_id: "" # Register exact <public_url>/oauth/callback upstream.
       client_secret_file: "" # Protected secret file; never put secrets in YAML.

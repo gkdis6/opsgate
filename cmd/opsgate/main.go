@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -34,6 +35,12 @@ func main() {
 
 	if len(os.Args) > 1 && os.Args[1] == "dev-runner" {
 		if err := runDevRunner(os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if len(os.Args) > 2 && os.Args[1] == "passkey" && os.Args[2] == "invite" {
+		if err := runPasskeyInvite(os.Args[3:]); err != nil {
 			log.Fatal(err)
 		}
 		return
@@ -171,4 +178,33 @@ func runDevRunner(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return devrunner.Serve(ctx, cfg)
+}
+
+// runPasskeyInvite prints a one-time passkey registration link. It writes
+// next to the OAuth state file, so run it as the server's account
+// (e.g. sudo -u opsgate opsgate passkey invite ...).
+func runPasskeyInvite(args []string) error {
+	fs := flag.NewFlagSet("passkey invite", flag.ContinueOnError)
+	path := fs.String("config", "", "path to opsgate.yaml (required)")
+	subject := fs.String("subject", "", "configured user, e.g. passkey:alice (required)")
+	ttl := fs.Duration("ttl", 24*time.Hour, "how long the link stays valid (max 168h)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *path == "" || *subject == "" || fs.NArg() != 0 {
+		return fmt.Errorf("usage: opsgate passkey invite -config <file> -subject <user> [-ttl 24h]")
+	}
+	cfg, err := config.Load(*path)
+	if err != nil {
+		return err
+	}
+	if err := cfg.ValidateHTTP(); err != nil {
+		return err
+	}
+	link, err := oauth.CreatePasskeyInvite(cfg.Auth.Builtin, cfg.Issuer(), *subject, *ttl)
+	if err != nil {
+		return err
+	}
+	fmt.Println(link)
+	return nil
 }

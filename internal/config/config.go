@@ -139,7 +139,8 @@ type BuiltinAuth struct {
 
 // Upstream is the identity provider that authenticates people.
 type Upstream struct {
-	// Provider is "github" or "oidc" (Google: issuer https://accounts.google.com).
+	// Provider is "passkey" (no external identity provider), "github" or
+	// "oidc" (Google: issuer https://accounts.google.com).
 	Provider string `yaml:"provider"`
 	// Issuer is required for oidc.
 	Issuer   string `yaml:"issuer"`

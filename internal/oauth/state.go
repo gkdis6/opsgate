@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/go-webauthn/webauthn/webauthn"
 )
 
 type client struct {
@@ -43,6 +45,10 @@ type pendingAuth struct {
 	Requested, Scopes                                                                                        []string
 	Expires                                                                                                  time.Time
 	InFlight                                                                                                 bool
+	// Passkey login: the open WebAuthn challenge, then the verified subject
+	// waiting for /oauth/passkey/complete.
+	WebAuthn       *webauthn.SessionData
+	PasskeySubject string
 }
 type browserSession struct {
 	Subject string
@@ -58,6 +64,7 @@ type diskState struct {
 	Refresh  map[string]*refreshToken      `json:"refresh"`
 	Families map[string]time.Time          `json:"revoked_families"`
 	Codes    map[string]*authorizationCode `json:"codes"`
+	Passkeys map[string]*passkeyUser       `json:"passkeys,omitempty"`
 }
 
 func (s *Server) load() error {
@@ -112,7 +119,15 @@ func (s *Server) load() error {
 			return fmt.Errorf("invalid OAuth code state")
 		}
 	}
-	s.clients, s.access, s.refresh, s.families, s.codes = d.Clients, d.Access, d.Refresh, d.Families, d.Codes
+	for subject, u := range d.Passkeys {
+		if u == nil || len(u.Handle) == 0 || subject == "" {
+			return fmt.Errorf("invalid passkey state")
+		}
+	}
+	if d.Passkeys == nil {
+		d.Passkeys = map[string]*passkeyUser{}
+	}
+	s.clients, s.access, s.refresh, s.families, s.codes, s.passkeys = d.Clients, d.Access, d.Refresh, d.Families, d.Codes, d.Passkeys
 	s.sweep()
 	return nil
 }
@@ -148,7 +163,7 @@ func (s *Server) writeState() error {
 	name := f.Name()
 	defer os.Remove(name)
 	defer f.Close()
-	d := diskState{Version: 1, Issuer: s.issuer, Resource: s.resource, Clients: s.clients, Access: s.access, Refresh: s.refresh, Families: s.families, Codes: s.codes}
+	d := diskState{Version: 1, Issuer: s.issuer, Resource: s.resource, Clients: s.clients, Access: s.access, Refresh: s.refresh, Families: s.families, Codes: s.codes, Passkeys: s.passkeys}
 	if err = f.Chmod(0600); err != nil {
 		return err
 	}

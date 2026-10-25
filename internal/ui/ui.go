@@ -1,4 +1,6 @@
-// Package ui renders the shared, script-free browser pages.
+// Package ui renders the shared browser pages. Pages are script-free except
+// those that define a "scripts" block (passkey ceremonies), which load only a
+// same-origin script under a matching Content-Security-Policy.
 package ui
 
 import (

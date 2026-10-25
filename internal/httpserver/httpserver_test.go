@@ -387,3 +387,62 @@ func publicRequest(method, target string, body io.Reader) *http.Request {
 	r.Host = "mcp.example.com"
 	return r
 }
+
+// Sessionless clients (ChatGPT sends server/discover and never falls back)
+// must see their version supported; older clients must keep sessions.
+func TestProtocolVersions(t *testing.T) {
+	cfg, options := testOptions(t)
+	h := Handler(cfg, options)
+	post := func(version, body string, headers ...string) *httptest.ResponseRecorder {
+		r := publicRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+		for i := 0; i+1 < len(headers); i += 2 {
+			r.Header.Set(headers[i], headers[i+1])
+		}
+		r.Header.Set("Authorization", "Bearer read-token")
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Accept", "application/json, text/event-stream")
+		if version != "" {
+			r.Header.Set("Mcp-Protocol-Version", version)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	meta := `"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"openai-mcp","version":"1.0.0"},"io.modelcontextprotocol/clientCapabilities":{}}`
+	w := post("2026-07-28", `{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{`+meta+`}}`, "Mcp-Method", "server/discover")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"supportedVersions":["2026-07-28"`) || w.Header().Get("Mcp-Session-Id") != "" {
+		t.Fatalf("discover: %d %s %v", w.Code, w.Body, w.Header())
+	}
+	w = post("2026-07-28", `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"whoami","arguments":{},`+meta+`}}`, "Mcp-Method", "tools/call", "Mcp-Name", "whoami")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "static:reader") {
+		t.Fatalf("sessionless call: %d %s", w.Code, w.Body)
+	}
+	w = post("", `{"jsonrpc":"2.0","id":3,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"legacy","version":"1"}}}`)
+	if w.Code != 200 || w.Header().Get("Mcp-Session-Id") == "" || !strings.Contains(w.Body.String(), `"protocolVersion":"2025-06-18"`) {
+		t.Fatalf("legacy initialize: %d %s %v", w.Code, w.Body, w.Header())
+	}
+
+	for _, version := range []string{"", "2025-11-25"} {
+		ts := newPipeServer(h)
+		client := ts.Client()
+		client.Transport = bearerTransport{client.Transport, "read-token"}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		session, err := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "1"}, nil).Connect(ctx, &mcp.StreamableClientTransport{Endpoint: ts.URL + "/mcp", HTTPClient: client}, &mcp.ClientSessionOptions{ProtocolVersion: version})
+		if err != nil {
+			t.Fatalf("%q: %v", version, err)
+		}
+		want := version
+		if want == "" {
+			want = "2026-07-28"
+		}
+		if got := session.InitializeResult().ProtocolVersion; got != want {
+			t.Fatalf("negotiated %q, want %q", got, want)
+		}
+		if _, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "whoami", Arguments: map[string]any{}}); err != nil {
+			t.Fatalf("%q: %v", version, err)
+		}
+		session.Close()
+		cancel()
+		ts.Close()
+	}
+}

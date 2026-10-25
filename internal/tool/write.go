@@ -3,8 +3,13 @@ package tool
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/gkdis6/opsgate/internal/audit"
+	"github.com/gkdis6/opsgate/internal/config"
+	"github.com/gkdis6/opsgate/internal/redact"
 )
 
 // Approval is embedded in the input struct of every write tool. A client
@@ -67,5 +72,85 @@ var ErrApprovalPending = errors.New("approval pending")
 // AddWrite registers a write tool on s. Without env.Confirm every call is
 // denied, so writes can never run unconfirmed.
 func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHandler[In]) {
-	// TODO(codex): implement.
+	destructive := true
+	t := &mcp.Tool{
+		Name: spec.Name, Title: spec.Title, Description: spec.Description,
+		Annotations: &mcp.ToolAnnotations{
+			Title: spec.Title, ReadOnlyHint: false,
+			DestructiveHint: &destructive, IdempotentHint: spec.Idempotent,
+		},
+	}
+	mcp.AddTool(s, t, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
+		start := time.Now()
+		args, argsErr := writeArgs(in)
+		ev := audit.Event{Time: start, Tool: spec.Name, Args: args}
+		c, ok := env.caller(req)
+		if ok {
+			ev.User, ev.Transport = c.User, c.Transport
+		}
+		text, err := func() (string, error) {
+			if !ok {
+				return "", Denied("unauthenticated")
+			}
+			if !c.Has(config.ScopeWrite) {
+				return "", Denied("missing scope %s", config.ScopeWrite)
+			}
+			if argsErr != nil {
+				return "", argsErr
+			}
+			if h.Plan == nil || h.Apply == nil {
+				return "", Denied("write handler unavailable")
+			}
+			planCtx, cancel := context.WithTimeout(ctx, env.Timeout)
+			plan, err := h.Plan(planCtx, c, in)
+			if err == nil {
+				err = planCtx.Err()
+			}
+			cancel()
+			ev.Plan = redact.String(plan.Summary)
+			if err != nil {
+				return "", err
+			}
+			if env.Confirm == nil {
+				return "", Denied("no human confirmation channel is available")
+			}
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+			ev.Approval, err = env.Confirm.Confirm(ctx, req, ConfirmRequest{
+				Caller: c, Tool: spec.Name, Args: args, Summary: ev.Plan, ApprovalID: in.approvalID(),
+			})
+			if err != nil {
+				return "", err
+			}
+			applyCtx, cancel := context.WithTimeout(ctx, env.Timeout)
+			defer cancel()
+			if err := applyCtx.Err(); err != nil {
+				return "", err
+			}
+			return h.Apply(applyCtx, c, in)
+		}()
+
+		ev.DurationMS = time.Since(start).Milliseconds()
+		ev.Outcome = "ok"
+		if err != nil {
+			ev.Outcome = "error"
+			switch {
+			case errors.Is(err, ErrDenied):
+				ev.Outcome = "denied"
+			case errors.Is(err, ErrApprovalPending):
+				ev.Outcome = "pending"
+			}
+			text = err.Error()
+		}
+		text = truncate(redact.String(text), env.MaxOutputBytes)
+		if err != nil && ev.Outcome != "pending" {
+			ev.Error = redact.String(err.Error())
+			env.Audit.Record(ev)
+			return errorResult(text), nil, nil
+		}
+		ev.OutputSize = len(text)
+		env.Audit.Record(ev)
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil
+	})
 }

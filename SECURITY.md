@@ -36,6 +36,36 @@ Writes need a separate action allowlist, `ops:write`, OS/RBAC permission and hum
 
 Set `approval.require_web: true` with `approval.web: true` to require browser approval and deny stdio writes. A compromised client UI can auto-approve elicitation; the server cannot establish that a real person clicked a client-controlled prompt. Prompt injection can still cause the model to *request* writes. Humans must read the summary and target before approving. Approval does not make an operation safe or guarantee the target's state remains unchanged; OS privileges, RBAC and narrow allowlists remain essential. Audit records include plans, approval methods, pending outcomes, web decisions (with only an approval ID prefix) and denied multi round-trip verifications, but audit delivery is not a prerequisite for execution.
 
+## Dev provider
+
+The dev provider uses `dev:run` for every tool and human approval for task starts.
+It connects to a separate `opsgate dev-runner` process under an unprivileged
+account such as `opsdev`, without sudo or cluster credentials. The runner's
+separate, trusted configuration is the sole authority for project paths, base
+refs, executable paths, argv and environment. Clients submit only configured
+names and a bounded prompt on stdin. The Unix socket has mode 0660 and a
+configured group; each connection checks SO_PEERCRED and account group membership.
+Give the HTTP account search access to the socket directory, but no runner
+configuration, state, credentials or repository write access.
+
+A compromised HTTP process can submit tasks directly and bypass the server's
+human approval, but cannot supply arbitrary runner commands or project paths.
+The selected coding agent can still act on an arbitrary malicious prompt. Use a
+verified agent sandbox and narrow OS permissions: a Git worktree and process
+group are not a sandbox. Tasks share the runner UID and repository metadata;
+agent-accessible files, credentials and network endpoints remain at risk. No
+push, merge or deploy operation is implemented. Runner Git commands disable
+hooks, fsmonitor, global/system configuration and signing; diff also disables
+external diff/text conversion. Keep repository-local Git configuration trusted.
+
+Task logs and final messages are untrusted data, as are diffs. API output is
+bounded and best-effort redacted, while raw prompts/logs/output and commit
+messages can retain sensitive material on disk. Protect repositories, state and
+backups. Persistence failures stop dispatch. Retention removes finished worktrees
+and records but keeps branches; task count/output caps do not bound repository
+size or all resource consumption. Configure service limits and cleanup. See
+[setup, workflow and risks](docs/dev.md).
+
 ## Supported versions
 
 While the project is 0.x, security fixes and support are best effort, focused on the latest development version. There is no guaranteed maintenance window for older 0.x releases.

@@ -70,7 +70,7 @@ Terminate TLS at a reverse proxy forwarding `/mcp`, `/.well-known/*`, `/oauth/*`
 
 ## Tool contract
 
-Read tools require `ops:read` and are registered only when their provider is enabled. Host units and Kubernetes namespaces are filtered by configuration; namespace denies win. Kubernetes has no Secrets tool. Read-only metadata and logs can still disclose sensitive information.
+Host and Kubernetes read tools require `ops:read`; dev tools require `dev:run`. Tools are registered only when their provider is enabled. Host units and Kubernetes namespaces are filtered by configuration; namespace denies win. Kubernetes has no Secrets tool. Read-only metadata and logs can still disclose sensitive information.
 
 | Tool | Purpose | Main arguments, defaults and limits |
 | --- | --- | --- |
@@ -98,6 +98,13 @@ Read tools require `ops:read` and are registered only when their provider is ena
 | `obsidian_append` | Append at end or under a unique exact heading | Required `path`, `content`; optional `heading`; same write gate |
 | `obsidian_replace` | Exact substring replacement | Required `path`, nonempty `old_text`, `new_text`; `expected_count=1` must match; same write gate |
 | `obsidian_trash` | Retain a note in local .trash with collision suffixes | Required `path`; same write gate; never permanently deletes |
+| `dev_projects` | Coding projects and agent allowlists (`dev:run`) | None; includes runner limits |
+| `dev_task_start` | Start an agent after human approval (`dev:run`) | Required `project`, `agent`, `prompt`; optional `approval_id`; runner prompt cap 32 KiB, shared MCP arguments/summary caps 16 KiB |
+| `dev_task_status` | Task state and final message (`dev:run`) | Required `id` |
+| `dev_task_log` | Untrusted task log page (`dev:run`) | Required `id`; `offset=0`, `limit=65536`, maximum 262144 bytes; raw `next_offset` |
+| `dev_task_diff` | Untrusted stat and patch against pinned base (`dev:run`) | Required `id`; maximum 256 KiB before MCP output cap |
+| `dev_task_list` | Retained tasks newest first (`dev:run`) | `limit=20`, range 1..100; final messages omitted |
+| `dev_task_cancel` | Cancel a task without new approval (`dev:run`) | Required `id`; changes state, terminates running process group |
 
 Obsidian paths use vault-relative forward slashes, preserve Unicode bytes, and are limited to 1024 bytes. Excluded paths behave as missing. Note text is untrusted data. Obsidian numeric inputs outside the documented ranges are rejected. Safe in-vault symlinks are supported with cycle prevention. Scans are bounded to 100000 entries and 128 directory levels; links/backlinks each return at most 1000 results. Write previews include a diff (full content for create), current hash and resulting hash, with explicit truncation near 8 KiB. Apply rechecks the approved hash, size and modification time. Creates publish atomically without overwriting racing creators; updates use a synced temporary file and rename. Trash publishes a durable copy before removing the source. Existing trailing-newline policy is preserved. Content/replacement inputs are capped at 256 KiB, but the shared 16 KiB JSON argument cap currently limits MCP calls further.
 
@@ -135,6 +142,30 @@ The server validates inputs and builds a side-effect-free plan before confirmati
 
 Set `approval.require_web: true` with `approval.web: true` to require browser approval even when the client supports elicitation; this denies writes over stdio. A compromised client UI can auto-approve elicitation. Prompt injection can still make a model request writes: humans must read the summary before approving. See [SECURITY.md](SECURITY.md).
 
+## Dev provider
+
+Run coding tasks through a separate, unprivileged `opsgate dev-runner` account.
+Its own configuration allowlists projects and fixed agent commands; the HTTP
+server supplies only names and a prompt. All dev tools require `dev:run`; task
+starts also require human approval. HTTP access additionally requires `ops:read`.
+Tasks use new branches/worktrees and never merge, push or deploy automatically.
+Agent output and diffs are untrusted data. Worktrees are not an OS sandbox;
+configure the agent sandbox and keep the runner account free of privileged
+credentials. See [setup, limits and risks](docs/dev.md) and the
+[runner configuration](deploy/dev-runner.example.yaml).
+
+The runner uses a separate YAML file; these keys are not nested under `providers`:
+
+| Runner YAML key | Default | Meaning |
+| --- | --- | --- |
+| `socket` / `socket_group` | Required | Absolute Unix socket path and allowed peer group |
+| `work_dir` | Required | Absolute private state/worktree directory |
+| `projects` | `[]` | Allowlist of unique lowercase `name`, absolute `path`, and `base_ref` (default `HEAD`) |
+| `agents` | `{}` | Agent names mapped to fixed `command` argv and optional `env` KEY=VALUE pairs; executable path must be absolute |
+| `timeout` | `1h` | Positive task timeout |
+| `max_concurrent` | `1` | FIFO worker count, 1..8 |
+| `max_tasks` | `100` | Positive retained-task cap; remove oldest finished worktrees/records, keep branches |
+
 ## Configuration reference
 
 Defaults below come from `config.Default()`. YAML is loaded over defaults with strict known-field checking; unknown keys fail. HTTP, authentication and approval settings are included below. Empty slices are shown as `[]` (some are nil in Go).
@@ -146,7 +177,7 @@ Defaults below come from `config.Default()`. YAML is loaded over defaults with s
 | `server.max_output_bytes` | `65536` | Tool output byte limit; must be positive |
 | `server.tool_timeout` | `30s` | Per-call timeout; must be positive |
 | `stdio.user` | `local` | Audit identity label; OS user is the trust boundary |
-| `stdio.scopes` | `[ops:read]` | Accepted scopes: ops:read, ops:write; write does not enable actions |
+| `stdio.scopes` | `[ops:read]` | Accepted scopes: ops:read, ops:write, dev:run; write does not enable actions |
 | `providers.host.enabled` | `false` | Enable host provider |
 | `providers.host.units` | `[]` | Unit glob allowlist; empty allows none |
 | `providers.host.disk_paths` | `[/]` | Mount points for overview |
@@ -198,6 +229,8 @@ Defaults below come from `config.Default()`. YAML is loaded over defaults with s
 | `providers.obsidian.exclude` | `[]` | Additional vault-relative path.Match globs matching a path or any parent; dot-prefixed segments and sync-conflict copies always excluded |
 | `providers.obsidian.allow_write` | `false` | Register four note write tools; each requires ops:write and human approval |
 | `providers.obsidian.max_note_bytes` | `1048576` | Positive per-note size limit for reads/writes; oversized notes skipped in content scans |
+| `providers.dev.enabled` | `false` | Enable dev provider; all tools require dev:run |
+| `providers.dev.runner_socket` | `""` | Absolute Unix socket path of the separate dev-runner |
 
 Log limits are provider caps; keep them positive. Raw write arguments are capped at 16 KiB before redaction and argument auditing. All four write tools accept optional `approval_id` for the browser retry. Write tools are registered only with nonempty action allowlists. Configuration changes require a restart.
 

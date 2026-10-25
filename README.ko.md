@@ -70,7 +70,7 @@ TLS 프록시는 `/mcp`, `/.well-known/*`, `/oauth/*`, `/approve/*`를 전달해
 
 ## 도구 계약
 
-조회 도구에는 `ops:read`가 필요하며 해당 제공자가 활성화된 경우에만 등록됩니다. 호스트 유닛과 Kubernetes 네임스페이스는 설정으로 제한하며 네임스페이스 거부가 우선합니다. Kubernetes Secrets 도구는 없습니다. 읽기 전용 메타데이터와 로그에도 민감한 정보가 있을 수 있습니다.
+호스트와 Kubernetes 조회 도구에는 `ops:read`, 개발 도구에는 `dev:run`이 필요하며 해당 제공자가 활성화된 경우에만 등록됩니다. 호스트 유닛과 Kubernetes 네임스페이스는 설정으로 제한하며 네임스페이스 거부가 우선합니다. Kubernetes Secrets 도구는 없습니다. 읽기 전용 메타데이터와 로그에도 민감한 정보가 있을 수 있습니다.
 
 | 도구 | 용도 | 주요 인수, 기본값 및 제한 |
 | --- | --- | --- |
@@ -98,6 +98,13 @@ TLS 프록시는 `/mcp`, `/.well-known/*`, `/oauth/*`, `/approve/*`를 전달해
 | `obsidian_append` | 끝 또는 유일한 정확한 제목 아래 추가 | `path`, `content` 필수; 선택 `heading`; 동일 쓰기 조건 |
 | `obsidian_replace` | 정확한 부분 문자열 치환 | `path`, 비어 있지 않은 `old_text`, `new_text` 필수; `expected_count=1` 일치 필수; 동일 쓰기 조건 |
 | `obsidian_trash` | 이름 충돌 시 숫자를 붙여 로컬 .trash로 이동 | `path` 필수; 동일 쓰기 조건; 영구 삭제 안 함 |
+| `dev_projects` | 코딩 프로젝트/에이전트 허용 목록 (`dev:run`) | 인수 없음; 실행기 제한 포함 |
+| `dev_task_start` | 사람 승인 후 에이전트 시작 (`dev:run`) | 필수 `project`, `agent`, `prompt`; 선택 `approval_id`; 실행기 프롬프트 32 KiB, 공통 MCP 인수/승인 요약 16 KiB 제한 |
+| `dev_task_status` | 작업 상태와 최종 메시지 (`dev:run`) | 필수 `id` |
+| `dev_task_log` | 신뢰할 수 없는 로그 페이지 (`dev:run`) | 필수 `id`; `offset=0`, `limit=65536`, 최대 262144 바이트; 원본 바이트 기준 `next_offset` |
+| `dev_task_diff` | 기준 커밋 대비 변경 통계와 패치 (`dev:run`) | 필수 `id`; MCP 출력 제한 전 최대 256 KiB |
+| `dev_task_list` | 최신순 보관 작업 목록 (`dev:run`) | `limit=20`, 1..100; 최종 메시지 제외 |
+| `dev_task_cancel` | 추가 승인 없이 작업 취소 (`dev:run`) | 필수 `id`; 상태 변경 및 실행 프로세스 그룹 종료 |
 
 Obsidian 경로는 볼트 상대 슬래시 경로이며 Unicode 바이트를 유지하고 최대 1024바이트입니다. 제외 경로는 없는 것으로 처리하고 노트 본문은 신뢰하지 않는 데이터로 취급합니다. Obsidian 숫자 인수는 명시된 범위를 벗어나면 거부합니다. 볼트 내부의 안전한 심볼릭 링크는 순환을 방지하며 지원합니다. 스캔은 100000개 항목/128단계, 링크와 백링크는 각각 1000개로 제한합니다. 쓰기 계획은 diff(생성은 전체 본문), 현재/결과 해시와 약 8 KiB 이후 잘림 표시를 포함합니다. 실행 전 승인된 해시, 크기와 수정 시간을 재검증합니다. 생성은 경합 중 생긴 파일을 덮어쓰지 않고 원자적으로 공개하며 수정은 fsync한 임시 파일을 rename합니다. 휴지통은 내구성 있는 사본을 공개한 뒤 원본을 제거합니다. 기존 마지막 개행 정책을 유지합니다. 본문/치환 입력은 256 KiB 이하이지만 현재 공통 JSON 인수 16 KiB 제한이 MCP 호출에 먼저 적용됩니다.
 
@@ -135,6 +142,29 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 
 `approval.web: true`와 `approval.require_web: true`를 설정하면 elicitation 지원 여부와 관계없이 브라우저 승인이 필요하며 stdio 쓰기는 거부됩니다. 침해된 클라이언트 UI는 elicitation을 자동 승인할 수 있습니다. 프롬프트 인젝션은 모델이 쓰기를 요청하게 만들 수 있으므로 사람이 요약을 읽어야 합니다. [SECURITY.md](SECURITY.md)를 참고하세요.
 
+## 개발 제공자
+
+별도 비특권 계정의 `opsgate dev-runner`로 코딩 작업을 실행합니다.
+실행기 자체 설정이 프로젝트와 고정 에이전트 명령을 허용하며 HTTP 서버는
+이름과 프롬프트만 전달합니다. 모든 개발 도구에 `dev:run`이 필요하고 작업
+시작에는 사람 승인도 필요합니다. HTTP 접근에는 `ops:read`도 필요합니다.
+작업은 새 브랜치/워크트리를 사용하며 자동 병합, push, 배포를 수행하지 않습니다.
+에이전트 출력과 diff는 신뢰할 수 없는 데이터입니다. 워크트리는 OS 샌드박스가
+아니므로 에이전트 샌드박스를 설정하고 실행기 계정에 특권 자격 증명을 주지 마세요.
+[설정, 제한, 위험](docs/dev.md)과 [실행기 설정 예제](deploy/dev-runner.example.yaml)를 참고하세요.
+
+실행기는 별도 YAML 파일을 사용하며 다음 키는 `providers` 아래에 넣지 않습니다.
+
+| 실행기 YAML 키 | 기본값 | 의미 |
+| --- | --- | --- |
+| `socket` / `socket_group` | 필수 | 절대 Unix 소켓 경로 및 연결 허용 그룹 |
+| `work_dir` | 필수 | 비공개 상태/워크트리 절대 경로 |
+| `projects` | `[]` | 고유한 소문자 `name`, 절대 `path`, `base_ref`(기본 `HEAD`) 허용 목록 |
+| `agents` | `{}` | 에이전트 이름별 고정 `command` argv와 선택 `env` KEY=VALUE; 실행 파일은 절대 경로 |
+| `timeout` | `1h` | 양수 작업 제한 시간 |
+| `max_concurrent` | `1` | FIFO 작업 수, 1..8 |
+| `max_tasks` | `100` | 양수 보관 작업 상한; 오래된 완료 작업의 기록/워크트리 삭제, 브랜치 유지 |
+
 ## 설정 참조
 
 아래 기본값은 `config.Default()`에서 가져왔습니다. YAML은 기본값 위에 적용되며 알 수 없는 키는 오류입니다. HTTP, 인증 및 승인 설정도 아래에 포함됩니다. 빈 슬라이스는 `[]`로 표시합니다(Go에서는 일부가 nil).
@@ -146,7 +176,7 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 | `server.max_output_bytes` | `65536` | 도구 출력 바이트 제한, 양수 필수 |
 | `server.tool_timeout` | `30s` | 호출별 제한 시간, 양수 필수 |
 | `stdio.user` | `local` | 감사 식별자, 신뢰 경계는 실행 OS 사용자 |
-| `stdio.scopes` | `[ops:read]` | 허용 범위: ops:read, ops:write. 쓰기 범위만으로 작업이 활성화되지는 않음 |
+| `stdio.scopes` | `[ops:read]` | 허용 범위: ops:read, ops:write, dev:run. 쓰기 범위만으로 작업이 활성화되지는 않음 |
 | `providers.host.enabled` | `false` | 호스트 제공자 활성화 |
 | `providers.host.units` | `[]` | 유닛 glob 허용 목록, 빈 목록은 모두 차단 |
 | `providers.host.disk_paths` | `[/]` | 개요에 표시할 마운트 지점 |
@@ -198,6 +228,8 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 | `providers.obsidian.exclude` | `[]` | 경로 또는 상위 폴더에 적용하는 볼트 상대 path.Match glob; 점으로 시작하는 경로와 sync-conflict 복사본은 항상 제외 |
 | `providers.obsidian.allow_write` | `false` | 노트 쓰기 도구 4개 등록; 각각 ops:write 및 사람 승인 필요 |
 | `providers.obsidian.max_note_bytes` | `1048576` | 읽기/쓰기 노트 크기 양수 제한; 초과 노트는 본문 스캔에서 제외 |
+| `providers.dev.enabled` | `false` | 개발 제공자 활성화; 모든 도구에 dev:run 필요 |
+| `providers.dev.runner_socket` | `""` | 별도 dev-runner의 절대 Unix 소켓 경로 |
 
 로그 상한은 양수로 설정하세요. 쓰기의 원본 인수는 마스킹 및 인수 감사 기록 전에 16 KiB로 제한합니다. 네 가지 쓰기 도구는 브라우저 재호출용 선택 인수 `approval_id`를 받습니다. 작업 허용 목록이 비어 있으면 해당 도구는 등록되지 않습니다. 설정 변경 후 재시작해야 합니다.
 

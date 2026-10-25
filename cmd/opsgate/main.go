@@ -20,6 +20,7 @@ import (
 	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/authn"
 	"github.com/gkdis6/opsgate/internal/config"
+	"github.com/gkdis6/opsgate/internal/devrunner"
 	"github.com/gkdis6/opsgate/internal/httpserver"
 	"github.com/gkdis6/opsgate/internal/oauth"
 	"github.com/gkdis6/opsgate/internal/server"
@@ -30,6 +31,13 @@ func main() {
 	log.SetFlags(0)
 	log.SetPrefix("opsgate: ")
 	log.SetOutput(os.Stderr) // stdout belongs to the stdio transport
+
+	if len(os.Args) > 1 && os.Args[1] == "dev-runner" {
+		if err := runDevRunner(os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 
 	cfgPath := flag.String("config", "", "path to opsgate.yaml")
 	transport := flag.String("transport", "stdio", "transport: stdio or http")
@@ -145,4 +153,22 @@ func printToken() error {
 	sum := sha256.Sum256([]byte(tok))
 	fmt.Printf("token:  %s\nsha256: %s\n", tok, hex.EncodeToString(sum[:]))
 	return nil
+}
+
+func runDevRunner(args []string) error {
+	fs := flag.NewFlagSet("dev-runner", flag.ContinueOnError)
+	path := fs.String("config", "", "path to dev-runner.yaml (required)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *path == "" || fs.NArg() != 0 {
+		return fmt.Errorf("usage: opsgate dev-runner -config <file>")
+	}
+	cfg, err := config.LoadDevRunner(*path)
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return devrunner.Serve(ctx, cfg)
 }

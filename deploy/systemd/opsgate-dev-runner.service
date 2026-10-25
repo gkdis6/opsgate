@@ -1,0 +1,44 @@
+[Unit]
+Description=opsgate coding agent runner
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=opsdev
+Group=opsdev
+# Allows chgrp of the socket; the server account belongs to opsgate, not opsdev.
+SupplementaryGroups=opsgate
+Environment=HOME=/var/lib/opsgate-dev
+ExecStart=/usr/local/bin/opsgate dev-runner -config /etc/opsgate/dev-runner.yaml
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=60s
+RuntimeDirectory=opsgate-dev
+RuntimeDirectoryMode=0750
+StateDirectory=opsgate-dev
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+# REQUIRED: fill in every configured project repository. Git worktrees and
+# branches also write inside <repo>/.git, outside StateDirectory.
+# ReadWritePaths=/srv/projects/example
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+LockPersonality=yes
+# Agent sandboxes (Codex/Claude bubblewrap) need unprivileged user namespaces.
+# Do not set RestrictNamespaces or PrivateUsers. Verify sandboxing works on
+# your kernel and with your agent version; this unit is not itself a sandbox.
+# SocketGroup needs search permission on RuntimeDirectory. Provision an ACL
+# (see docs/dev.md); never grant the HTTP account access to StateDirectory.
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,22 @@
+# Separate file: root-owned, readable by opsdev, never writable by opsgate.
+socket: /run/opsgate-dev/runner.sock
+socket_group: opsgate
+work_dir: /var/lib/opsgate-dev
+projects:
+  - name: example
+    path: /srv/projects/example
+    base_ref: main
+agents:
+  codex:
+    # Workspace edits and sandboxed commands; approval is for the entire task.
+    # The requirement is read from stdin, never a command-line argument.
+    command: [/usr/local/bin/codex, exec, -C, "{workdir}", -s, workspace-write, --skip-git-repo-check, -o, "{output}", "-"]
+  claude:
+    # Automatically accepts file edits. Command permissions still depend on
+    # Claude's local settings; configure and verify its OS sandbox separately.
+    # Do not add bypass-permissions flags. stdout becomes the final message.
+    command: [/usr/local/bin/claude, -p, --permission-mode, acceptEdits, --output-format, text]
+    # env: ["EXAMPLE_SETTING=value"] # Trusted KEY=VALUE entries; never client input.
+timeout: 1h
+max_concurrent: 1 # 1..8; queued work is FIFO
+max_tasks: 100 # Includes queued/running tasks; reject new work if all slots are active.

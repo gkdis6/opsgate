@@ -11,9 +11,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -420,6 +422,81 @@ func checkScopes(where string, scopes []string) error {
 	for _, s := range scopes {
 		if !KnownScope(s) {
 			return fmt.Errorf("%s: unknown scope %q", where, s)
+		}
+	}
+	return nil
+}
+
+// LoadDevRunner reads a strict, single-document runner configuration.
+func LoadDevRunner(path string) (DevRunner, error) {
+	c := DevRunner{Timeout: time.Hour, MaxConcurrent: 1, MaxTasks: 100}
+	f, err := os.Open(path)
+	if err != nil {
+		return c, err
+	}
+	defer f.Close()
+	dec := yaml.NewDecoder(f)
+	dec.KnownFields(true)
+	if err := dec.Decode(&c); err != nil {
+		return c, fmt.Errorf("parse runner configuration: %w", err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return c, fmt.Errorf("runner configuration must contain one YAML document")
+	}
+	for i := range c.Projects {
+		if c.Projects[i].BaseRef == "" {
+			c.Projects[i].BaseRef = "HEAD"
+		}
+	}
+	return c, c.Validate()
+}
+
+// Validate checks the runner's allowlists and resource limits.
+func (c DevRunner) Validate() error {
+	name := regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+	envName := regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	clean := func(s string) bool { return !strings.ContainsFunc(s, unicode.IsControl) }
+	for _, p := range []string{c.Socket, c.WorkDir} {
+		if !filepath.IsAbs(p) || !clean(p) {
+			return fmt.Errorf("runner socket and work_dir must be absolute paths without control characters")
+		}
+	}
+	if c.SocketGroup == "" || !clean(c.SocketGroup) {
+		return fmt.Errorf("socket_group is required")
+	}
+	if c.Timeout <= 0 || c.MaxConcurrent < 1 || c.MaxConcurrent > 8 || c.MaxTasks < 1 {
+		return fmt.Errorf("timeout and max_tasks must be positive; max_concurrent must be 1..8")
+	}
+	seen := map[string]bool{}
+	for _, p := range c.Projects {
+		if !name.MatchString(p.Name) || seen[p.Name] {
+			return fmt.Errorf("project names must be unique lowercase names of at most 63 characters")
+		}
+		seen[p.Name] = true
+		if !filepath.IsAbs(p.Path) || !clean(p.Path) {
+			return fmt.Errorf("project paths must be absolute without control characters")
+		}
+		if len(p.BaseRef) > 256 || strings.HasPrefix(p.BaseRef, "-") || !clean(p.BaseRef) {
+			return fmt.Errorf("invalid project base_ref")
+		}
+	}
+	for n, a := range c.Agents {
+		if !name.MatchString(n) || len(a.Command) == 0 || !filepath.IsAbs(a.Command[0]) || strings.ContainsAny(a.Command[0], "{}") {
+			return fmt.Errorf("invalid agent name or executable; command[0] must be an absolute path")
+		}
+		for _, arg := range a.Command {
+			if len(arg) > 8192 || strings.ContainsRune(arg, 0) {
+				return fmt.Errorf("invalid agent argument")
+			}
+		}
+		seenEnv := map[string]bool{}
+		for _, env := range a.Env {
+			key, _, ok := strings.Cut(env, "=")
+			if !ok || !envName.MatchString(key) || strings.ContainsRune(env, 0) || seenEnv[key] {
+				return fmt.Errorf("invalid or duplicate agent environment key")
+			}
+			seenEnv[key] = true
 		}
 	}
 	return nil

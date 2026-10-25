@@ -1,6 +1,8 @@
 # Connecting clients
 
-opsgate currently supports **stdio only**. The client launches the binary and exchanges MCP messages through stdin/stdout. Use absolute executable and configuration paths. Keep stdout free of banners or debugging output; diagnostics and the default audit destination use stderr. v0.1 providers, auditing and redaction are implemented; the release is pre-release and has not yet been security-reviewed by third parties.
+opsgate supports stdio and authenticated Streamable HTTP at `<public_url>/mcp`. Stages 1–4 are implemented and pre-release; third-party security review is pending. Use [deployment](deploy.md) to configure TLS, authentication and upstream callbacks.
+
+For stdio, the client launches the binary and exchanges MCP messages through stdin/stdout. Use absolute executable/config paths. Keep stdout free of banners; diagnostics and the default audit destination use stderr.
 
 The process runs with the launching OS user's permissions and configured `stdio.scopes`. `stdio.user` is an audit label. Protect the config and use an unprivileged account. Enable only needed providers and allowlisted units/namespaces. Kubernetes kubeconfig `exec` and `auth-provider` credential plugins are rejected; use credentials such as a short-lived ServiceAccount token. Namespace policies do not restrict Nodes or PersistentVolumes; review the [RBAC manifest](../deploy/kubernetes/rbac-readonly.yaml) and [security policy](../SECURITY.md).
 
@@ -73,6 +75,40 @@ Desktop and Cursor can use this server entry:
 
 Set up host-key verification and noninteractive SSH authentication first. Do not disable host-key checking. Use a dedicated unprivileged remote account and no pseudo-terminal. Remote startup files must not print to stdout. Keep remote command paths fixed and trusted; never interpolate tool input into SSH commands. SSH supplies transport security; this is still a stdio MCP server, not an HTTP endpoint.
 
-## Remote web clients
+## claude.ai and ChatGPT over HTTP
 
-claude.ai and ChatGPT need the planned Streamable HTTP and OAuth mode; they cannot connect directly to this stdio process. See the [roadmap](roadmap.md). No HTTP URL or OAuth setup is available yet.
+Add a custom connector in the client's connector/integration settings, select OAuth, and enter the full MCP URL, for example `https://mcp.example.com/mcp`. The client uses Protected Resource Metadata and authorization-server discovery; builtin mode supports OAuth Dynamic Client Registration (DCR), so no manual MCP client ID or secret provisioning is needed. The upstream Google/GitHub application credentials belong only on the server. Sign in upstream as an allowlisted user and inspect the consent screen's client, redirect destination and scopes before granting access. Connector availability and setting names depend on the client/account.
+
+Register `<public_url>/oauth/callback` at the upstream identity provider, not the MCP URL. The proxy must forward `/mcp`, `/.well-known/*`, `/oauth/*` and `/approve/*` and support streaming. External mode depends on the external authorization server's client registration support; static mode does not supply OAuth/DCR.
+
+## Claude Code over HTTP
+
+```sh
+claude mcp add --transport http opsgate https://host/mcp
+```
+
+Use the client's authentication flow to sign in. Replace `host` with your public HTTPS origin. Keep the stdio setup above if you prefer local or SSH access.
+
+## Static tokens for local HTTP clients
+
+Run `opsgate -gen-token` in a private terminal. It prints a raw token and its SHA-256 digest. Put only the digest in the server configuration:
+
+```yaml
+http:
+  listen: 127.0.0.1:8787
+  public_url: http://127.0.0.1:8787
+auth:
+  mode: static
+  static:
+    - name: local-client
+      sha256: REPLACE_WITH_GENERATED_HEX_DIGEST
+      scopes: [ops:read]
+```
+
+Start with `opsgate -transport http -config /path/opsgate.yaml`. Configure a local HTTP client's secret/header facility to send `Authorization: Bearer <raw-token>` to `http://127.0.0.1:8787/mcp`. Never put the token in a URL, committed config or shared logs. Static tokens have no OAuth refresh flow: remove/replace their digest and restart to revoke/rotate them. Keep the listener on loopback; use HTTPS for remote clients.
+
+## Approving writes
+
+Writes are registered only when the provider and corresponding action allowlist are enabled. They also need `ops:write`, OS/RBAC permission and human confirmation; HTTP users need `ops:read` too. Clients supporting MCP elicitation display the plan in an in-client prompt, using multi round-trip input requests across protocol versions.
+
+Otherwise, builtin auth with `approval.web: true` returns a browser approval link and `approval_id`. Open the link, sign in as the same upstream user and read the exact summary. After approval, the client retries the same tool and arguments plus `approval_id`. Approval is expiring, single-use and bound to the exact operation. Static/external clients without elicitation cannot write; stdio also requires elicitation. A compromised UI can auto-approve elicitation, and prompt injection can request writes: humans must read the summary.

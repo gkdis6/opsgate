@@ -60,8 +60,9 @@ Set `http.public_url` to the external **HTTPS origin**, for example
 Google authenticates the human; opsgate issues the MCP access tokens.
 
 Create a Google OIDC web application, use issuer `https://accounts.google.com`,
-and register the exact upstream callback URL exposed by the completed OAuth
-implementation under `/oauth/`. Set the client ID and an explicit allowlist of
+and register the exact upstream callback URL **`<public_url>/oauth/callback`**
+(for example, `https://mcp.example.com/oauth/callback`) at the identity provider.
+Set the client ID and an explicit allowlist of
 verified email subjects (`email:operator@example.com`). Store the client secret
 in a file or Kubernetes Secret, never directly in YAML, a command argument, or
 source control. Give `ops:write` only to operators who need it. Each write also

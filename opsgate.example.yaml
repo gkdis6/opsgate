@@ -1,24 +1,62 @@
-# All supported keys. Defaults are noted where this example differs.
+# Complete key reference; provider/write allowlists deny everything by default.
+# This file loads for stdio. Configure auth.mode and upstream before HTTP use.
 server:
-  name: opsgate # MCP server name.
-  audit_log: "" # Default: stderr; set a protected JSONL file path to persist.
-  max_output_bytes: 65536 # Positive byte limit per tool response.
-  tool_timeout: 30s # Positive per-call context deadline.
+  name: opsgate # MCP name.
+  audit_log: "" # stderr; otherwise a protected JSONL path.
+  max_output_bytes: 65536 # Positive response byte limit.
+  tool_timeout: 30s # Cooperative deadline; separate plan/apply deadlines for writes.
 stdio:
-  user: local # Audit label; the launching OS user is the trust boundary.
-  scopes: ["ops:read"] # Only ops:read and ops:write are recognized.
+  user: local # Audit label; launching OS account is the trust boundary.
+  scopes: [ops:read] # Add ops:write only with reviewed write policy and elicitation.
+http:
+  listen: 127.0.0.1:8787 # Keep backend private behind TLS proxy.
+  public_url: "" # Required HTTP origin, e.g. https://mcp.example.com (no /mcp).
+auth:
+  mode: "" # Required for HTTP: builtin, external or static.
+  builtin:
+    state_file: "" # Optional private state path, e.g. /var/lib/opsgate/oauth.json.
+    users: [] # Default denies all; entries: {subject: 'email:operator@example.com', scopes: [ops:read]}.
+    # GitHub subjects use github:login; OIDC requires a verified email.
+    upstream:
+      provider: "" # github or oidc; Google uses oidc.
+      issuer: "" # OIDC: https://accounts.google.com.
+      client_id: "" # Upstream application ID; register <public_url>/oauth/callback.
+      client_secret_file: "" # Protected secret file; never put secrets in YAML.
+      client_secret_env: "" # Alternative: environment variable NAME, not its value.
+    access_token_ttl: 1h
+    refresh_token_ttl: 720h # Rotation and reuse detection.
+    max_clients: 100 # DCR capacity; lower for small deployments.
+  external:
+    issuer: "" # Trusted issuer supporting discovery and JWKS.
+    audience: "" # Empty defaults to <public_url>/mcp.
+    user_claim: sub # String identity claim.
+    users: [] # Optional entries: {subject: 'claim:operator', scopes: [ops:read]}.
+    # Empty users trusts token scopes; entries intersect token and configured scopes.
+  static: [] # Entries: {name: local-client, sha256: 'HEX_DIGEST', scopes: [ops:read]}.
+  # Generate digest with opsgate -gen-token; raw token belongs only in client storage.
+approval:
+  ttl: 10m # Pending browser approval lifetime.
+  web: false # Browser fallback requires builtin auth; stdio uses elicitation only.
 providers:
   host:
-    enabled: false # Enable explicitly after reviewing permissions.
-    units: ["ssh.service", "nginx*"] # Glob allowlist; default [] denies all.
-    disk_paths: ["/"] # Mount points reported in the overview.
-    max_log_lines: 500 # Journal lines per call.
+    enabled: false
+    units: [] # Read status/log glob allowlist, e.g. [myapp.service].
+    disk_paths: [/]
+    max_log_lines: 500 # Keep positive.
+    restart_units: [] # Separate write glob allowlist; empty disables restart tool.
+    command_prefix: [] # Optional [/usr/bin/sudo, -n]; exact sudoers rule required.
   kubernetes:
-    enabled: false # Enable explicitly with narrowly scoped credentials.
-    kubeconfig: "" # In-cluster, then $KUBECONFIG, then ~/.kube/config.
-    context: "" # Empty uses the selected kubeconfig context.
-    namespaces: ["default", "apps-*"] # Glob allowlist; default [] denies all.
-    deny_namespaces: ["kube-system"] # Denies win; default [].
-    allow_logs: false # Explicit opt-in for pod logs.
-    show_configmap_data: false # Keep values hidden; expose keys only.
-    max_log_lines: 500 # Pod log lines per call.
+    enabled: false
+    kubeconfig: "" # In-cluster, then $KUBECONFIG, then ~/.kube/config; no exec/auth-provider.
+    context: "" # Empty uses selected context.
+    namespaces: [] # Glob allowlist, e.g. [apps]; empty denies all.
+    deny_namespaces: [] # Denies win; consider [kube-system, kube-public, kube-node-lease].
+    allow_logs: false
+    show_configmap_data: false # Hide values, expose keys only.
+    max_log_lines: 500 # Keep positive.
+    rollout_restart: [] # namespace/name globs, e.g. [apps/myapp].
+    scale: [] # Separate namespace/name globs.
+    delete_pod: [] # Separate namespace/name globs; prefer exact pod names.
+    max_replicas: 10 # Nonnegative scale ceiling; zero allows only zero replicas.
+# Both user lists accept subject and scopes; static entries accept name, sha256, scopes.
+# HTTP writers need ops:read + ops:write, action allowlists, OS/RBAC and human approval.

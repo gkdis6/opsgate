@@ -1,14 +1,22 @@
 # Roadmap
 
-v0.1 is implemented and pre-release: stdio-only, read-only Linux and Kubernetes inspection, with host and Kubernetes providers, JSONL audit persistence, best-effort redaction and a read-only RBAC manifest. The shared wrapper checks scopes, supplies cooperative context deadlines, redacts and truncates output, and records calls. v0.1 has not yet been security-reviewed by third parties.
+Stages 1–4 are implemented and pre-release. They have not yet been security-reviewed by third parties. There are no promised dates for future work.
 
-Everything below is **planned, not implemented**. There are no promised release dates.
+## Done
 
-- Streamable HTTP transport for remote MCP clients, including claude.ai and ChatGPT.
-- A built-in OAuth 2.1 authorization server: authorization code with PKCE S256 only, refresh-token rotation, Dynamic Client Registration, and per-client consent screens. Delegate upstream login to GitHub, Google or any OIDC provider. Store opaque tokens hashed rather than in plaintext.
-- An external authorization mode validating JWTs from an existing authorization server via JWKS, including Keycloak, Authentik, Zitadel, Auth0 and WorkOS. Validate issuer, audience, expiry and allowed algorithms as well as signatures.
-- Write actions: systemd restart and Kubernetes rollout restart, scale and pod deletion. Require explicit action/resource allowlists, the `ops:write` scope and human confirmation through MCP elicitation that the model cannot bypass. No write should be enabled by a scope alone.
-- Docker and PostgreSQL providers with explicitly reviewed permissions and bounded inputs.
-- Signed releases using GoReleaser, cosign and SLSA provenance.
+- Stdio host and Kubernetes inspection, allowlists, namespace denies, scope checks, bounded output, redaction and JSONL audit persistence.
+- Streamable HTTP at `/mcp`, mandatory authentication and Protected Resource Metadata.
+- Builtin OAuth 2.1: authorization code with PKCE S256, DCR, consent, upstream GitHub/OIDC login (including Google), hashed opaque tokens, refresh rotation/reuse detection and optional state persistence.
+- External JWT authentication using issuer discovery/JWKS and static bearer tokens configured by digest; `-gen-token` helper.
+- Host service restart and Kubernetes rollout restart, scale and pod deletion, gated by separate action allowlists, `ops:write` and human confirmation.
+- MCP elicitation across protocol versions and browser approval fallback with same-user upstream login, expiry and single-use argument-bound approvals.
+- GoReleaser releases, cosign keyless signatures, SBOMs, provenance attestations, container image, hardened systemd unit and Kubernetes manifests.
 
-Security review and tests must precede enabling new transports or write actions. Current configuration has no HTTP or OAuth settings; do not add speculative keys to deployed YAML.
+## Remaining ideas
+
+These are planned, not implemented; scope remains subject to security review.
+
+- Docker and PostgreSQL providers with narrow permissions and bounded inputs.
+- Configuration reload.
+- Client ID Metadata Documents (CIMD).
+- Per-tool rate limits.

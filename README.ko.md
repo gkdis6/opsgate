@@ -2,15 +2,15 @@
 
 [English](README.md) · [클라이언트 설정](docs/clients.md) · [보안](SECURITY.md)
 
-opsgate는 AI 클라이언트가 Linux 서버를 안전하게 조회하도록 돕는 오픈 소스 Go MCP 서버입니다. 최소 권한, 명시적 허용 목록, 기본 거부가 보안 모델의 핵심입니다. 기본적으로 제공자는 비활성화되며 유닛과 네임스페이스 허용 목록은 비어 있습니다. stdio는 실행한 OS 사용자의 권한으로 작동합니다. 제한된 Kubernetes RBAC와 일반 사용자 계정으로 실행하세요.
+opsgate는 AI 클라이언트가 Linux와 Kubernetes를 조회하고 제한된 운영 작업을 요청하도록 돕는 오픈 소스 Go MCP 서버입니다. 최소 권한, 명시적 허용 목록, 기본 거부를 사용합니다. 제공자는 기본 비활성화이고 허용 목록은 비어 있으며 쓰기에는 정책과 사람의 승인이 모두 필요합니다. 일반 OS 계정과 좁은 Kubernetes RBAC로 실행하세요. 셸이나 임의 명령 도구는 없으며 내부 명령은 고정 argv와 exec.CommandContext를 사용합니다. 설정과 자격 증명은 신뢰하는 소유자가 관리해야 합니다.
 
-v0.1 계약은 셸, 임의 명령 실행, Kubernetes Secrets 접근 없는 읽기 전용 조회입니다. 공통 래퍼가 범위 검사, 협력적 컨텍스트 제한 시간, 최선형 비밀정보 마스킹, 출력 잘림, JSONL 감사를 처리합니다. 로그와 이벤트는 프롬프트 인젝션을 포함할 수 있는 신뢰할 수 없는 데이터입니다. 클라이언트가 악성 지시를 무시한다고 보장할 수는 없습니다.
+stdio 및 Streamable HTTP, Protected Resource Metadata, GitHub/OIDC 로그인 기반 builtin OAuth 2.1, 외부 JWT 및 static 토큰 인증, 조회와 네 가지 쓰기 도구, 마스킹과 JSONL 감사를 지원합니다. GoReleaser, cosign keyless 서명, SBOM, provenance 증명, 컨테이너 이미지 및 강화된 systemd/Kubernetes 템플릿도 제공합니다. [배포 안내](docs/deploy.md)를 참고하세요.
 
-**개발 상태:** v0.1은 호스트 및 Kubernetes 제공자, 감사 기록, 마스킹을 포함하여 구현 완료된 사전 릴리스입니다. 아직 제3자의 보안 검토를 받지 않았습니다. 운영 환경에 사용하기 전에 구현을 검토하세요. 향후 계획은 [로드맵](docs/roadmap.md)을 참고하세요.
+**개발 상태:** 1–4단계가 구현된 사전 릴리스이며 제3자의 보안 검토는 아직 받지 않았습니다. 로그와 이벤트는 프롬프트 인젝션을 포함할 수 있는 신뢰할 수 없는 데이터입니다. 마스킹은 최선형 보호입니다.
 
-## 빠른 시작
+## stdio 빠른 시작
 
-현재 stdio만 지원합니다. 호스트 조회는 systemd/journald 및 /proc가 있는 Linux가 필요합니다. Kubernetes 조회는 client-go와 제한된 자격 증명을 사용합니다.
+호스트 조회에는 systemd/journald 및 /proc가 있는 Linux가 필요합니다. Kubernetes는 client-go와 제한된 자격 증명을 사용합니다. stdio는 실행 OS 계정을 신뢰합니다.
 
 ```sh
 go install github.com/gkdis6/opsgate/cmd/opsgate@latest
@@ -33,9 +33,44 @@ claude mcp add opsgate -- /path/to/opsgate -config /path/opsgate.yaml
 
 YAML을 `/path/opsgate.yaml`에 저장하고 실행 파일과 설정 경로를 절대 경로로 바꾸세요. 소스 빌드는 `bin/opsgate`를 생성합니다. 설정이 없으면 두 제공자 모두 비활성화됩니다. 전체 설정은 [예제](opsgate.example.yaml), Desktop, Cursor, SSH 연결은 [클라이언트 설정](docs/clients.md)을 참고하세요.
 
-## v0.1 도구 계약
+## Google 기반 HTTP 빠른 시작
 
-모든 도구에는 `ops:read`가 필요하며 해당 제공자가 활성화된 경우에만 등록됩니다. 호스트 유닛과 Kubernetes 네임스페이스는 설정으로 제한하며 네임스페이스 거부가 우선합니다. Kubernetes Secrets 도구는 없습니다. 읽기 전용 메타데이터와 로그에도 민감한 정보가 있을 수 있습니다.
+Google OIDC 웹 애플리케이션을 만들고 정확한 redirect URI **`https://mcp.example.com/oauth/callback`**을 등록하세요. 아래 origin, client ID, 검증된 이메일을 교체하고 비밀 파일과 쓰기 가능한 비공개 상태 디렉터리를 준비하세요.
+
+```yaml
+http:
+  listen: 127.0.0.1:8787
+  public_url: https://mcp.example.com
+auth:
+  mode: builtin
+  builtin:
+    state_file: /var/lib/opsgate/oauth.json
+    upstream:
+      provider: oidc
+      issuer: https://accounts.google.com
+      client_id: YOUR_GOOGLE_CLIENT_ID
+      client_secret_file: /etc/opsgate/google-client-secret
+    users:
+      - subject: email:operator@example.com
+        scopes: [ops:read]
+approval:
+  web: true
+providers:
+  host:
+    enabled: true
+    units: [myapp.service]
+```
+
+```sh
+opsgate -transport http -config /etc/opsgate/opsgate.yaml
+claude mcp add --transport http opsgate https://mcp.example.com/mcp
+```
+
+TLS 프록시는 `/mcp`, `/.well-known/*`, `/oauth/*`, `/approve/*`를 전달해야 합니다. claude.ai와 ChatGPT에는 `/mcp` URL의 사용자 지정 OAuth 커넥터를 추가하세요. DCR이 클라이언트를 등록합니다. [클라이언트](docs/clients.md) 및 [배포](docs/deploy.md)를 참고하세요.
+
+## 도구 계약
+
+조회 도구에는 `ops:read`가 필요하며 해당 제공자가 활성화된 경우에만 등록됩니다. 호스트 유닛과 Kubernetes 네임스페이스는 설정으로 제한하며 네임스페이스 거부가 우선합니다. Kubernetes Secrets 도구는 없습니다. 읽기 전용 메타데이터와 로그에도 민감한 정보가 있을 수 있습니다.
 
 | 도구 | 용도 | 주요 인수, 기본값 및 제한 |
 | --- | --- | --- |
@@ -49,8 +84,12 @@ YAML을 `/path/opsgate.yaml`에 저장하고 실행 파일과 설정 경로를 �
 | `k8s_get` | 정제된 객체 YAML과 최근 1시간의 관련 이벤트 최대 50개 | `kind`, `name` 필수. 네임스페이스 범위 종류는 `namespace` 필수, 클러스터 범위 종류는 생략 |
 | `k8s_logs` | 파드 로그. `allow_logs=true`일 때만 등록 | `namespace`, `pod` 필수. 일반/init/ephemeral 컨테이너를 합쳐 하나뿐인 경우에만 `container` 생략 가능. `tail=200`, 1–`max_log_lines`로 제한(기본 상한 500). `since=""`(시간 필터 없음), 최대 168h의 양수 Go 기간. `previous=false`. `grep=""`, 대소문자 구분 없는 리터럴 부분 문자열. 스트림은 1 MiB로 제한 |
 | `k8s_events` | 네임스페이스 이벤트 | `namespace=""`(허용된 모든 네임스페이스). `warnings_only=true`. `since="1h"`, 최대 168h의 양수 Go 기간. `limit=50`, 1–500으로 제한 |
+| `host_service_restart` | 허용된 systemd 유닛 재시작 | `unit` 필수(상태 조회와 같은 정규화, 256바이트 제한); `restart_units` 필요 |
+| `k8s_rollout_restart` | 파드 템플릿 갱신으로 워크로드 재시작 | `kind`(deployment/statefulset/daemonset), `namespace`, `name` 필수; `rollout_restart` 필요 |
+| `k8s_scale` | 복제본 수 지정 | `kind`(deployment/statefulset), `namespace`, `name`, `replicas`(0–`max_replicas`, 기본 상한 10) 필수; `scale` 필요 |
+| `k8s_delete_pod` | UID 전제조건으로 특정 파드 삭제 | `namespace`, `name` 필수; `delete_pod` 필요 |
 
-숫자 제한에서 0은 기본값을 선택하며 그 외 범위를 벗어난 값은 상하한으로 조정됩니다. 모든 반환 텍스트에는 `server.max_output_bytes`(기본 65536)가 적용되며 호출에는 협력적 제한 시간(`server.tool_timeout`, 기본 30s)이 적용됩니다.
+조회 도구의 숫자 제한에서 0은 기본값을 선택하며 그 외 범위를 벗어난 값은 상하한으로 조정됩니다. 쓰기 복제본 수는 조정하지 않고 범위를 검증합니다. 모든 반환 텍스트에는 `server.max_output_bytes`(기본 65536)가 적용되며 호출에는 협력적 제한 시간(`server.tool_timeout`, 기본 30s)이 적용됩니다.
 
 Kubernetes 네임스페이스 입력은 DNS-1123 레이블이어야 합니다. 객체 `name`, `pod`, `container` 입력은 DNS-1123 서브도메인으로 검증합니다.
 
@@ -68,9 +107,21 @@ Kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 거부됩
 
 `k8s_get`은 추가로 템플릿을 포함한 메타데이터에서 `managedFields`와 `kubectl.kubernetes.io/last-applied-configuration`을 제거합니다. ConfigMap `data`와 `binaryData`는 `show_configmap_data=true`가 아니면 키를 유지하고 값을 바이트 수 표시로 바꿉니다. 환경 변수 이름에 pass, secret, token, key, credential, auth, dsn, private, cert, database_url이 포함되면(대소문자 무시) 리터럴 환경 `value` 필드를 `[REDACTED]`로 바꿉니다. Pods와 CronJobs를 포함한 지원 워크로드 템플릿의 일반, init, ephemeral 컨테이너에 적용됩니다. 다른 리터럴 값은 공통 마스킹 패턴에 해당하지 않으면 표시됩니다. `valueFrom` 참조는 표시되며 실제 값을 조회하지 않습니다.
 
+## 인증 및 사람의 승인
+
+`builtin`은 GitHub 또는 Google 등의 OIDC로 로그인한 뒤 불투명 MCP 토큰을 발급합니다. PKCE S256 전용 authorization code, 동적 클라이언트 등록(DCR), 클라이언트별 동의 화면, refresh 회전 및 재사용 시 폐기를 지원합니다. issuer는 `http.public_url`, resource는 `<public_url>/mcp`입니다. 선택적 상태 파일은 등록 정보와 토큰 해시를 재시작 후에도 유지합니다. 디렉터리와 백업을 보호하고 파일당 프로세스 하나만 사용하세요.
+
+`external`은 issuer discovery 및 JWKS로 JWT 서명, issuer, audience, 만료, 허용 알고리즘을 검증합니다. audience 기본값은 MCP resource URL입니다. 범위는 `scope` 또는 `scp`에서 읽으며 선택적 `claim:<value>` 사용자 목록을 설정하면 신원을 제한하고 토큰 범위와 허용 범위의 교집합을 사용합니다. `static`은 SHA-256 해시로 설정한 공유 Bearer 토큰을 사용합니다. `opsgate -gen-token`으로 토큰과 해시를 생성하고 원본은 클라이언트 비밀 저장소에만 보관하세요. static 모드에는 OAuth 로그인이나 DCR이 없습니다.
+
+조회 도구에는 `ops:read`가 필요합니다. 쓰기는 별도 작업 허용 목록, `ops:write`, OS/RBAC 권한 및 사람의 승인이 모두 필요합니다. HTTP 진입에는 `ops:read`도 필요하므로 원격 쓰기 사용자에게 두 범위를 부여하세요. Kubernetes 네임스페이스 허용/거부 규칙은 쓰기에도 적용됩니다. 조회 유닛 목록은 재시작 권한을 부여하지 않습니다.
+
+서버는 입력을 검증하고 부작용 없는 계획을 만든 뒤 확인을 요청합니다. MCP elicitation 지원 클라이언트에는 앱 내 승인 요청을 표시하며 프로토콜 버전에 걸친 여러 차례의 입력 요청을 지원합니다. 미지원 시 builtin 인증과 `approval.web: true`가 있으면 브라우저 승인 링크와 `approval_id`를 반환합니다. 사람은 링크를 열어 동일한 사용자로 upstream에 로그인하고 작업을 검토합니다. 승인 후 정확히 같은 인수에 `approval_id`를 추가하여 재호출하세요. 승인은 만료되며 일회용이고 사용자, 도구, 인수 및 계획에 결합됩니다. 확인 채널이 없으면 쓰기를 거부합니다. stdio는 elicitation만 지원합니다.
+
+침해된 클라이언트 UI는 elicitation을 자동 승인할 수 있습니다. 프롬프트 인젝션은 모델이 쓰기를 요청하게 만들 수 있으므로 사람이 요약을 읽어야 합니다. [SECURITY.md](SECURITY.md)를 참고하세요.
+
 ## 설정 참조
 
-아래 기본값은 `config.Default()`에서 가져왔습니다. YAML은 기본값 위에 적용되며 알 수 없는 키는 오류입니다. 상위 매핑은 `server`, `stdio`, `providers`, `providers.host`, `providers.kubernetes`입니다. 빈 슬라이스는 `[]`로 표시합니다(Go에서는 일부가 nil).
+아래 기본값은 `config.Default()`에서 가져왔습니다. YAML은 기본값 위에 적용되며 알 수 없는 키는 오류입니다. HTTP, 인증 및 승인 설정도 아래에 포함됩니다. 빈 슬라이스는 `[]`로 표시합니다(Go에서는 일부가 nil).
 
 | YAML 키 | 기본값 | 의미 |
 | --- | --- | --- |
@@ -92,8 +143,41 @@ Kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 거부됩
 | `providers.kubernetes.allow_logs` | `false` | 파드 로그 활성화 |
 | `providers.kubernetes.show_configmap_data` | `false` | false이면 키만 표시하고 값은 숨김 |
 | `providers.kubernetes.max_log_lines` | `500` | 호출별 파드 로그 행 제한 |
+| `http.listen` | `127.0.0.1:8787` | 백엔드 TCP 주소 |
+| `http.public_url` | `""` | HTTP 사용 시 필수 origin; loopback 외에는 HTTPS, resource는 origin + /mcp |
+| `auth.mode` | `""` | HTTP 사용 시 필수: builtin, external 또는 static |
+| `auth.builtin.state_file` | `""` | 선택적 0600 상태 파일; 빈 값이면 재시작 시 등록 및 토큰 상태 소실 |
+| `auth.builtin.users` | `[]` | 허용 upstream 사용자 목록; 빈 목록은 모두 거부 |
+| `auth.builtin.users[].subject` | `""` | github:로그인 또는 email:검증된이메일 |
+| `auth.builtin.users[].scopes` | `[]` | ops:read 및 선택적 ops:write 권한 |
+| `auth.builtin.upstream.provider` | `""` | github 또는 oidc |
+| `auth.builtin.upstream.issuer` | `""` | OIDC issuer 필수, 예: https://accounts.google.com |
+| `auth.builtin.upstream.client_id` | `""` | Upstream 애플리케이션 client ID |
+| `auth.builtin.upstream.client_secret_file` | `""` | 비밀 파일 경로; client_secret_env와 둘 중 하나 사용 |
+| `auth.builtin.upstream.client_secret_env` | `""` | 비밀 값이 들어 있는 환경 변수의 이름 |
+| `auth.builtin.access_token_ttl` | `1h` | Access 토큰 수명 |
+| `auth.builtin.refresh_token_ttl` | `720h` | Refresh 토큰 수명 |
+| `auth.builtin.max_clients` | `100` | 동적 클라이언트 등록 상한 |
+| `auth.external.issuer` | `""` | Discovery 및 JWKS에 사용할 신뢰하는 issuer |
+| `auth.external.audience` | `""` | 빈 값이면 public_url + /mcp 사용 |
+| `auth.external.user_claim` | `sub` | 사용자를 식별하는 문자열 claim |
+| `auth.external.users` | `[]` | 빈 목록이면 토큰 범위를 신뢰; 목록이 있으면 사용자 제한 및 범위 교집합 적용 |
+| `auth.external.users[].subject` | `""` | 설정한 user_claim의 claim:값 |
+| `auth.external.users[].scopes` | `[]` | 해당 신원의 최대 허용 범위 |
+| `auth.static` | `[]` | 공유 Bearer 토큰 목록; OAuth 로그인 없음 |
+| `auth.static[].name` | `""` | 토큰 신원 및 감사 이름 |
+| `auth.static[].sha256` | `""` | 16진수 SHA-256 해시; 원본 토큰 저장 금지 |
+| `auth.static[].scopes` | `[]` | 토큰 권한; HTTP 접근에 ops:read 필요 |
+| `approval.ttl` | `10m` | 브라우저 승인 대기 수명 |
+| `approval.web` | `false` | 브라우저 대체 승인; builtin 인증 필수 |
+| `providers.host.restart_units` | `[]` | 별도 재시작 유닛 glob 목록; 빈 목록이면 도구 비활성화 |
+| `providers.host.command_prefix` | `[]` | 쓰기 argv 접두사, 예: [/usr/bin/sudo, -n]; 첫 항목은 절대 실행 경로, 나머지는 경로/플래그 |
+| `providers.kubernetes.rollout_restart` | `[]` | namespace/name glob 목록; 빈 목록이면 도구 비활성화 |
+| `providers.kubernetes.scale` | `[]` | namespace/name glob 목록; 빈 목록이면 도구 비활성화 |
+| `providers.kubernetes.delete_pod` | `[]` | namespace/name glob 목록; 빈 목록이면 도구 비활성화 |
+| `providers.kubernetes.max_replicas` | `10` | 0 이상의 복제본 상한; 0이면 0개로만 조정 가능 |
 
-로그 제한은 제공자별 상한이므로 양수로 설정하세요. 현재 설정 검증은 출력 크기와 제한 시간의 양수 여부, 범위 이름을 확인합니다. `stdio.user`는 설정된 이름이며 인증 자격 증명이 아닙니다. `ops:write`를 부여해도 쓰기 도구나 확인 기능이 구현되지는 않습니다.
+로그 상한은 양수로 설정하세요. 네 가지 쓰기 도구는 브라우저 재호출용 선택 인수 `approval_id`를 받습니다. 작업 허용 목록이 비어 있으면 해당 도구는 등록되지 않습니다. 설정 변경 후 재시작해야 합니다.
 
 ## 감사 형식
 
@@ -103,7 +187,7 @@ Kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 거부됩
 {"time":"2026-10-24T12:00:00Z","user":"local","transport":"stdio","tool":"host_service_status","args":{"unit":"ssh.service"},"outcome":"ok","duration_ms":12,"output_bytes":120}
 ```
 
-`audit.Event`의 필드: `time`(선택적 소수 초를 포함하는 RFC3339 타임스탬프), `user`, `transport`, `tool`, 선택적 마스킹된 `args`, `outcome`(`ok`, `error`, `denied`), 선택적 마스킹된 `error`, `duration_ms`, `output_bytes`(성공 반환 텍스트 크기, 오류 시 0). 도구 출력 본문은 저장하지 않습니다. 기록 실패는 도구 호출을 실패시키지 않고 stderr로 보고하며 감사는 위변조 방지를 보장하지 않습니다. 민감한 정보가 남을 수 있으므로 로그를 보호하고 순환 관리하세요.
+`audit.Event`의 필드: `time`(선택적 소수 초를 포함하는 RFC3339 타임스탬프), `user`, `transport`, `tool`, 선택적 마스킹된 `args`, `outcome`(`ok`, `error`, `denied`, `pending`), 선택적 마스킹된 `error`, `duration_ms`, `output_bytes`(성공 반환 텍스트 크기, 오류 시 0). 쓰기 이벤트에는 선택적 마스킹된 `plan`(사람에게 표시한 요약), `approval`(확인 방법인 `elicitation` 또는 `web`; 거부나 대기 호출에도 포함될 수 있음)이 추가됩니다. `pending`은 브라우저 승인 대기이며 반환 안내 텍스트는 `output_bytes`에 포함됩니다. 계획과 실행에는 각각 제한 시간이 적용되며 사람의 확인은 더 오래 걸릴 수 있습니다. 도구 출력 본문은 저장하지 않습니다. 기록 실패는 도구 호출을 실패시키지 않고 stderr로 보고하며 감사는 위변조 방지를 보장하지 않습니다. 민감한 정보가 남을 수 있으므로 로그를 보호하고 순환 관리하세요.
 
 ## 개발 및 라이선스
 

@@ -501,7 +501,7 @@ func (c Config) ValidateHTTP() error {
 		return fmt.Errorf("http.listen: %w", err)
 	}
 	u, err := url.Parse(c.HTTP.PublicURL)
-	if err != nil || u.Host == "" || u.Path != "" && u.Path != "/" || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || u.Host == "" || u.Path != "" && u.Path != "/" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
 		return fmt.Errorf("http.public_url must be an origin like https://mcp.example.com")
 	}
 	if u.Scheme != "https" && !(u.Scheme == "http" && isLoopback(u.Hostname())) {

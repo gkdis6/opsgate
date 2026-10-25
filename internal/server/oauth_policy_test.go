@@ -31,7 +31,12 @@ func TestBuiltinVerifierCarriesToolPolicy(t *testing.T) {
 			hash := sha256.Sum256([]byte(raw))
 			state := map[string]any{
 				"version": 1, "issuer": issuer, "resource": issuer + "/mcp",
-				"clients": map[string]any{}, "refresh": map[string]any{}, "revoked_families": map[string]any{}, "codes": map[string]any{},
+				// Verify only honours tokens of registered, approved clients.
+				"clients": map[string]any{"test-client": map[string]any{
+					"client_id": "test-client", "redirect_uris": []string{"https://client.example/cb"}, "client_name": "test",
+					"token_endpoint_auth_method": "none", "grant_types": []string{"authorization_code", "refresh_token"},
+					"created": time.Now(), "last_used": time.Now(),
+				}}, "refresh": map[string]any{}, "revoked_families": map[string]any{}, "codes": map[string]any{},
 				"access": map[string]any{hex.EncodeToString(hash[:]): map[string]any{
 					"ClientID": "test-client", "Subject": tc.subject, "Scopes": config.Scopes,
 					"Family": "test-family", "Expires": time.Now().Add(time.Hour),

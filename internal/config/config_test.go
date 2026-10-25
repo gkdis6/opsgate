@@ -51,3 +51,12 @@ func TestValidateCommandPrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateHTTPRejectsCredentialsInPublicURL(t *testing.T) {
+	c := Default()
+	c.HTTP.PublicURL = "https://user:pass@mcp.example.com"
+	c.Auth.Mode = AuthStatic
+	if err := c.ValidateHTTP(); err == nil {
+		t.Fatal("public_url with userinfo accepted")
+	}
+}

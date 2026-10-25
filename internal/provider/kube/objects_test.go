@@ -8,12 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	ktesting "k8s.io/client-go/testing"
+	"sigs.k8s.io/yaml"
 )
 
 func TestListPolicyAndValidation(t *testing.T) {
@@ -61,6 +64,102 @@ func TestListTruncation(t *testing.T) {
 	out, err := p.list(context.Background(), tool.Caller{}, listInput{Kind: "pods", Limit: 1})
 	if err != nil || !strings.Contains(out, "truncated to 1") || strings.Contains(out, "pod-1") {
 		t.Fatal(out, err)
+	}
+}
+
+func TestListCollectionBudget(t *testing.T) {
+	for _, limit := range []int{1, 500} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			p := testProvider()
+			calls := 0
+			p.client.(*fake.Clientset).PrependReactor("list", "pods", func(action ktesting.Action) (bool, runtime.Object, error) {
+				calls++
+				opts := action.(ktesting.ListActionImpl).GetListOptions()
+				pageSize := min(limit+1, 500)
+				if opts.Limit != int64(pageSize) || opts.LabelSelector != "app=web" {
+					t.Errorf("list options = %+v", opts)
+				}
+				if calls > 3 {
+					return true, nil, errors.New("read beyond authorized result budget")
+				}
+				page := &corev1.PodList{ListMeta: metav1.ListMeta{Continue: fmt.Sprint(calls)}}
+				for i := 0; i < pageSize; i++ {
+					ns := "public"
+					if calls == 1 {
+						ns = "private" // Denied items must not spend the budget.
+					}
+					page.Items = append(page.Items, corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("pod-%d-%03d", calls, i), Namespace: ns, Labels: map[string]string{"app": "web"}}})
+				}
+				return true, page, nil
+			})
+			out, err := p.list(context.Background(), tool.Caller{}, listInput{Kind: "pods", Limit: limit, LabelSelector: "app=web"})
+			wantCalls := 2
+			if limit == 500 {
+				wantCalls = 3
+			}
+			if err != nil || calls != wantCalls || !strings.Contains(out, fmt.Sprintf("truncated to %d objects", limit)) || strings.Contains(out, "private") {
+				t.Fatalf("calls=%d: %s, %v", calls, out, err)
+			}
+		})
+	}
+}
+
+func TestCollectRetainsTableFieldsOnly(t *testing.T) {
+	p := testProvider(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "public", Annotations: map[string]string{"large": strings.Repeat("x", 1<<20)}}, Data: map[string]string{"one": "secret-payload"}, BinaryData: map[string][]byte{"two": []byte("binary-payload")}})
+	items, err := p.collect(context.Background(), resource{"configmaps", "ConfigMap", false}, "public", "")
+	if err != nil || len(items) != 1 {
+		t.Fatal(items, err)
+	}
+	text := fmt.Sprint(items)
+	if strings.Contains(text, "payload") || strings.Contains(text, "annotations") || tableCells(items[0], "configmaps")[0] != "2" {
+		t.Fatalf("retained non-table data (%d bytes)", len(text))
+	}
+}
+
+func TestSanitizeContainerFlags(t *testing.T) {
+	for _, kind := range []string{"pods", "deployments", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs"} {
+		t.Run(kind, func(t *testing.T) {
+			spec := map[string]any{}
+			for _, field := range []string{"containers", "initContainers", "ephemeralContainers"} {
+				container := map[string]any{}
+				for _, argv := range []string{"command", "args"} {
+					container[argv] = []any{"app", "--password", "flag-password\n", "--token", "flag-token", "--secret", "flag-secret", "--api-key", "flag-api-key", "--client-secret", "flag-client-secret", "--db-password", "flag-db-password", "-p", "keep-short", "--port", "8080"}
+				}
+				spec[field] = []any{container}
+			}
+			m := map[string]any{"spec": spec}
+			if kind == "cronjobs" {
+				m["spec"] = map[string]any{"jobTemplate": map[string]any{"spec": map[string]any{"template": map[string]any{"spec": spec}}}}
+			} else if kind != "pods" {
+				m["spec"] = map[string]any{"template": map[string]any{"spec": spec}}
+			}
+			sanitize(m, kind, false)
+			data, err := yaml.Marshal(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := redact.String(string(data))
+			if strings.Contains(text, "flag-") || strings.Count(text, redact.Mask) != 36 || !strings.Contains(text, "keep-short") || !strings.Contains(text, "8080") {
+				t.Fatal(text)
+			}
+		})
+	}
+}
+
+func TestGetRedactsStructuredValues(t *testing.T) {
+	p := testProvider(&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "public", Annotations: map[string]string{"password": "multiline-secret\n", "client_secret": "quoted-secret\n"}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Args: []string{"--password", "argument-secret\n", "-p", "keep-short"}}}}})
+	out, err := p.get(context.Background(), tool.Caller{}, getInput{Kind: "pods", Namespace: "public", Name: "app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = redact.String(out)
+	for _, secret := range []string{"multiline-secret", "quoted-secret", "argument-secret"} {
+		if strings.Contains(out, secret) {
+			t.Fatalf("leaked %s: %s", secret, out)
+		}
+	}
+	if !strings.Contains(out, "keep-short") || strings.Count(out, redact.Mask) != 3 {
+		t.Fatal(out)
 	}
 }
 
@@ -117,7 +216,7 @@ func TestGet(t *testing.T) {
 		{getInput{Kind: "cm", Namespace: "private", Name: "settings"}, "denied by policy"},
 		{getInput{Kind: "cm", Namespace: "public", Name: "../bad"}, "invalid name"},
 	} {
-		p := testProvider(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "public"}, Data: map[string]string{"password": "secret"}})
+		p := testProvider(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "public"}, Data: map[string]string{"password": "secret", "normal": "public"}})
 		out, err := p.get(context.Background(), tool.Caller{}, tt.in)
 		if err != nil {
 			out = err.Error()

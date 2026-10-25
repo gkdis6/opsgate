@@ -7,6 +7,87 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+// tableObject retains only fields read by the list tables and overview. In
+// particular, do not retain annotations, environment, or ConfigMap payloads.
+func tableObject(m map[string]any, kind string) map[string]any {
+	paths := []string{"metadata.name", "metadata.namespace", "metadata.creationTimestamp", "status.phase"}
+	switch kind {
+	case "pods":
+		paths = append(paths, "spec.containers.name", "status.conditions.type", "status.conditions.status")
+		for _, field := range []string{"containerStatuses", "initContainerStatuses", "ephemeralContainerStatuses"} {
+			for _, suffix := range []string{"name", "ready", "restartCount", "state.waiting.reason"} {
+				paths = append(paths, "status."+field+"."+suffix)
+			}
+		}
+	case "deployments", "statefulsets", "replicasets":
+		paths = append(paths, "spec.replicas", "status.readyReplicas")
+	case "daemonsets":
+		paths = append(paths, "status.numberReady", "status.desiredNumberScheduled")
+	case "nodes":
+		paths = append(paths, "status.conditions.type", "status.conditions.status", "status.nodeInfo.kubeletVersion", "status.allocatable.cpu", "status.allocatable.memory")
+	case "services":
+		paths = append(paths, "spec.type", "spec.clusterIP")
+	case "jobs":
+		paths = append(paths, "spec.completions", "status.succeeded", "status.active", "status.failed")
+	case "cronjobs":
+		paths = append(paths, "spec.schedule", "spec.suspend", "status.active.name")
+	case "ingresses":
+		paths = append(paths, "spec.ingressClassName", "spec.rules.host")
+	case "persistentvolumeclaims":
+		paths = append(paths, "spec.volumeName", "status.capacity.storage")
+	case "persistentvolumes":
+		paths = append(paths, "spec.capacity.storage", "spec.storageClassName")
+	}
+	out := tableProjection(m, paths).(map[string]any)
+	if kind == "configmaps" {
+		for _, field := range []string{"data", "binaryData"} {
+			values, _ := m[field].(map[string]any)
+			keys := make(map[string]any, len(values))
+			for key := range values {
+				keys[key] = nil
+			}
+			out[field] = keys
+		}
+	}
+	if kind == "nodes" {
+		labels, _, _ := unstructured.NestedMap(m, "metadata", "labels")
+		roles := map[string]any{}
+		for key := range labels {
+			if strings.HasPrefix(key, "node-role.kubernetes.io/") {
+				roles[key] = ""
+			}
+		}
+		out["metadata"].(map[string]any)["labels"] = roles
+	}
+	return out
+}
+
+func tableProjection(v any, paths []string) any {
+	switch x := v.(type) {
+	case map[string]any:
+		children := map[string][]string{}
+		for _, path := range paths {
+			key, rest, _ := strings.Cut(path, ".")
+			children[key] = append(children[key], rest)
+		}
+		out := map[string]any{}
+		for key, paths := range children {
+			if value, ok := x[key]; ok {
+				out[key] = tableProjection(value, paths)
+			}
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, value := range x {
+			out[i] = tableProjection(value, paths)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
 func display(s string) string {
 	if s == "" {
 		return "-"

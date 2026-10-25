@@ -20,33 +20,41 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-go@v6 # TODO pin
+      - uses: actions/setup-go@v6 # TODO pin to SHA
         with:
           go-version: '1.26.x'
           cache: true
       - run: go test -race ./...
       - name: Vulnerability scan
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           govulncheck ./...
-      - uses: sigstore/cosign-installer@v3 # TODO pin
-      - uses: anchore/sbom-action/download-syft@v0 # TODO pin
-      - uses: docker/setup-qemu-action@v3 # TODO pin
-      - uses: docker/setup-buildx-action@v3 # TODO pin
-      - uses: docker/login-action@v3 # TODO pin
+      - uses: sigstore/cosign-installer@v3 # TODO pin to SHA
+        with:
+          cosign-release: v3.1.1
+      - uses: anchore/sbom-action/download-syft@v0 # TODO pin to SHA
+        with:
+          syft-version: v1.18.1
+      - uses: docker/setup-qemu-action@v3 # TODO pin to SHA
+        with:
+          image: tonistiigi/binfmt:qemu-v8.1.5
+      - uses: docker/setup-buildx-action@v3 # TODO pin to SHA
+        with:
+          version: v0.29.1
+      - uses: docker/login-action@v3 # TODO pin to SHA
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # GoReleaser signs checksums with a Sigstore bundle and signs image digests.
-      - uses: goreleaser/goreleaser-action@v6 # TODO pin
+      - uses: goreleaser/goreleaser-action@v6 # TODO pin to SHA
         with:
           distribution: goreleaser
-          version: '~> v2'
+          version: v2.19.0
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/attest-build-provenance@v3 # TODO pin
+      - uses: actions/attest-build-provenance@v3 # TODO pin to SHA
         with:
           subject-path: |
             dist/*.tar.gz

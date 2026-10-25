@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,7 +48,11 @@ func objectMap(obj runtime.Object) (map[string]any, error) {
 	return runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
 }
 
-func (p *provider) collect(ctx context.Context, r resource, ns, selector string) ([]map[string]any, error) {
+func (p *provider) collect(ctx context.Context, r resource, ns, selector string, limits ...int) ([]map[string]any, error) {
+	limit := 500
+	if len(limits) > 0 {
+		limit = clamp(limits[0], 100, 500)
+	}
 	if ns != "" {
 		if err := p.checkNamespace(ns); err != nil {
 			return nil, err
@@ -65,8 +70,9 @@ func (p *provider) collect(ctx context.Context, r resource, ns, selector string)
 		}
 	}
 	var result []map[string]any
+collect:
 	for _, scope := range scopes {
-		opts := metav1.ListOptions{LabelSelector: selector, Limit: 500}
+		opts := metav1.ListOptions{LabelSelector: selector, Limit: int64(min(limit+1, 500))}
 		for {
 			obj, err := p.listResource(ctx, r, scope, opts)
 			if err != nil {
@@ -94,7 +100,10 @@ func (p *provider) collect(ctx context.Context, r resource, ns, selector string)
 				if r.name == "persistentvolumes" && !p.claimAllowed(m) {
 					continue
 				}
-				result = append(result, m)
+				result = append(result, tableObject(m, r.name))
+				if len(result) == limit+1 {
+					break collect
+				}
 			}
 			a, err := meta.ListAccessor(obj)
 			if err != nil {
@@ -120,11 +129,11 @@ func (p *provider) list(ctx context.Context, _ tool.Caller, in listInput) (strin
 	if _, err = labels.Parse(in.LabelSelector); err != nil {
 		return "", fmt.Errorf("invalid label_selector: %w", err)
 	}
-	items, err := p.collect(ctx, r, in.Namespace, in.LabelSelector)
+	limit := clamp(in.Limit, 100, 500)
+	items, err := p.collect(ctx, r, in.Namespace, in.LabelSelector, limit)
 	if err != nil {
 		return "", err
 	}
-	limit := clamp(in.Limit, 100, 500)
 	truncated := len(items) > limit
 	if truncated {
 		items = items[:limit]
@@ -179,7 +188,7 @@ func (p *provider) get(ctx context.Context, _ tool.Caller, in getInput) (string,
 	}
 	m["apiVersion"], m["kind"] = apiVersion(r.name), r.kind
 	sanitize(m, r.name, p.cfg.ShowConfigMapData)
-	data, err := yaml.Marshal(m)
+	data, err := yaml.Marshal(redact.Value(m))
 	if err != nil {
 		return "", err
 	}
@@ -264,6 +273,16 @@ func sanitize(m map[string]any, kind string, showData bool) {
 		containers, _ := spec[field].([]any)
 		for _, c := range containers {
 			cm, _ := c.(map[string]any)
+			for _, field := range []string{"command", "args"} {
+				argv, _ := cm[field].([]any)
+				for i := 0; i+1 < len(argv); i++ {
+					flag, _ := argv[i].(string)
+					if redact.SensitiveFlag(flag) {
+						i++
+						argv[i] = redact.Mask
+					}
+				}
+			}
 			env, _ := cm["env"].([]any)
 			for _, e := range env {
 				em, _ := e.(map[string]any)

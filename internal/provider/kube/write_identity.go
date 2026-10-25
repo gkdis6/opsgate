@@ -5,9 +5,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// Retained for the provider declaration in kube.go; no shared plan state remains.
-type writeSnapshots struct{}
-
 // writeIdentity is private to one Plan/Apply invocation.
 type writeIdentity struct {
 	uid            types.UID

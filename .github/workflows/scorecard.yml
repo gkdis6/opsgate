@@ -18,11 +18,11 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - uses: ossf/scorecard-action@v2 # TODO pin
+      - uses: ossf/scorecard-action@v2 # TODO pin to SHA
         with:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
-      - uses: github/codeql-action/upload-sarif@v4 # TODO pin
+      - uses: github/codeql-action/upload-sarif@v4 # TODO pin to SHA
         with:
           sarif_file: results.sarif

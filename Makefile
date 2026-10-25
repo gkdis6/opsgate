@@ -7,6 +7,7 @@ build:
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "-X github.com/gkdis6/opsgate/internal/server.Version=$(VERSION)" -o $(BIN) ./cmd/opsgate
 
 test:
+	python3 .github/workflows/tool_pins_test.py
 	$(GO) test -race ./...
 
 vet:

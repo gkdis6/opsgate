@@ -74,6 +74,13 @@ func redactAssignments(s string) string {
 		sep := pos + next
 		pos = sep + 1
 		space := s[sep] == ' ' || s[sep] == '\t'
+		// Visit a whitespace run once. Looking back from every byte in a
+		// run would repeatedly scan the same prefix (quadratic on log input).
+		if space {
+			for pos < len(s) && (s[pos] == ' ' || s[pos] == '\t') {
+				pos++
+			}
+		}
 		// Sensitive env keys end in an uppercase letter. Ordinary log words
 		// need no backward scan unless the text also contains long flags.
 		if space && !hasFlags && (sep == 0 || s[sep-1] < 'A' || s[sep-1] > 'Z') {
@@ -164,6 +171,12 @@ func sensitiveKey(k string) bool {
 		}
 		k = k[i+1:]
 	}
+}
+
+// SensitiveFlag reports whether a standalone long flag takes a secret value.
+// Short flags are deliberately excluded because their meanings vary by program.
+func SensitiveFlag(flag string) bool {
+	return strings.HasPrefix(flag, "--") && strings.IndexAny(flag, "=: \t\r\n") < 0 && sensitiveKey(strings.TrimPrefix(flag, "--"))
 }
 
 func envKey(k string) bool {

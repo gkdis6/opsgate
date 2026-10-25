@@ -59,6 +59,8 @@ type Handler[In any] func(ctx context.Context, c Caller, in In) (string, error)
 // audited as "denied" rather than "error".
 var ErrDenied = errors.New("denied by policy")
 
+const maxArgumentBytes = 16 << 10
+
 // Denied returns an error wrapping ErrDenied.
 func Denied(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrDenied, fmt.Sprintf(format, args...))
@@ -82,13 +84,17 @@ func Add[In any](s *mcp.Server, env *Env, spec Spec, h Handler[In]) {
 	}
 	mcp.AddTool(s, t, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
-		ev := audit.Event{Time: start, Tool: spec.Name, Args: argsOf(in)}
+		ev := audit.Event{Time: start, Tool: spec.Name}
 
 		c, ok := env.caller(req)
 		if ok {
 			ev.User, ev.Transport = c.User, c.Transport
 		}
 		text, err := func() (string, error) {
+			if len(req.Params.Arguments) > maxArgumentBytes {
+				return "", fmt.Errorf("arguments exceed 16 KiB limit")
+			}
+			ev.Args = argsOf(in)
 			if !ok {
 				return "", Denied("unauthenticated")
 			}
@@ -106,11 +112,11 @@ func Add[In any](s *mcp.Server, env *Env, spec Spec, h Handler[In]) {
 			if errors.Is(err, ErrDenied) {
 				ev.Outcome = "denied"
 			}
-			ev.Error = redact.String(err.Error())
+			ev.Error = truncate(redact.String(truncate(err.Error(), env.MaxOutputBytes)), env.MaxOutputBytes)
 			env.Audit.Record(ev)
 			return errorResult(truncate(ev.Error, env.MaxOutputBytes)), nil, nil
 		}
-		text = truncate(redact.String(text), env.MaxOutputBytes)
+		text = truncate(redact.String(truncate(text, env.MaxOutputBytes)), env.MaxOutputBytes)
 		ev.Outcome, ev.OutputSize = "ok", len(text)
 		env.Audit.Record(ev)
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil

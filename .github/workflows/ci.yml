@@ -13,19 +13,18 @@ jobs:
         go: ["1.26.x", "stable"]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      # TODO: pin to a reviewed full commit SHA.
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v6 # TODO pin to SHA
         with:
           go-version: ${{ matrix.go }}
           cache: true
+      - run: python3 .github/workflows/tool_pins_test.py
       - run: go vet ./...
       - run: go test -race ./...
       - run: make build
       - name: Vulnerability scan
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           govulncheck ./...
-      # TODO: pin to a reviewed full commit SHA.
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v8 # TODO pin to SHA
         with:
-          version: latest
+          version: v2.12.0

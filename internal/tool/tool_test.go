@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,6 +155,83 @@ func TestAnnotations(t *testing.T) {
 			a := result.Tools[0].Annotations
 			if a == nil || a.ReadOnlyHint != readOnly || a.DestructiveHint == nil || *a.DestructiveHint == readOnly || a.Title != "Check" {
 				t.Errorf("annotations = %+v", a)
+			}
+		})
+	}
+}
+
+func TestAddTruncatesBeforeRedaction(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(map[bool]string{false: "output", true: "error"}[fail], func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "audit")
+			logger, err := audit.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { logger.Close() })
+			const max = 80
+			output := "password=" + strings.Repeat("x", 1<<20) + " outside-budget"
+			cs := connectTool(t, &Env{Audit: logger, MaxOutputBytes: max, Timeout: time.Second, Fallback: &Caller{Scopes: []string{config.ScopeRead}}}, Spec{Name: "check", ReadOnly: true}, func(context.Context, Caller, testInput) (string, error) {
+				if fail {
+					return "", errors.New(output)
+				}
+				return output, nil
+			})
+			result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "check", Arguments: testInput{}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := result.Content[0].(*mcp.TextContent).Text
+			if result.IsError != fail || !strings.Contains(got, redact.Mask) || !strings.Contains(got, "truncated") || strings.Contains(got, "outside-budget") || len(got) > max {
+				t.Fatalf("result = %q, error = %v", got, result.IsError)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(data), "outside-budget") {
+				t.Fatal("audit retained error beyond output budget")
+			}
+		})
+	}
+}
+
+func TestAddRawArgumentsLimit(t *testing.T) {
+	for _, size := range []int{16 << 10, (16 << 10) + 1} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "audit")
+			logger, err := audit.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { logger.Close() })
+			called := false
+			cs := connectTool(t, &Env{Audit: logger, MaxOutputBytes: 1024, Timeout: time.Second, Fallback: &Caller{Scopes: []string{config.ScopeRead}}}, Spec{Name: "check", ReadOnly: true}, func(context.Context, Caller, testInput) (string, error) {
+				called = true
+				return "ok", nil
+			})
+			// Escapes count toward the raw limit, while the decoded input is
+			// much smaller. Checking argsOf(in)'s size would miss the attack.
+			padding := size - len(`{"password":"hidden","message":""}`)
+			raw := json.RawMessage(`{"password":"hidden","message":"` + strings.Repeat(`\u0061`, padding/6) + strings.Repeat("a", padding%6) + `"}`)
+			result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "check", Arguments: raw})
+			if err != nil {
+				t.Fatal(err)
+			}
+			oversized := size > 16<<10
+			if result.IsError != oversized || called == oversized {
+				t.Fatalf("size=%d: called=%v, result=%+v", size, called, result)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var event audit.Event
+			if err := json.Unmarshal(data, &event); err != nil {
+				t.Fatal(err)
+			}
+			if oversized && (len(event.Args) != 0 || event.Outcome != "error") {
+				t.Fatalf("oversized arguments audited: %+v", event)
 			}
 		})
 	}

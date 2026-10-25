@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+	ktesting "k8s.io/client-go/testing"
 )
 
 func TestEvents(t *testing.T) {
@@ -53,6 +56,46 @@ func TestEvents(t *testing.T) {
 }
 
 func boolPtr(v bool) *bool { return &v }
+
+func TestEventsScanBudgetAndNewestRetention(t *testing.T) {
+	for _, eligible := range []bool{true, false} {
+		t.Run(fmt.Sprint(eligible), func(t *testing.T) {
+			p := testProvider()
+			calls, scanned := 0, 0
+			now := time.Now()
+			p.client.(*fake.Clientset).PrependReactor("list", "events", func(action ktesting.Action) (bool, runtime.Object, error) {
+				calls++
+				opts := action.(ktesting.ListActionImpl).GetListOptions()
+				if opts.Limit != 500 {
+					t.Errorf("page limit = %d, want 500", opts.Limit)
+				}
+				if calls > 10 {
+					return true, nil, fmt.Errorf("scanned beyond 5000 events")
+				}
+				page := &corev1.EventList{ListMeta: metav1.ListMeta{Continue: fmt.Sprint(calls)}}
+				for i := 0; i < 500; i++ {
+					scanned++
+					ns := "public"
+					if !eligible {
+						ns = "private"
+					}
+					page.Items = append(page.Items, corev1.Event{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Annotations: map[string]string{"discard": "metadata"}}, Type: "Warning", Reason: fmt.Sprintf("event-%04d", scanned), Message: "message", LastTimestamp: metav1.NewTime(now.Add(time.Duration(scanned-5001) * time.Second))})
+				}
+				return true, page, nil
+			})
+			out, err := p.events(context.Background(), tool.Caller{}, eventsInput{Limit: 500, Since: "2h"})
+			if err != nil || calls != 10 || !strings.Contains(out, "truncated") {
+				t.Fatalf("calls=%d: %s, %v", calls, out, err)
+			}
+			if eligible && (!strings.Contains(out, "event-5000") || strings.Contains(out, "event-4500") || strings.Index(out, "event-5000") > strings.Index(out, "event-4999")) {
+				t.Fatalf("did not retain newest 500 events: %s", out)
+			}
+			if !eligible && strings.Contains(out, "event-") {
+				t.Fatal("denied events leaked")
+			}
+		})
+	}
+}
 func TestDurationAndLimits(t *testing.T) {
 	for _, tt := range []struct {
 		value string

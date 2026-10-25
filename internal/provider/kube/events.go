@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"container/heap"
 	"context"
 	"fmt"
 	"sort"
@@ -51,6 +52,35 @@ func eventTime(e corev1.Event) time.Time {
 	return e.CreationTimestamp.Time
 }
 
+const maxEventsScanned = 5000
+
+// Retain table fields only, ordered oldest first so the heap stays bounded
+// while later pages can still supply newer events.
+type eventRow struct {
+	last                                        time.Time
+	namespace, kind, name, typ, reason, message string
+	order                                       int
+}
+
+type eventHeap []eventRow
+
+func (h eventHeap) Len() int { return len(h) }
+func (h eventHeap) Less(i, j int) bool {
+	if h[i].last.Equal(h[j].last) {
+		return h[i].order > h[j].order
+	}
+	return h[i].last.Before(h[j].last)
+}
+func (h eventHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+func (h *eventHeap) Push(v any)   { *h = append(*h, v.(eventRow)) }
+func (h *eventHeap) Pop() any {
+	old := *h
+	v := old[len(old)-1]
+	old[len(old)-1] = eventRow{}
+	*h = old[:len(old)-1]
+	return v
+}
+
 func (p *provider) recentEvents(ctx context.Context, ns string, warnings bool, since string, limit int, name, kind string) (string, error) {
 	d, err := duration(since, "1h")
 	if err != nil {
@@ -69,26 +99,40 @@ func (p *provider) recentEvents(ctx context.Context, ns string, warnings bool, s
 		selector["involvedObject.namespace"] = ns
 		selector["involvedObject.kind"] = kind
 	}
-	var events []corev1.Event
+	limit = clamp(limit, 50, 500)
+	events := make(eventHeap, 0, limit)
+	scanned, matched := 0, 0
+	scanCapped := false
 	cutoff := time.Now().Add(-d)
-	for _, scope := range scopes {
-		opts := metav1.ListOptions{FieldSelector: selector.AsSelector().String(), Limit: 500}
+scan:
+	for scopeIndex, scope := range scopes {
+		opts := metav1.ListOptions{FieldSelector: selector.AsSelector().String(), Limit: int64(min(limit+1, 500))}
 		for {
 			list, err := p.client.CoreV1().Events(scope).List(ctx, opts)
 			if err != nil {
 				return "", err
 			}
-			for _, e := range list.Items {
-				if !p.policy.allowed(e.Namespace) || (e.InvolvedObject.Namespace != "" && !p.policy.allowed(e.InvolvedObject.Namespace)) || eventTime(e).Before(cutoff) {
-					continue
+			for i, e := range list.Items {
+				scanned++
+				if scanned == maxEventsScanned {
+					scanCapped = i+1 < len(list.Items) || list.Continue != "" || scopeIndex+1 < len(scopes)
 				}
-				if warnings && e.Type != "Warning" {
-					continue
+				last := eventTime(e)
+				// Filter locally too: clients and API proxies need not honor selectors.
+				eligible := p.policy.allowed(e.Namespace) && (e.InvolvedObject.Namespace == "" || p.policy.allowed(e.InvolvedObject.Namespace)) && !last.Before(cutoff)
+				if eligible && (!warnings || e.Type == "Warning") && (name == "" || (e.InvolvedObject.Name == name && e.InvolvedObject.Namespace == ns && e.InvolvedObject.Kind == kind)) {
+					matched++
+					row := eventRow{last: last, namespace: e.Namespace, kind: e.InvolvedObject.Kind, name: e.InvolvedObject.Name, typ: e.Type, reason: e.Reason, message: e.Message, order: scanned}
+					if len(events) < limit {
+						heap.Push(&events, row)
+					} else if row.last.After(events[0].last) {
+						events[0] = row
+						heap.Fix(&events, 0)
+					}
 				}
-				if name != "" && (e.InvolvedObject.Name != name || e.InvolvedObject.Namespace != ns || e.InvolvedObject.Kind != kind) {
-					continue
+				if scanned == maxEventsScanned {
+					break scan
 				}
-				events = append(events, e)
 			}
 			opts.Continue = list.Continue
 			if opts.Continue == "" {
@@ -96,23 +140,23 @@ func (p *provider) recentEvents(ctx context.Context, ns string, warnings bool, s
 			}
 		}
 	}
-	sort.SliceStable(events, func(i, j int) bool { return eventTime(events[i]).After(eventTime(events[j])) })
-	truncated := len(events) > limit
-	if truncated {
-		events = events[:limit]
-	}
+	sort.Slice(events, func(i, j int) bool { return events.Less(j, i) })
+	truncated := scanCapped || matched > limit
 	var b strings.Builder
 	w := tabwriter.NewWriter(&b, 0, 4, 2, ' ', 0)
 	// AGE follows kubectl: time since the event was last seen, not since the
 	// (possibly long-lived, aggregated) Event object was created.
 	fmt.Fprintln(w, "AGE\tLAST SEEN\tTYPE\tREASON\tOBJECT\tMESSAGE")
 	for _, e := range events {
-		last := eventTime(e).UTC().Format(time.RFC3339)
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s/%s/%s\t%s\n", age(last), last, display(e.Type), display(e.Reason), display(e.Namespace), display(e.InvolvedObject.Kind), display(e.InvolvedObject.Name), display(e.Message))
+		last := e.last.UTC().Format(time.RFC3339)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s/%s/%s\t%s\n", age(last), last, display(e.typ), display(e.reason), display(e.namespace), display(e.kind), display(e.name), display(e.message))
 	}
 	w.Flush()
 	if truncated {
 		fmt.Fprintf(&b, "... truncated to %d events\n", limit)
+	}
+	if scanCapped {
+		fmt.Fprintf(&b, "... event scan capped at %d; newer events may be omitted\n", maxEventsScanned)
 	}
 	return b.String(), nil
 }

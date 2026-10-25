@@ -6,6 +6,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -243,6 +244,10 @@ func Load(path string) (Config, error) {
 	dec.KnownFields(true)
 	if err := dec.Decode(&cfg); err != nil {
 		return cfg, fmt.Errorf("parse %s: %w", path, err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return cfg, fmt.Errorf("parse %s: multiple YAML documents are not supported", path)
 	}
 	return cfg, cfg.Validate()
 }

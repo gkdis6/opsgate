@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestString(t *testing.T) {
@@ -42,6 +43,45 @@ func TestString(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := String(tc.in); got != tc.want {
 				t.Errorf("String(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func adversarialInputs() []struct{ name, text string } {
+	const n = 1 << 20
+	return []struct{ name, text string }{
+		{"flag spaces", "--" + strings.Repeat(" ", n-2)},
+		{"long key", strings.Repeat("A", n-1) + " "},
+		{"flag long key", "--" + strings.Repeat("A", n-3) + " "},
+		{"alternating separators", "--" + strings.Repeat(" \t:=", (n-2)/4)},
+		{"equals", strings.Repeat("=", n)},
+		{"flag tabs", "--" + strings.Repeat("\t", n-2)},
+	}
+}
+
+func TestStringAdversarial(t *testing.T) {
+	for _, tc := range adversarialInputs() {
+		done := make(chan string, 1)
+		go func() { done <- String(tc.text) }()
+		select {
+		case got := <-done:
+			if got != tc.text {
+				t.Fatalf("%s: changed text without secrets", tc.name)
+			}
+		case <-time.After(200 * time.Millisecond):
+			t.Fatalf("%s: String on 1 MiB took at least 200 ms", tc.name)
+		}
+	}
+}
+
+func BenchmarkStringAdversarial(b *testing.B) {
+	for _, tc := range adversarialInputs() {
+		b.Run(tc.name, func(b *testing.B) {
+			b.SetBytes(int64(len(tc.text)))
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				String(tc.text)
 			}
 		})
 	}

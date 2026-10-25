@@ -43,7 +43,6 @@ type provider struct {
 	client kubernetes.Interface
 	cfg    config.Kubernetes
 	policy namespacePolicy
-	writes writeSnapshots
 }
 
 const supportedKinds = "Supported kinds (aliases): pods (pod, po), deployments (deployment, deploy), statefulsets (statefulset, sts), daemonsets (daemonset, ds), replicasets (replicaset, rs), jobs (job), cronjobs (cronjob), services (service, svc), ingresses (ingress, ing), configmaps (configmap, cm), persistentvolumeclaims (persistentvolumeclaim, pvc), persistentvolumes (persistentvolume, pv), nodes (node, no), namespaces (namespace, ns). Cluster-scoped kinds persistentvolumes, nodes, and namespaces take no namespace. "

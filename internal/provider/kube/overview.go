@@ -14,7 +14,16 @@ import (
 
 func (p *provider) overview(ctx context.Context, _ tool.Caller, _ struct{}) (string, error) {
 	var b strings.Builder
-	nodes, err := p.collect(ctx, resource{"nodes", "Node", true}, "", "")
+	var truncated []string
+	collect := func(r resource) ([]map[string]any, error) {
+		items, err := p.collect(ctx, r, "", "", 500)
+		if len(items) > 500 {
+			truncated = append(truncated, r.name)
+			items = items[:500]
+		}
+		return items, err
+	}
+	nodes, err := collect(resource{"nodes", "Node", true})
 	if err != nil {
 		return "", err
 	}
@@ -45,12 +54,12 @@ func (p *provider) overview(ctx context.Context, _ tool.Caller, _ struct{}) (str
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", str(n, "metadata", "name"), ready, display(strings.Join(roles, ",")), str(n, "status", "nodeInfo", "kubeletVersion"), str(n, "status", "allocatable", "cpu"), str(n, "status", "allocatable", "memory"), display(strings.Join(pressure, ",")))
 	}
 	w.Flush()
-	pods, err := p.collect(ctx, resource{"pods", "Pod", false}, "", "")
+	pods, err := collect(resource{"pods", "Pod", false})
 	if err != nil {
 		return "", err
 	}
 	counts := map[string]map[string]int{}
-	allowedNamespaces, err := p.collect(ctx, resource{"namespaces", "Namespace", true}, "", "")
+	allowedNamespaces, err := collect(resource{"namespaces", "Namespace", true})
 	if err != nil {
 		return "", err
 	}
@@ -91,7 +100,7 @@ func (p *provider) overview(ctx context.Context, _ tool.Caller, _ struct{}) (str
 	fmt.Fprintln(w, "NAMESPACE\tKIND\tNAME\tREADY")
 	for _, kind := range []string{"deployments", "statefulsets", "daemonsets"} {
 		r, _ := resolveKind(kind)
-		items, err := p.collect(ctx, r, "", "")
+		items, err := collect(r)
 		if err != nil {
 			return "", err
 		}
@@ -112,6 +121,9 @@ func (p *provider) overview(ctx context.Context, _ tool.Caller, _ struct{}) (str
 	}
 	fmt.Fprintln(&b, "\nRECENT WARNINGS")
 	b.WriteString(events)
+	if len(truncated) > 0 {
+		fmt.Fprintf(&b, "\n... overview truncated to 500 objects per kind (%s); pod counts may be incomplete\n", strings.Join(truncated, ", "))
+	}
 	return b.String(), nil
 }
 

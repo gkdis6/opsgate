@@ -20,3 +20,10 @@ vuln:
 
 clean:
 	rm -rf bin .gocache
+
+.PHONY: snapshot docker
+snapshot:
+	goreleaser release --snapshot --clean
+
+docker:
+	docker build --build-arg VERSION=$(VERSION) -t opsgate:$(VERSION) .

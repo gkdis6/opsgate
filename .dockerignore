@@ -1,0 +1,10 @@
+# Send only source and module metadata; exclude credentials and local state.
+**
+!go.mod
+!go.sum
+!cmd/
+!cmd/**/
+!cmd/**/*.go
+!internal/
+!internal/**/
+!internal/**/*.go

@@ -1,0 +1,48 @@
+server:
+  name: opsgate
+  audit_log: /var/log/opsgate/audit.jsonl
+  max_output_bytes: 65536
+  tool_timeout: 30s
+http:
+  listen: 127.0.0.1:8787
+  public_url: https://mcp.example.com
+auth:
+  mode: builtin
+  builtin:
+    state_file: /var/lib/opsgate/oauth.json
+    access_token_ttl: 1h
+    refresh_token_ttl: 720h
+    max_clients: 25
+    upstream:
+      provider: oidc
+      issuer: https://accounts.google.com
+      client_id: REPLACE_WITH_GOOGLE_CLIENT_ID
+      client_secret_file: /etc/opsgate/google-client-secret
+    users:
+      - subject: email:operator@example.com
+        scopes: [ops:read, ops:write]
+approval:
+  ttl: 10m
+  web: true
+providers:
+  host:
+    enabled: true
+    units: [myapp.service]
+    disk_paths: [/]
+    max_log_lines: 200
+    # Optional: requires the systemd drop-in and exact sudoers rule in deploy.md.
+    restart_units: [myapp.service]
+    command_prefix: [/usr/bin/sudo, -n]
+  kubernetes:
+    enabled: true
+    kubeconfig: /etc/opsgate/kubeconfig
+    context: opsgate
+    namespaces: [apps]
+    deny_namespaces: [kube-system, kube-public, kube-node-lease, opsgate]
+    allow_logs: true
+    show_configmap_data: false
+    max_log_lines: 200
+    rollout_restart: [apps/myapp]
+    scale: [apps/myapp]
+    delete_pod: []
+    max_replicas: 3

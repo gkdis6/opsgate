@@ -1,0 +1,54 @@
+version: 2
+project_name: opsgate
+builds:
+  - id: opsgate
+    main: ./cmd/opsgate
+    binary: opsgate
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/gkdis6/opsgate/internal/server.Version={{.Version}}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+archives:
+  - id: opsgate
+    formats: [tar.gz]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - LICENSE
+      - README*
+      - SECURITY.md
+      - opsgate.example.yaml
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+sboms:
+  - artifacts: archive
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: '${artifact}.sigstore.json'
+    args: [sign-blob, '--yes', '--bundle=${signature}', '${artifact}']
+dockers_v2:
+  - id: opsgate
+    ids: [opsgate]
+    dockerfile: Dockerfile
+    images: [ghcr.io/gkdis6/opsgate]
+    tags:
+      - '{{ .Tag }}'
+      - '{{ if not .Prerelease }}latest{{ end }}'
+    platforms: [linux/amd64, linux/arm64]
+    flags: ['--target=release']
+    labels:
+      org.opencontainers.image.source: https://github.com/gkdis6/opsgate
+      org.opencontainers.image.version: '{{ .Version }}'
+      org.opencontainers.image.revision: '{{ .FullCommit }}'
+docker_signs:
+  - cmd: cosign
+    artifacts: all
+    args: [sign, '--yes', '${artifact}@${digest}']
+changelog:
+  use: git
+  sort: asc

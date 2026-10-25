@@ -1,0 +1,172 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: opsgate
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opsgate
+  namespace: opsgate
+data:
+  opsgate.yaml: |
+    server:
+      name: opsgate
+      # Send audit events to stderr for collection by the cluster logging agent.
+      audit_log: ""
+      max_output_bytes: 65536
+      tool_timeout: 30s
+    http:
+      listen: 0.0.0.0:8787
+      public_url: https://mcp.example.com
+    auth:
+      mode: builtin
+      builtin:
+        state_file: /var/lib/opsgate/oauth.json
+        access_token_ttl: 1h
+        refresh_token_ttl: 720h
+        max_clients: 25
+        upstream:
+          provider: oidc
+          issuer: https://accounts.google.com
+          client_id: REPLACE_WITH_GOOGLE_CLIENT_ID
+          client_secret_file: /etc/opsgate/upstream/client-secret
+        users:
+          - subject: email:operator@example.com
+            scopes: [ops:read]
+    approval:
+      ttl: 10m
+      web: true
+    providers:
+      # Host inspection in a pod does not represent the node.
+      host:
+        enabled: false
+      kubernetes:
+        enabled: true
+        kubeconfig: ""
+        namespaces: [apps]
+        deny_namespaces: [kube-system, kube-public, kube-node-lease, opsgate]
+        allow_logs: true
+        show_configmap_data: false
+        max_log_lines: 200
+        rollout_restart: []
+        scale: []
+        delete_pod: []
+        max_replicas: 3
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: opsgate-state
+  namespace: opsgate
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opsgate
+  namespace: opsgate
+spec:
+  replicas: 1
+  # Only one process may own the OAuth state file.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: opsgate
+  template:
+    metadata:
+      labels:
+        app: opsgate
+    spec:
+      serviceAccountName: opsgate # Defined in rbac-readonly.yaml.
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: opsgate
+          # Replace with a verified release tag AND its immutable manifest digest.
+          image: ghcr.io/gkdis6/opsgate:v0.2.0
+          imagePullPolicy: Always
+          args: [-transport, http, -config, /etc/opsgate/opsgate.yaml]
+          ports:
+            - name: http
+              containerPort: 8787
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: '1'
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+          volumeMounts:
+            - name: config
+              mountPath: /etc/opsgate/opsgate.yaml
+              subPath: opsgate.yaml
+              readOnly: true
+            - name: upstream-secret
+              mountPath: /etc/opsgate/upstream
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/opsgate
+      volumes:
+        - name: config
+          configMap:
+            name: opsgate
+            defaultMode: 0444
+        - name: upstream-secret
+          secret:
+            secretName: opsgate-upstream
+            defaultMode: 0440
+            items:
+              - key: client-secret
+                path: client-secret
+        - name: state
+          persistentVolumeClaim:
+            claimName: opsgate-state
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opsgate
+  namespace: opsgate
+spec:
+  type: ClusterIP
+  selector:
+    app: opsgate
+  ports:
+    - name: http
+      port: 8787
+      targetPort: http

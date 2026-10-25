@@ -355,6 +355,40 @@ func TestAddWriteRawArgumentLimit(t *testing.T) {
 	}
 }
 
+func TestAddWriteMaxArgBytes(t *testing.T) {
+	var plans atomic.Int32
+	h := WriteHandler[writeTestInput]{
+		Plan: func(context.Context, Caller, writeTestInput) (Plan, error) {
+			plans.Add(1)
+			return Plan{Summary: "change service"}, nil
+		},
+		Apply: func(context.Context, Caller, writeTestInput, Plan) (string, error) { return "changed", nil },
+	}
+	raw := json.RawMessage(`{"target":"` + strings.Repeat("a", 20<<10) + `","password":"x"}`)
+	for _, tc := range []struct {
+		max     int
+		planned bool
+	}{{0, false}, {64 << 10, true}, {8 << 10, false}} {
+		plans.Store(0)
+		logger, err := audit.Open(filepath.Join(t.TempDir(), "audit"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cs := connectWrite(t, &Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 1024,
+			Fallback: &Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeWrite}},
+		}, WriteSpec{Name: "change", MaxArgBytes: tc.max}, h)
+		res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "change", Arguments: raw})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Plan runs only when the raw arguments fit; Confirm is nil, so Apply never does.
+		if got := plans.Load() == 1; got != tc.planned {
+			t.Errorf("MaxArgBytes %d: planned = %v, want %v (%s)", tc.max, got, tc.planned, res.Content[0].(*mcp.TextContent).Text)
+		}
+		logger.Close()
+	}
+}
+
 func TestWriteArgsHash(t *testing.T) {
 	inputs := []string{
 		`{"target":"glpat-aaaaaaaa","n":9007199254740993,"nested":{"b":2,"a":1}}`,

@@ -88,6 +88,18 @@ TLS 프록시는 `/mcp`, `/.well-known/*`, `/oauth/*`, `/approve/*`를 전달해
 | `k8s_rollout_restart` | 파드 템플릿 갱신으로 워크로드 재시작 | `kind`(deployment/statefulset/daemonset), `namespace`, `name` 필수; `rollout_restart` 필요 |
 | `k8s_scale` | 복제본 수 지정 | `kind`(deployment/statefulset), `namespace`, `name`, `replicas`(0–`max_replicas`, 기본 상한 10) 필수; `scale` 필요 |
 | `k8s_delete_pod` | UID 전제조건으로 특정 파드 삭제 | `namespace`, `name` 필수; `delete_pod` 필요 |
+| `obsidian_search` | 노트 본문/파일명 리터럴 검색, 발췌 및 스캔 수 | `query` 필수; 선택 `folder`, `tag`, `case_sensitive=false`; `limit=20`, 최대 100 |
+| `obsidian_read` | 노트 본문과 파일/행 메타데이터 | `path` 필수, .md 생략 가능; `offset_line=1`, `max_lines=400`, 최대 2000 |
+| `obsidian_list` | 폴더 우선, .md/.canvas/.base 파일 목록 | `folder=""` (볼트 루트), `recursive=false`, `limit=200`, 최대 1000; 잘림 표시 |
+| `obsidian_recent` | 수정 시간 내림차순 노트 | `limit=20`, 최대 100; `days=7`, 최대 365 |
+| `obsidian_links` | 위키링크/임베드/상대 Markdown 링크와 백링크 | `path` 필수; 정확한 경로 또는 유일한 파일명으로 해석, 미해결 대상 표시 |
+| `obsidian_tags` | frontmatter/인라인 태그 수 또는 해당 노트 | 선택 `tag`; 하위 태그 포함, 코드 블록과 제목 제외 |
+| `obsidian_create` | 노트 및 없는 상위 폴더 생성 | `path`, `content` 필수; allow_write=true, ops:write 및 사람 승인 필요 |
+| `obsidian_append` | 끝 또는 유일한 정확한 제목 아래 추가 | `path`, `content` 필수; 선택 `heading`; 동일 쓰기 조건 |
+| `obsidian_replace` | 정확한 부분 문자열 치환 | `path`, 비어 있지 않은 `old_text`, `new_text` 필수; `expected_count=1` 일치 필수; 동일 쓰기 조건 |
+| `obsidian_trash` | 이름 충돌 시 숫자를 붙여 로컬 .trash로 이동 | `path` 필수; 동일 쓰기 조건; 영구 삭제 안 함 |
+
+Obsidian 경로는 볼트 상대 슬래시 경로이며 Unicode 바이트를 유지하고 최대 1024바이트입니다. 제외 경로는 없는 것으로 처리하고 노트 본문은 신뢰하지 않는 데이터로 취급합니다. Obsidian 숫자 인수는 명시된 범위를 벗어나면 거부합니다. 볼트 내부의 안전한 심볼릭 링크는 순환을 방지하며 지원합니다. 스캔은 100000개 항목/128단계, 링크와 백링크는 각각 1000개로 제한합니다. 쓰기 계획은 diff(생성은 전체 본문), 현재/결과 해시와 약 8 KiB 이후 잘림 표시를 포함합니다. 실행 전 승인된 해시, 크기와 수정 시간을 재검증합니다. 생성은 경합 중 생긴 파일을 덮어쓰지 않고 원자적으로 공개하며 수정은 fsync한 임시 파일을 rename합니다. 휴지통은 내구성 있는 사본을 공개한 뒤 원본을 제거합니다. 기존 마지막 개행 정책을 유지합니다. 본문/치환 입력은 256 KiB 이하이지만 현재 공통 JSON 인수 16 KiB 제한이 MCP 호출에 먼저 적용됩니다.
 
 조회 도구의 숫자 제한에서 0은 기본값을 선택하며 그 외 범위를 벗어난 값은 상하한으로 조정됩니다. 쓰기 복제본 수는 조정하지 않고 범위를 검증합니다. 모든 반환 텍스트에는 `server.max_output_bytes`(기본 65536)가 적용되며 호출에는 협력적 제한 시간(`server.tool_timeout`, 기본 30s)이 적용됩니다.
 
@@ -181,6 +193,11 @@ OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로
 | `providers.kubernetes.scale` | `[]` | namespace/name glob 목록; 빈 목록이면 도구 비활성화 |
 | `providers.kubernetes.delete_pod` | `[]` | namespace/name glob 목록; 빈 목록이면 도구 비활성화 |
 | `providers.kubernetes.max_replicas` | `10` | 0 이상의 복제본 상한; 0이면 0개로만 조정 가능 |
+| `providers.obsidian.enabled` | `false` | Markdown 볼트 제공자 활성화; Obsidian 앱/CLI 불필요 |
+| `providers.obsidian.vault` | `""` | 존재하는 볼트 디렉터리 절대 경로; os.Root로 접근 제한 |
+| `providers.obsidian.exclude` | `[]` | 경로 또는 상위 폴더에 적용하는 볼트 상대 path.Match glob; 점으로 시작하는 경로와 sync-conflict 복사본은 항상 제외 |
+| `providers.obsidian.allow_write` | `false` | 노트 쓰기 도구 4개 등록; 각각 ops:write 및 사람 승인 필요 |
+| `providers.obsidian.max_note_bytes` | `1048576` | 읽기/쓰기 노트 크기 양수 제한; 초과 노트는 본문 스캔에서 제외 |
 
 로그 상한은 양수로 설정하세요. 쓰기의 원본 인수는 마스킹 및 인수 감사 기록 전에 16 KiB로 제한합니다. 네 가지 쓰기 도구는 브라우저 재호출용 선택 인수 `approval_id`를 받습니다. 작업 허용 목록이 비어 있으면 해당 도구는 등록되지 않습니다. 설정 변경 후 재시작해야 합니다.
 

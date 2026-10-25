@@ -88,6 +88,18 @@ Read tools require `ops:read` and are registered only when their provider is ena
 | `k8s_rollout_restart` | Restart a workload by updating its pod template | Required `kind` (deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` gate |
 | `k8s_scale` | Set workload replicas | Required `kind` (deployment/statefulset), `namespace`, `name`, `replicas` (0–`max_replicas`, default cap 10); `scale` gate |
 | `k8s_delete_pod` | Delete a specific pod with UID precondition | Required `namespace`, `name`; `delete_pod` gate |
+| `obsidian_search` | Literal note content/filename search with snippets and scanned counts | Required `query`; optional `folder`, `tag`, `case_sensitive=false`; `limit=20`, max 100 |
+| `obsidian_read` | Note text and file/line metadata | Required `path`, `.md` optional; `offset_line=1`, `max_lines=400`, max 2000 |
+| `obsidian_list` | Folders first, then .md/.canvas/.base files | `folder=""` (vault root), `recursive=false`, `limit=200`, max 1000; reports truncation |
+| `obsidian_recent` | Notes ordered by modification time | `limit=20`, max 100; `days=7`, max 365 |
+| `obsidian_links` | Outgoing wikilinks/embeds/relative Markdown links and backlinks | Required `path`; exact path or unique basename resolution; reports unresolved targets |
+| `obsidian_tags` | Frontmatter/inline tag counts or matching notes | Optional `tag`; includes nested tags; ignores fenced code and headings |
+| `obsidian_create` | Create a note and missing parent folders | Required `path`, `content`; `allow_write=true`, ops:write and human approval required |
+| `obsidian_append` | Append at end or under a unique exact heading | Required `path`, `content`; optional `heading`; same write gate |
+| `obsidian_replace` | Exact substring replacement | Required `path`, nonempty `old_text`, `new_text`; `expected_count=1` must match; same write gate |
+| `obsidian_trash` | Retain a note in local .trash with collision suffixes | Required `path`; same write gate; never permanently deletes |
+
+Obsidian paths use vault-relative forward slashes, preserve Unicode bytes, and are limited to 1024 bytes. Excluded paths behave as missing. Note text is untrusted data. Obsidian numeric inputs outside the documented ranges are rejected. Safe in-vault symlinks are supported with cycle prevention. Scans are bounded to 100000 entries and 128 directory levels; links/backlinks each return at most 1000 results. Write previews include a diff (full content for create), current hash and resulting hash, with explicit truncation near 8 KiB. Apply rechecks the approved hash, size and modification time. Creates publish atomically without overwriting racing creators; updates use a synced temporary file and rename. Trash publishes a durable copy before removing the source. Existing trailing-newline policy is preserved. Content/replacement inputs are capped at 256 KiB, but the shared 16 KiB JSON argument cap currently limits MCP calls further.
 
 For read-tool numeric limits, zero selects the default; other out-of-range values are clamped. Write replica counts are validated, not clamped. All returned text is subject to `server.max_output_bytes` (default 65536) and calls have cooperative deadlines (`server.tool_timeout`, default 30s).
 
@@ -181,6 +193,11 @@ Defaults below come from `config.Default()`. YAML is loaded over defaults with s
 | `providers.kubernetes.scale` | `[]` | namespace/name globs; empty disables tool |
 | `providers.kubernetes.delete_pod` | `[]` | namespace/name globs; empty disables tool |
 | `providers.kubernetes.max_replicas` | `10` | Scale maximum; nonnegative, zero permits only zero replicas |
+| `providers.obsidian.enabled` | `false` | Enable the Markdown vault provider; no Obsidian app or CLI needed |
+| `providers.obsidian.vault` | `""` | Absolute existing vault directory; all access confined with os.Root |
+| `providers.obsidian.exclude` | `[]` | Additional vault-relative path.Match globs matching a path or any parent; dot-prefixed segments and sync-conflict copies always excluded |
+| `providers.obsidian.allow_write` | `false` | Register four note write tools; each requires ops:write and human approval |
+| `providers.obsidian.max_note_bytes` | `1048576` | Positive per-note size limit for reads/writes; oversized notes skipped in content scans |
 
 Log limits are provider caps; keep them positive. Raw write arguments are capped at 16 KiB before redaction and argument auditing. All four write tools accept optional `approval_id` for the browser retry. Write tools are registered only with nonempty action allowlists. Configuration changes require a restart.
 

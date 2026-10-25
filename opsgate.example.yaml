@@ -38,6 +38,12 @@ approval:
   ttl: 10m # Pending browser approval lifetime.
   web: false # Browser fallback requires builtin auth; stdio uses elicitation only.
 providers:
+  # obsidian: # Markdown vault; no Obsidian app/CLI required.
+  #   enabled: false
+  #   vault: /absolute/path/to/vault # Must already exist; os.Root confines access.
+  #   exclude: [] # Extra path.Match globs; dot paths and sync conflicts always hidden.
+  #   allow_write: false # Requires ops:write and human approval for each note change.
+  #   max_note_bytes: 1048576 # Positive read/write limit; oversized notes skip scans.
   host:
     enabled: false
     units: [] # Read status/log glob allowlist, e.g. [myapp.service].

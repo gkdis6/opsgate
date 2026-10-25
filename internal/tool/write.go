@@ -34,6 +34,9 @@ type WriteSpec struct {
 	Idempotent bool
 	// Scope required in addition to human approval; default ops:write.
 	Scope string
+	// MaxArgBytes caps the raw JSON arguments (default 16 KiB). Raise it only
+	// for tools that carry document content.
+	MaxArgBytes int
 }
 
 // Plan is the side-effect-free preview of a write. Summary is shown to the
@@ -93,6 +96,10 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 	if scope == "" {
 		scope = config.ScopeWrite
 	}
+	maxArgs := spec.MaxArgBytes
+	if maxArgs <= 0 {
+		maxArgs = 16 << 10
+	}
 	t := &mcp.Tool{
 		Name: spec.Name, Title: spec.Title, Description: spec.Description,
 		Annotations: &mcp.ToolAnnotations{
@@ -107,8 +114,8 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 		var argsHash [sha256.Size]byte
 		var argsErr error
 		// Check the wire size before redaction or adding arguments to the audit.
-		if req == nil || req.Params == nil || len(req.Params.Arguments) > 16<<10 {
-			argsErr = Denied("write arguments must be JSON of at most 16 KiB")
+		if req == nil || req.Params == nil || len(req.Params.Arguments) > maxArgs {
+			argsErr = Denied("write arguments must be JSON of at most %d KiB", maxArgs>>10)
 		} else {
 			args, argsHash, argsErr = writeArgs(req.Params.Arguments)
 		}

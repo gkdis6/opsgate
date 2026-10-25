@@ -99,7 +99,7 @@ func TestAuthentication(t *testing.T) {
 		{"missing", "", 401}, {"invalid", "invalid", 401}, {"no read scope", "write-token", 403},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+			req := publicRequest(http.MethodPost, "/mcp", nil)
 			if tt.token != "" {
 				req.Header.Set("Authorization", "Bearer "+tt.token)
 			}
@@ -124,7 +124,7 @@ func TestAuthentication(t *testing.T) {
 	}
 	options.Verifier = nil
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("POST", "/mcp", nil)
+	r := publicRequest("POST", "/mcp", nil)
 	r.Header.Set("Authorization", "Bearer any")
 	Handler(cfg, options).ServeHTTP(w, r)
 	if w.Code != 401 {
@@ -139,7 +139,7 @@ func TestMetadata(t *testing.T) {
 		h := Handler(cfg, o)
 		for _, path := range []string{"/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} {
 			w := httptest.NewRecorder()
-			h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+			h.ServeHTTP(w, publicRequest("GET", path, nil))
 			var data map[string]any
 			if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &data) != nil {
 				t.Fatalf("bad metadata: %s", w.Body.String())
@@ -172,7 +172,7 @@ func TestRoutesAndCORS(t *testing.T) {
 	h := Handler(cfg, o)
 	for _, path := range []string{"/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-authorization-server", "/oauth/token", "/oauth/register", "/oauth/revoke", "/healthz", "/extra", "/oauth/authorize", "/approve/123"} {
 		t.Run(path, func(t *testing.T) {
-			r := httptest.NewRequest("OPTIONS", path, nil)
+			r := publicRequest("OPTIONS", path, nil)
 			r.Header.Set("Origin", "https://inspector.example.com")
 			r.Header.Set("Access-Control-Request-Method", "POST")
 			w := httptest.NewRecorder()
@@ -195,7 +195,7 @@ func TestRoutesAndCORS(t *testing.T) {
 	}
 	for path, want := range map[string]string{"/healthz": "ok", "/extra": "extra"} {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		h.ServeHTTP(w, publicRequest("GET", path, nil))
 		if w.Code != 200 || w.Body.String() != want {
 			t.Fatalf("route %s failed", path)
 		}
@@ -211,7 +211,7 @@ func TestRecoveryAndLogging(t *testing.T) {
 	o.Routes = []func(*http.ServeMux){func(mux *http.ServeMux) {
 		mux.HandleFunc("/oauth/token", func(http.ResponseWriter, *http.Request) { panic("panic-secret") })
 	}}
-	req := httptest.NewRequest("POST", "/oauth/token?code=query-secret", strings.NewReader("body-secret"))
+	req := publicRequest("POST", "/oauth/token?code=query-secret", strings.NewReader("body-secret"))
 	req.Header.Set("Authorization", "Bearer header-secret")
 	w := httptest.NewRecorder()
 	Handler(cfg, o).ServeHTTP(w, req)
@@ -297,7 +297,7 @@ type pipeServer struct {
 
 func newPipeServer(h http.Handler) *pipeServer {
 	listener := &pipeListener{connections: make(chan net.Conn), done: make(chan struct{})}
-	s := &pipeServer{URL: "http://mcp.example", server: &http.Server{Handler: h}, client: &http.Client{Transport: &http.Transport{DialContext: listener.dial}}, done: make(chan struct{})}
+	s := &pipeServer{URL: "http://mcp.example.com", server: &http.Server{Handler: h}, client: &http.Client{Transport: &http.Transport{DialContext: listener.dial}}, done: make(chan struct{})}
 	go func() { defer close(s.done); s.server.Serve(listener) }()
 	return s
 }
@@ -372,7 +372,7 @@ func TestAccessLogHidesApprovalIDsAndQueries(t *testing.T) {
 	defer log.SetOutput(prior)
 	h := common(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) }))
 	for _, path := range []string{"/approve/approval-secret?token=query-secret", "/approve/%61pproval-secret?code=query-secret", "/oauth/callback?code=query-secret", "/mcp?token=query-secret"} {
-		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil))
+		h.ServeHTTP(httptest.NewRecorder(), publicRequest("GET", path, nil))
 	}
 	if strings.Contains(logs.String(), "approval-secret") || strings.Contains(logs.String(), "query-secret") || strings.Contains(logs.String(), "?") {
 		t.Fatalf("secret in access log: %s", logs.String())
@@ -380,4 +380,10 @@ func TestAccessLogHidesApprovalIDsAndQueries(t *testing.T) {
 	if strings.Count(logs.String(), `path="/approve/*"`) != 2 || !strings.Contains(logs.String(), `path="/oauth/callback"`) || !strings.Contains(logs.String(), `path="/mcp"`) {
 		t.Fatalf("missing sanitized paths: %s", logs.String())
 	}
+}
+
+func publicRequest(method, target string, body io.Reader) *http.Request {
+	r := httptest.NewRequest(method, target, body)
+	r.Host = "mcp.example.com"
+	return r
 }

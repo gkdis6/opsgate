@@ -66,6 +66,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 func (s *Server) authorizeResponse(v url.Values) response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.sweep()
 	c := s.clients[v.Get("client_id")]
 	if c == nil || !slices.Contains(c.RedirectURIs, v.Get("redirect_uri")) {
 		return htmlErrorResponse(400, "Unknown client or redirect URI")
@@ -75,6 +76,9 @@ func (s *Server) authorizeResponse(v url.Values) response {
 	}
 	if s.storageErr != nil || s.closed {
 		return fail("server_error")
+	}
+	if c.Pending {
+		return pendingClientResponse()
 	}
 	if v.Get("response_type") == "" {
 		return fail("invalid_request")
@@ -170,7 +174,7 @@ func (s *Server) callbackResponse(key string, p *pendingAuth, subject string, er
 		return redirectResponse(p.ReturnPath).withCookie(sessionCookie, session, 12*60*60).withCookie(pendingCookie, "", -1)
 	}
 	client := s.clients[p.ClientID]
-	if client == nil {
+	if client == nil || client.Pending {
 		delete(s.pending, key)
 		return htmlErrorResponse(400, "Client no longer registered")
 	}
@@ -290,7 +294,7 @@ func (s *Server) consentResponse(r *http.Request, key string) response {
 	if !ok {
 		return htmlErrorResponse(403, "User is not allowed").withCookie(pendingCookie, "", -1)
 	}
-	if s.clients[p.ClientID] == nil || len(s.codes) >= maxTokens {
+	if s.clients[p.ClientID] == nil || s.clients[p.ClientID].Pending || len(s.codes) >= maxTokens {
 		return htmlErrorResponse(503, "Authorization unavailable").withCookie(pendingCookie, "", -1)
 	}
 	raw := random()

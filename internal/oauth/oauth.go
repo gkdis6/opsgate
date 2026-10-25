@@ -53,6 +53,11 @@ func New(cfg config.BuiltinAuth, issuer, resource string) (*Server, error) {
 }
 
 func newServer(cfg config.BuiltinAuth, issuer, resource string, transport http.RoundTripper) (*Server, error) {
+	validation := config.Default()
+	validation.Auth.Builtin = cfg
+	if err := validation.Validate(); err != nil {
+		return nil, err
+	}
 	u, err := url.Parse(issuer)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.ForceQuery || strings.Contains(issuer, "#") || (u.Scheme != "https" && !(u.Scheme == "http" && loopbackOrigin(u.Hostname()))) {
 		return nil, fmt.Errorf("issuer must be an https origin")
@@ -124,7 +129,7 @@ func newServer(cfg config.BuiltinAuth, issuer, resource string, transport http.R
 	return s, nil
 }
 
-// Routes registers /.well-known/oauth-authorization-server and /oauth/*.
+// Routes registers OAuth discovery, /oauth/* and the /admin/clients page.
 func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.metadata)
 	mux.HandleFunc("POST /oauth/register", s.register)
@@ -133,6 +138,7 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /oauth/consent", s.consent)
 	mux.HandleFunc("POST /oauth/token", s.token)
 	mux.HandleFunc("POST /oauth/revoke", s.revoke)
+	s.adminRoutes(mux)
 }
 
 // Verify implements auth.TokenVerifier for access tokens issued by s.
@@ -143,7 +149,7 @@ func (s *Server) Verify(ctx context.Context, token string, r *http.Request) (*au
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t := s.access[hash(token)]
-	if s.storageErr != nil || s.closed || t == nil || !s.now().Before(t.Expires) || s.revoked(t.Family) {
+	if s.storageErr != nil || s.closed || t == nil || s.clients[t.ClientID] == nil || s.clients[t.ClientID].Pending || !s.now().Before(t.Expires) || s.revoked(t.Family) {
 		return nil, auth.ErrInvalidToken
 	}
 	scopes, ok := s.user(t.Subject)

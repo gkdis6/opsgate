@@ -44,7 +44,7 @@ func (s *Server) authenticate(r *http.Request) (*client, response) {
 		method = "client_secret_post"
 	}
 	c := s.clients[id]
-	if c == nil || c.Method != method || (method != "none" && subtle.ConstantTimeCompare([]byte(hash(secret)), []byte(c.SecretHash)) != 1) {
+	if c == nil || c.Pending || c.Method != method || (method != "none" && subtle.ConstantTimeCompare([]byte(hash(secret)), []byte(c.SecretHash)) != 1) {
 		return nil, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="opsgate"`)
 			errorResponse(401, "invalid_client")(w, r)

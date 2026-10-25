@@ -41,7 +41,7 @@ func TestRedirectAllowlist(t *testing.T) {
 		valid bool
 	}{
 		{"https://client.example/cb?a=b", true}, {"http://localhost:12345/cb", true}, {"http://127.0.0.1:1234/cb", true}, {"http://[::1]:123/cb", true}, {"com.example.app:/cb", true}, {"cursor://client/callback", true},
-		{"ftp://client.example/cb", false}, {"http://localhost.evil/cb", false}, {"https://user:password@client.example/cb", false}, {"https://client.example/#", false}, {"https://client.example/" + strings.Repeat("x", 512), false}, {"http://127.0.0.2/cb", false}, {"https:opaque", false},
+		{"ftp://client.example/cb", false}, {"http://localhost.evil/cb", false}, {"https://user:password@client.example/cb", false}, {"https://client.example/#", false}, {"https://client.example/" + strings.Repeat("x", 512), false}, {"http://127.0.0.2/cb", true}, {"https:opaque", false},
 	} {
 		t.Run(tt.uri, func(t *testing.T) {
 			if got := validRedirect(tt.uri); got != tt.valid {

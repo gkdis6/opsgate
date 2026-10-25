@@ -10,6 +10,7 @@ import (
 )
 
 type client struct {
+	Pending      bool      `json:"pending,omitempty"`
 	ID           string    `json:"client_id"`
 	RedirectURIs []string  `json:"redirect_uris"`
 	Name         string    `json:"client_name"`
@@ -45,6 +46,7 @@ type pendingAuth struct {
 }
 type browserSession struct {
 	Subject string
+	CSRF    string
 	Expires time.Time
 }
 type diskState struct {
@@ -203,7 +205,7 @@ func (s *Server) sweep() {
 	}
 	protected := s.protectedClients()
 	for k, c := range s.clients {
-		if !protected[k] && (c.LastUsed.IsZero() && now.Sub(c.Created) >= 24*time.Hour || !c.LastUsed.IsZero() && now.Sub(c.LastUsed) >= 90*24*time.Hour) {
+		if c.Pending && now.Sub(c.Created) >= 24*time.Hour || !protected[k] && (c.LastUsed.IsZero() && now.Sub(c.Created) >= 24*time.Hour || !c.LastUsed.IsZero() && now.Sub(c.LastUsed) >= 90*24*time.Hour) {
 			delete(s.clients, k)
 		}
 	}
@@ -297,8 +299,8 @@ func (s *Server) protectedClients() map[string]bool {
 	return protected
 }
 
-// Caller holds mu. Reclaim only old registrations that never issued tokens and
-// have no outstanding authorization; active clients retain their registration.
+// Caller holds mu. Pending registrations go first, then old unused clients.
+// Active clients and outstanding authorizations retain their registration.
 func (s *Server) pruneClients() {
 	if len(s.clients) < s.cfg.MaxClients {
 		return
@@ -307,10 +309,10 @@ func (s *Server) pruneClients() {
 	for len(s.clients) >= s.cfg.MaxClients {
 		oldest := ""
 		for id, c := range s.clients {
-			if !c.LastUsed.IsZero() || protected[id] || s.now().Sub(c.Created) <= 10*time.Minute {
+			if !c.LastUsed.IsZero() || protected[id] || !c.Pending && s.now().Sub(c.Created) <= 10*time.Minute {
 				continue
 			}
-			if oldest == "" || c.Created.Before(s.clients[oldest].Created) {
+			if oldest == "" || c.Pending && !s.clients[oldest].Pending || c.Pending == s.clients[oldest].Pending && c.Created.Before(s.clients[oldest].Created) {
 				oldest = id
 			}
 		}

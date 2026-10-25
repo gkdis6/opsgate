@@ -122,12 +122,16 @@ func (s *Server) registerResponse(in registration) response {
 	if s.storageErr != nil || s.closed {
 		return errorResponse(503, "server_error")
 	}
+	pending := !s.redirectsAllowed(in.RedirectURIs)
+	if pending && s.cfg.UnknownRedirectHosts != "approve" {
+		return errorResponse(400, "invalid_redirect_uri")
+	}
 	s.pruneClients()
 	if len(s.clients) >= s.cfg.MaxClients {
 		return errorResponse(400, "invalid_client_metadata")
 	}
 	id := random()
-	c := &client{ID: id, RedirectURIs: in.RedirectURIs, Name: in.Name, Method: in.Method, GrantTypes: in.GrantTypes, Created: s.now()}
+	c := &client{Pending: pending, ID: id, RedirectURIs: in.RedirectURIs, Name: in.Name, Method: in.Method, GrantTypes: in.GrantTypes, Created: s.now()}
 	secret := ""
 	if in.Method != "none" {
 		secret = random()
@@ -142,5 +146,13 @@ func (s *Server) registerResponse(in registration) response {
 		out["client_secret"] = secret
 		out["client_secret_expires_at"] = 0
 	}
-	return jsonResponse(http.StatusCreated, out)
+	reply := jsonResponse(http.StatusCreated, out)
+	if pending && s.cfg.NotifyURL != "" {
+		notice := clientNotice{Event: "client_pending", ClientID: id, ClientName: c.Name, RedirectHosts: redirectHosts(c.RedirectURIs), ApproveURL: s.issuer + "/admin/clients"}
+		return func(w http.ResponseWriter, r *http.Request) {
+			s.notifyClient(r.Context(), notice)
+			reply(w, r)
+		}
+	}
+	return reply
 }

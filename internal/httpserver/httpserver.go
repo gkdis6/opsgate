@@ -35,7 +35,7 @@ func Handler(cfg config.Config, o Options) http.Handler {
 			return nil, auth.ErrInvalidToken
 		}
 	}
-	stream := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return o.Server }, &mcp.StreamableHTTPOptions{SessionTimeout: 30 * time.Minute})
+	stream := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return o.Server }, &mcp.StreamableHTTPOptions{SessionTimeout: 30 * time.Minute, DisableLocalhostProtection: true})
 	prm := cfg.Issuer() + "/.well-known/oauth-protected-resource/mcp"
 	// The SDK puts its required scopes into the 401 challenge, and MCP clients
 	// request exactly the challenge's scopes, so requiring ops:read there made
@@ -55,7 +55,7 @@ func Handler(cfg config.Config, o Options) http.Handler {
 	for _, routes := range o.Routes {
 		routes(mux)
 	}
-	return common(cors(mux))
+	return common(checkHost(cfg, cors(mux)))
 }
 
 // requireScope rejects tokens lacking scope with RFC 6750 insufficient_scope,

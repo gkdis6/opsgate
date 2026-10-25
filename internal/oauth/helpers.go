@@ -43,9 +43,9 @@ func hash(v string) string { sum := sha256.Sum256([]byte(v)); return hex.EncodeT
 func equal(a, b string) bool {
 	return subtle.ConstantTimeCompare([]byte(hash(a)), []byte(hash(b))) == 1
 }
-func loopback(host string) bool { return host == "localhost" || host == "127.0.0.1" || host == "::1" }
+func loopback(host string) bool { return loopbackOrigin(host) }
 func loopbackOrigin(host string) bool {
-	if host == "localhost" {
+	if strings.EqualFold(host, "localhost") {
 		return true
 	}
 	ip := net.ParseIP(host)

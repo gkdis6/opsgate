@@ -1,0 +1,29 @@
+# Apply once per namespace you allow writes in. Keep this narrower than the
+# opsgate allowlists. Never use a ClusterRole for writes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: opsgate-operator
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: opsgate-operator
+subjects:
+  - kind: ServiceAccount
+    name: opsgate
+    namespace: opsgate
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: opsgate-operator

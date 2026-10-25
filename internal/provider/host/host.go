@@ -19,6 +19,7 @@ type provider struct {
 	cfg       config.Host
 	proc, etc string
 	run       func(context.Context, string, ...string) (string, error)
+	resolve   func(string) (string, error)
 	now       func() time.Time
 	pause     func(context.Context) error
 }
@@ -39,15 +40,18 @@ type topInput struct {
 	Limit int    `json:"limit,omitempty" jsonschema:"Maximum number of process rows to return; integer, default 15, minimum 1, maximum 50."`
 }
 
-// Register adds read-only host tools without requiring systemd to be available.
+// Register adds host tools without requiring systemd to be available.
 func Register(s *mcp.Server, env *tool.Env, cfg config.Host) error {
-	for _, pattern := range cfg.Units {
+	for _, pattern := range append(append([]string{}, cfg.Units...), cfg.RestartUnits...) {
 		if _, err := normalizePattern(pattern); err != nil {
 			return err
 		}
 	}
+	if err := validatePrefix(cfg.CommandPrefix); err != nil {
+		return err
+	}
 	p := &provider{
-		cfg: cfg, proc: "/proc", etc: "/etc", run: runCommand, now: time.Now,
+		cfg: cfg, proc: "/proc", etc: "/etc", run: runCommand, resolve: trustedBinary, now: time.Now,
 		pause: func(ctx context.Context) error { return waitSample(ctx, 500*time.Millisecond) },
 	}
 	tool.Add(s, env, tool.Spec{
@@ -80,6 +84,9 @@ func Register(s *mcp.Server, env *tool.Env, cfg config.Host) error {
 	}, func(ctx context.Context, _ tool.Caller, in topInput) (string, error) {
 		return p.top(ctx, in)
 	})
+	if len(cfg.RestartUnits) > 0 {
+		tool.AddWrite(s, env, tool.WriteSpec{Name: "host_service_restart", Title: "Restart systemd unit", Description: "Restart a unit allowed by restart_units after human approval."}, tool.WriteHandler[restartInput]{Plan: p.planRestart, Apply: p.applyRestart})
+	}
 	return nil
 }
 
@@ -98,7 +105,7 @@ func (w *cappedWriter) Write(b []byte) (int, error) {
 	w.remaining -= len(b)
 	return w.Builder.Write(b)
 }
-func runCommand(ctx context.Context, name string, args ...string) (string, error) {
+func trustedBinary(name string) (string, error) {
 	// Resolve only in trusted system directories, independent of the server's PATH.
 	var binary string
 	for _, dir := range []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin"} {
@@ -110,6 +117,18 @@ func runCommand(ctx context.Context, name string, args ...string) (string, error
 	}
 	if binary == "" {
 		return "", fmt.Errorf("%s unavailable: required system binary not found (systemd may not be installed)", name)
+	}
+	return binary, nil
+}
+
+func runCommand(ctx context.Context, name string, args ...string) (string, error) {
+	binary := name
+	if !strings.HasPrefix(name, "/") {
+		var err error
+		binary, err = trustedBinary(name)
+		if err != nil {
+			return "", err
+		}
 	}
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Env = []string{"LC_ALL=C", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}

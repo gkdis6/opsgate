@@ -248,7 +248,7 @@ func TestRunnerIntegration(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		var info devrunner.Info
-		if p.request(ctx, "GET", "/v1/info", nil, &info) == nil {
+		if p.request(ctx, tool.Caller{User: "operator"}, "GET", "/v1/info", nil, &info) == nil {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -305,7 +305,7 @@ func TestClientBoundedResponse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := fakeProvider(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(tc.status); io.WriteString(w, tc.body) }))
 			var out any
-			if err := p.request(context.Background(), "GET", "/v1/info", nil, &out); err == nil || strings.Contains(err.Error(), "secret material") {
+			if err := p.request(context.Background(), tool.Caller{User: "operator"}, "GET", "/v1/info", nil, &out); err == nil || strings.Contains(err.Error(), "secret material") {
 				t.Fatal(err)
 			}
 		})
@@ -316,6 +316,9 @@ func TestApprovedToolFlow(t *testing.T) {
 	id := strings.Repeat("a", 20)
 	starts := 0
 	p := fakeProvider(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if users := req.Header.Values("X-Opsgate-User"); len(users) != 1 || users[0] != "operator" {
+			t.Errorf("caller identity not forwarded: %q", users)
+		}
 		switch req.URL.Path {
 		case "/v1/info":
 			json.NewEncoder(w).Encode(devrunner.Info{Projects: []devrunner.Project{{Name: "app", BaseRef: "main"}}, Agents: []string{"fake"}})

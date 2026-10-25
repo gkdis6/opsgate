@@ -17,6 +17,12 @@ func TestLoadDevRunner(t *testing.T) {
 		valid                  bool
 	}{
 		{name: "defaults", valid: true},
+		{name: "admins", suffix: "admins: ['github:123', 'static:operator']\n", valid: true},
+		{name: "empty admin", suffix: "admins: ['']\n"},
+		{name: "duplicate admin", suffix: "admins: [owner, owner]\n"},
+		{name: "admin whitespace", suffix: "admins: [' owner']\n"},
+		{name: "admin control", suffix: `admins: ["owner\nadmin"]`},
+		{name: "long admin", suffix: "admins: ['" + strings.Repeat("a", 257) + "']\n"},
 		{name: "unknown", suffix: "unknown: true\n"},
 		{name: "multiple documents", suffix: "---\n{}\n"},
 		{name: "relative socket", from: "/run/dev.sock", to: "dev.sock"},

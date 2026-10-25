@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -209,6 +210,8 @@ type Dev struct {
 // DevRunner is the configuration of `opsgate dev-runner`, kept in its own
 // file that the opsgate server cannot write.
 type DevRunner struct {
+	// Admins are exact caller subjects allowed to read and cancel every task.
+	Admins []string `yaml:"admins"`
 	// Socket is the Unix socket to listen on (mode 0660).
 	Socket string `yaml:"socket"`
 	// SocketGroup is the group allowed to connect (the opsgate server's).
@@ -498,6 +501,13 @@ func LoadDevRunner(path string) (DevRunner, error) {
 
 // Validate checks the runner's allowlists and resource limits.
 func (c DevRunner) Validate() error {
+	admins := make(map[string]bool, len(c.Admins))
+	for _, subject := range c.Admins {
+		if subject == "" || len(subject) > 256 || !utf8.ValidString(subject) || strings.TrimSpace(subject) != subject || strings.ContainsFunc(subject, unicode.IsControl) || admins[subject] {
+			return fmt.Errorf("runner admins must be unique nonempty subjects of at most 256 bytes without control characters or surrounding whitespace")
+		}
+		admins[subject] = true
+	}
 	name := regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 	envName := regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	clean := func(s string) bool { return !strings.ContainsFunc(s, unicode.IsControl) }

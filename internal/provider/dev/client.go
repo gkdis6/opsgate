@@ -9,7 +9,12 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/gkdis6/opsgate/internal/tool"
 )
 
 type provider struct{ client *http.Client }
@@ -27,7 +32,11 @@ func newProvider(socket string) (*provider, error) {
 	}
 	return &provider{client: &http.Client{Transport: transport, Timeout: 40 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
-func (p *provider) request(ctx context.Context, method, path string, in, out any) error {
+func (p *provider) request(ctx context.Context, c tool.Caller, method, path string, in, out any) error {
+	user := c.User
+	if user == "" || len(user) > 256 || !utf8.ValidString(user) || strings.TrimSpace(user) != user || strings.ContainsFunc(user, unicode.IsControl) {
+		return fmt.Errorf("invalid caller identity")
+	}
 	var body io.Reader
 	if in != nil {
 		b, err := json.Marshal(in)
@@ -40,6 +49,7 @@ func (p *provider) request(ctx context.Context, method, path string, in, out any
 	if err != nil {
 		return fmt.Errorf("invalid runner request")
 	}
+	req.Header.Set("X-Opsgate-User", user)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

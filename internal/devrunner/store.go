@@ -8,8 +8,17 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 	"time"
+
+	"github.com/gkdis6/opsgate/internal/redact"
 )
+
+// storedTask keeps the exact ownership identity out of API responses and redaction.
+type storedTask struct {
+	Task
+	Owner string `json:"owner,omitempty"`
+}
 
 var taskID = regexp.MustCompile(`^[a-z2-7]{20}$`)
 
@@ -24,12 +33,29 @@ func (r *runner) load() error {
 	defer f.Close()
 	dec := json.NewDecoder(io.LimitReader(f, 64<<20))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&r.tasks); err != nil {
+	var stored []*storedTask
+	if err := dec.Decode(&stored); err != nil {
 		return fmt.Errorf("load tasks: %w", err)
 	}
 	var extra any
 	if dec.Decode(&extra) != io.EOF {
 		return fmt.Errorf("invalid task store")
+	}
+	r.tasks = make([]*Task, 0, len(stored))
+	for _, record := range stored {
+		if record == nil {
+			return fmt.Errorf("invalid task store")
+		}
+		t := record.Task
+		t.owner = record.Owner
+		if t.owner == "" && validUser(t.RequestedBy) && !strings.Contains(t.RequestedBy, redact.Mask) && redact.String(t.RequestedBy) == t.RequestedBy {
+			// Legacy attribution is usable only when redaction has not obscured it.
+			t.owner = t.RequestedBy
+		}
+		if t.owner != "" && !validUser(t.owner) {
+			return fmt.Errorf("invalid task owner")
+		}
+		r.tasks = append(r.tasks, &t)
 	}
 	seen := map[string]bool{}
 	for _, t := range r.tasks {
@@ -58,7 +84,11 @@ func (r *runner) save() error {
 		r.stop()
 		return r.storageErr
 	}
-	b, err := json.Marshal(r.tasks)
+	stored := make([]*storedTask, len(r.tasks))
+	for i, task := range r.tasks {
+		stored[i] = &storedTask{Task: *task, Owner: task.owner}
+	}
+	b, err := json.Marshal(stored)
 	if err != nil {
 		return fail(err)
 	}

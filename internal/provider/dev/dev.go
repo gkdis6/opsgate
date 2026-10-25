@@ -58,9 +58,9 @@ func Register(s *mcp.Server, env *tool.Env, cfg config.Dev) error {
 }
 
 func registerTools(s *mcp.Server, env *tool.Env, p *provider) error {
-	tool.Add(s, env, tool.Spec{Name: "dev_projects", Title: "Coding projects and agents", ReadOnly: true, Scope: config.ScopeDev, Description: "List allowlisted projects, base refs, configured coding agents and runner limits." + caution}, func(ctx context.Context, _ tool.Caller, _ emptyInput) (string, error) {
+	tool.Add(s, env, tool.Spec{Name: "dev_projects", Title: "Coding projects and agents", ReadOnly: true, Scope: config.ScopeDev, Description: "List allowlisted projects, base refs, configured coding agents and runner limits." + caution}, func(ctx context.Context, c tool.Caller, _ emptyInput) (string, error) {
 		var info devrunner.Info
-		if err := p.request(ctx, http.MethodGet, "/v1/info", nil, &info); err != nil {
+		if err := p.request(ctx, c, http.MethodGet, "/v1/info", nil, &info); err != nil {
 			return "", err
 		}
 		return encode(info)
@@ -70,18 +70,18 @@ func registerTools(s *mcp.Server, env *tool.Env, p *provider) error {
 		{"dev_task_status", "Coding task status", ""},
 		{"dev_task_diff", "Coding task diff", "/diff"},
 	} {
-		tool.Add(s, env, tool.Spec{Name: endpoint.name, Title: endpoint.title, ReadOnly: true, Scope: config.ScopeDev, Description: "Read a coding task's " + strings.ToLower(endpoint.title) + "." + caution}, func(ctx context.Context, _ tool.Caller, in idInput) (string, error) {
+		tool.Add(s, env, tool.Spec{Name: endpoint.name, Title: endpoint.title, ReadOnly: true, Scope: config.ScopeDev, Description: "Read a coding task's " + strings.ToLower(endpoint.title) + "." + caution}, func(ctx context.Context, c tool.Caller, in idInput) (string, error) {
 			if !validID.MatchString(in.ID) {
 				return "", fmt.Errorf("invalid task ID")
 			}
 			var out json.RawMessage
-			if err := p.request(ctx, http.MethodGet, "/v1/tasks/"+in.ID+endpoint.suffix, nil, &out); err != nil {
+			if err := p.request(ctx, c, http.MethodGet, "/v1/tasks/"+in.ID+endpoint.suffix, nil, &out); err != nil {
 				return "", err
 			}
 			return string(out), nil
 		})
 	}
-	tool.Add(s, env, tool.Spec{Name: "dev_task_log", Title: "Coding task log", ReadOnly: true, Scope: config.ScopeDev, Description: "Read a bounded log page. Follow next_offset to continue; byte offsets refer to the raw log before redaction." + caution}, func(ctx context.Context, _ tool.Caller, in logInput) (string, error) {
+	tool.Add(s, env, tool.Spec{Name: "dev_task_log", Title: "Coding task log", ReadOnly: true, Scope: config.ScopeDev, Description: "Read a bounded log page. Follow next_offset to continue; byte offsets refer to the raw log before redaction." + caution}, func(ctx context.Context, c tool.Caller, in logInput) (string, error) {
 		if in.Limit == 0 {
 			in.Limit = 64 << 10
 		}
@@ -90,12 +90,12 @@ func registerTools(s *mcp.Server, env *tool.Env, p *provider) error {
 		}
 		q := url.Values{"offset": {strconv.FormatInt(in.Offset, 10)}, "limit": {strconv.Itoa(in.Limit)}}
 		var out devrunner.Log
-		if err := p.request(ctx, http.MethodGet, "/v1/tasks/"+in.ID+"/log?"+q.Encode(), nil, &out); err != nil {
+		if err := p.request(ctx, c, http.MethodGet, "/v1/tasks/"+in.ID+"/log?"+q.Encode(), nil, &out); err != nil {
 			return "", err
 		}
 		return encode(out)
 	})
-	tool.Add(s, env, tool.Spec{Name: "dev_task_list", Title: "Coding task list", ReadOnly: true, Scope: config.ScopeDev, Description: "List retained tasks newest first, omitting final messages. Read dev_task_status for the final message." + caution}, func(ctx context.Context, _ tool.Caller, in listInput) (string, error) {
+	tool.Add(s, env, tool.Spec{Name: "dev_task_list", Title: "Coding task list", ReadOnly: true, Scope: config.ScopeDev, Description: "List your retained tasks (all tasks for runner admins) newest first, omitting final messages. Read dev_task_status for the final message." + caution}, func(ctx context.Context, c tool.Caller, in listInput) (string, error) {
 		if in.Limit == 0 {
 			in.Limit = 20
 		}
@@ -103,17 +103,17 @@ func registerTools(s *mcp.Server, env *tool.Env, p *provider) error {
 			return "", fmt.Errorf("limit must be 1..100")
 		}
 		var out []devrunner.Task
-		if err := p.request(ctx, http.MethodGet, "/v1/tasks?limit="+strconv.Itoa(in.Limit), nil, &out); err != nil {
+		if err := p.request(ctx, c, http.MethodGet, "/v1/tasks?limit="+strconv.Itoa(in.Limit), nil, &out); err != nil {
 			return "", err
 		}
 		return encode(out)
 	})
-	tool.Add(s, env, tool.Spec{Name: "dev_task_cancel", Title: "Cancel coding task", ReadOnly: false, Scope: config.ScopeDev, Description: "Cancel a queued or running coding task. Running process groups receive SIGTERM, then SIGKILL after 10 seconds. No approval is required to stop a task." + caution}, func(ctx context.Context, _ tool.Caller, in idInput) (string, error) {
+	tool.Add(s, env, tool.Spec{Name: "dev_task_cancel", Title: "Cancel coding task", ReadOnly: false, Scope: config.ScopeDev, Description: "Cancel a queued or running coding task. Running process groups receive SIGTERM, then SIGKILL after 10 seconds. No approval is required to stop a task." + caution}, func(ctx context.Context, c tool.Caller, in idInput) (string, error) {
 		if !validID.MatchString(in.ID) {
 			return "", fmt.Errorf("invalid task ID")
 		}
 		var out devrunner.Task
-		if err := p.request(ctx, http.MethodPost, "/v1/tasks/"+in.ID+"/cancel", nil, &out); err != nil {
+		if err := p.request(ctx, c, http.MethodPost, "/v1/tasks/"+in.ID+"/cancel", nil, &out); err != nil {
 			return "", err
 		}
 		return encode(out)
@@ -126,7 +126,7 @@ func (p *provider) plan(ctx context.Context, c tool.Caller, in startInput) (tool
 		return tool.Plan{}, fmt.Errorf("invalid prompt or caller identity")
 	}
 	var info devrunner.Info
-	if err := p.request(ctx, http.MethodGet, "/v1/info", nil, &info); err != nil {
+	if err := p.request(ctx, c, http.MethodGet, "/v1/info", nil, &info); err != nil {
 		return tool.Plan{}, err
 	}
 	if !slices.Contains(info.Agents, in.Agent) {
@@ -153,7 +153,7 @@ func (p *provider) apply(ctx context.Context, c tool.Caller, in startInput, plan
 		return "", tool.Denied("runner policy changed; request approval again")
 	}
 	var t devrunner.Task
-	if err := p.request(ctx, http.MethodPost, "/v1/tasks", approved.Request, &t); err != nil {
+	if err := p.request(ctx, c, http.MethodPost, "/v1/tasks", approved.Request, &t); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("Started task %s on branch %s. Follow with dev_task_status {id: %q}, dev_task_log {id: %q}, and dev_task_diff {id: %q}. Nothing is merged or deployed automatically.", t.ID, t.Branch, t.ID, t.ID, t.ID), nil

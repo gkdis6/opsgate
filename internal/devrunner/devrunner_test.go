@@ -181,6 +181,7 @@ func (h *harness) request(t *testing.T, method, path string, body any, out any) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	req.Header.Set("X-Opsgate-User", "operator")
 	resp, err := h.client.Do(req)
 	if err != nil {
 		t.Fatal(err)

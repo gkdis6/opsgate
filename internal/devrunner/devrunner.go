@@ -1,5 +1,8 @@
 // Package devrunner runs configured coding agents in git worktrees over a
 // peer-authenticated Unix socket. The runner must use a dedicated OS account.
+// Only the opsgate server and trusted runner account may access the socket:
+// socket peers can assert any caller identity using X-Opsgate-User. Coding
+// agents and other untrusted processes must not have access to that socket.
 package devrunner
 
 import (
@@ -46,6 +49,7 @@ func Serve(ctx context.Context, cfg config.DevRunner) error {
 	if cfg.MaxTasks == 0 {
 		cfg.MaxTasks = 100
 	}
+	cfg.Admins = slices.Clone(cfg.Admins)
 	cfg.Projects = slices.Clone(cfg.Projects)
 	for i := range cfg.Projects {
 		if cfg.Projects[i].BaseRef == "" {

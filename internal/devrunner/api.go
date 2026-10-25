@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/gkdis6/opsgate/internal/redact"
@@ -33,6 +34,13 @@ func (r *runner) handler() http.Handler {
 		if req.ProtoMajor != 1 || (req.ContentLength != 0 || len(req.TransferEncoding) > 0) && (req.Method == http.MethodGet || req.Method == http.MethodHead) {
 			http.Error(w, "invalid request", 400)
 			return
+		}
+		if req.URL.Path != "/v1/info" {
+			users := req.Header.Values("X-Opsgate-User")
+			if len(users) != 1 || !validUser(users[0]) {
+				bad(w, http.StatusUnauthorized, "caller identity required")
+				return
+			}
 		}
 		ctx, cancel := context.WithTimeout(req.Context(), 30*time.Second)
 		defer cancel()
@@ -81,7 +89,7 @@ func (r *runner) start(w http.ResponseWriter, req *http.Request) {
 	}
 	p, ok := r.project(in.Project)
 	_, agentOK := r.cfg.Agents[in.Agent]
-	if !ok || !agentOK || len(in.Prompt) < 1 || len(in.Prompt) > MaxPromptBytes || !utf8.ValidString(in.Prompt) || strings.ContainsRune(in.Prompt, 0) || len(in.RequestedBy) > 256 || !utf8.ValidString(in.RequestedBy) {
+	if !ok || !agentOK || len(in.Prompt) < 1 || len(in.Prompt) > MaxPromptBytes || !utf8.ValidString(in.Prompt) || strings.ContainsRune(in.Prompt, 0) || len(in.RequestedBy) > 256 || !utf8.ValidString(in.RequestedBy) || (in.RequestedBy != "" && in.RequestedBy != req.Header.Get("X-Opsgate-User")) {
 		bad(w, 400, "invalid project, agent, prompt or requested_by")
 		return
 	}
@@ -131,7 +139,7 @@ func (r *runner) start(w http.ResponseWriter, req *http.Request) {
 		bad(w, 503, "cannot save task prompt")
 		return
 	}
-	t := &Task{ID: id, Project: p.Name, Agent: in.Agent, Branch: "opsgate/" + id, BaseRef: p.BaseRef, RequestedBy: redact.String(in.RequestedBy), State: "queued", Created: time.Now().UTC()}
+	t := &Task{owner: req.Header.Get("X-Opsgate-User"), ID: id, Project: p.Name, Agent: in.Agent, Branch: "opsgate/" + id, BaseRef: p.BaseRef, RequestedBy: redact.String(req.Header.Get("X-Opsgate-User")), State: "queued", Created: time.Now().UTC()}
 	r.tasks = append(r.tasks, t)
 	if err := r.save(); err != nil {
 		bad(w, 503, "cannot persist task")
@@ -177,6 +185,9 @@ func (r *runner) list(w http.ResponseWriter, req *http.Request) {
 	defer r.mu.Unlock()
 	out := make([]Task, 0, min(int(limit), len(r.tasks)))
 	for i := len(r.tasks) - 1; i >= 0 && len(out) < int(limit); i-- {
+		if !r.canAccess(req, r.tasks[i]) {
+			continue
+		}
 		t := *r.tasks[i]
 		t.Message = ""
 		out = append(out, t)
@@ -192,7 +203,7 @@ func (r *runner) get(w http.ResponseWriter, req *http.Request) (Task, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	t := r.find(id)
-	if t == nil {
+	if t == nil || !r.canAccess(req, t) {
 		bad(w, 404, "task not found")
 		return Task{}, false
 	}
@@ -224,7 +235,7 @@ func (r *runner) cancel(w http.ResponseWriter, req *http.Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	current := r.find(t.ID)
-	if current == nil {
+	if current == nil || !r.canAccess(req, current) {
 		bad(w, 404, "task not found")
 		return
 	}
@@ -281,7 +292,7 @@ func (r *runner) diff(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	t := r.find(id)
-	if t == nil {
+	if t == nil || !r.canAccess(req, t) {
 		bad(w, 404, "task not found")
 		return
 	}
@@ -306,4 +317,14 @@ func redactedText(b []byte) string {
 		}
 	}
 	return s
+}
+
+func validUser(user string) bool {
+	return user != "" && len(user) <= 256 && utf8.ValidString(user) && strings.TrimSpace(user) == user && !strings.ContainsFunc(user, unicode.IsControl)
+}
+
+// Caller identity is supplied by the trusted opsgate socket peer, never tool arguments.
+func (r *runner) canAccess(req *http.Request, task *Task) bool {
+	user := req.Header.Get("X-Opsgate-User")
+	return validUser(user) && (slices.Contains(r.cfg.Admins, user) || task.owner != "" && task.owner == user)
 }

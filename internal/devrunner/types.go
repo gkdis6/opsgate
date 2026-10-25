@@ -36,6 +36,7 @@ type StartRequest struct {
 
 // Task describes a queued or completed agent run.
 type Task struct {
+	owner       string
 	ID          string    `json:"id"`
 	Project     string    `json:"project"`
 	Agent       string    `json:"agent"`

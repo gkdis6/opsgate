@@ -119,7 +119,7 @@ func tokenScopes(claims map[string]json.RawMessage) ([]string, bool) {
 	}
 	var out []string
 	for _, s := range scopes {
-		if (s == config.ScopeRead || s == config.ScopeWrite) && !slices.Contains(out, s) {
+		if config.KnownScope(s) && !slices.Contains(out, s) {
 			out = append(out, s)
 		}
 	}

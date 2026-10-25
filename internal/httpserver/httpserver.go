@@ -39,7 +39,7 @@ func Handler(cfg config.Config, o Options) http.Handler {
 	})(stream))
 	metadata := auth.ProtectedResourceMetadataHandler(&oauthex.ProtectedResourceMetadata{
 		Resource: cfg.ResourceURL(), AuthorizationServers: o.AuthorizationServers,
-		ScopesSupported:        []string{config.ScopeRead, config.ScopeWrite},
+		ScopesSupported:        config.Scopes,
 		BearerMethodsSupported: []string{"header"}, ResourceName: cfg.Server.Name,
 	})
 	mux.Handle("/.well-known/oauth-protected-resource", metadata)

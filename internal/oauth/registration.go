@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/gkdis6/opsgate/internal/config"
 )
 
 type registration struct {
@@ -25,7 +27,7 @@ func (s *Server) metadata(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonReply(w, 200, map[string]any{
 		"issuer": s.issuer, "authorization_endpoint": s.issuer + "/oauth/authorize", "token_endpoint": s.issuer + "/oauth/token", "registration_endpoint": s.issuer + "/oauth/register", "revocation_endpoint": s.issuer + "/oauth/revoke",
-		"response_types_supported": []string{"code"}, "grant_types_supported": []string{"authorization_code", "refresh_token"}, "code_challenge_methods_supported": []string{"S256"}, "token_endpoint_auth_methods_supported": []string{"none", "client_secret_basic", "client_secret_post"}, "scopes_supported": []string{"ops:read", "ops:write"}, "authorization_response_iss_parameter_supported": true,
+		"response_types_supported": []string{"code"}, "grant_types_supported": []string{"authorization_code", "refresh_token"}, "code_challenge_methods_supported": []string{"S256"}, "token_endpoint_auth_methods_supported": []string{"none", "client_secret_basic", "client_secret_post"}, "scopes_supported": config.Scopes, "authorization_response_iss_parameter_supported": true,
 	})
 }
 func validRedirect(raw string) bool {

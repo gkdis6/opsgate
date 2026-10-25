@@ -15,6 +15,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/gkdis6/opsgate/internal/config"
 )
 
 const (
@@ -52,7 +54,7 @@ func secureEndpoint(raw string) bool {
 }
 func supportedScopes(scopes []string) bool {
 	for _, scope := range scopes {
-		if scope != "ops:read" && scope != "ops:write" {
+		if !config.KnownScope(scope) {
 			return false
 		}
 	}
@@ -78,7 +80,7 @@ func subset(a, b []string) bool {
 func (s *Server) user(subject string) ([]string, bool) {
 	for _, u := range s.cfg.Users {
 		if subject == u.Subject || !strings.HasPrefix(subject, "oidc:") && !strings.HasPrefix(u.Subject, "oidc:") && strings.EqualFold(subject, u.Subject) {
-			return intersection(u.Scopes, []string{"ops:read", "ops:write"}), true
+			return intersection(u.Scopes, config.Scopes), true
 		}
 	}
 	return nil, false

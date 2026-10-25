@@ -32,6 +32,8 @@ type WriteSpec struct {
 	Description string
 	// Idempotent marks tools whose repetition has no further effect.
 	Idempotent bool
+	// Scope required in addition to human approval; default ops:write.
+	Scope string
 }
 
 // Plan is the side-effect-free preview of a write. Summary is shown to the
@@ -87,6 +89,10 @@ func (e *InputRequired) Error() string { return "human approval input required" 
 // denied, so writes can never run unconfirmed.
 func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHandler[In]) {
 	destructive := true
+	scope := spec.Scope
+	if scope == "" {
+		scope = config.ScopeWrite
+	}
 	t := &mcp.Tool{
 		Name: spec.Name, Title: spec.Title, Description: spec.Description,
 		Annotations: &mcp.ToolAnnotations{
@@ -115,8 +121,8 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 			if !ok {
 				return "", Denied("unauthenticated")
 			}
-			if !c.Has(config.ScopeWrite) {
-				return "", Denied("missing scope %s", config.ScopeWrite)
+			if !c.Has(scope) {
+				return "", Denied("missing scope %s", scope)
 			}
 			if argsErr != nil {
 				return "", argsErr

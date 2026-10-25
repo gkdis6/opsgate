@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,7 +22,15 @@ import (
 const (
 	ScopeRead  = "ops:read"
 	ScopeWrite = "ops:write"
+	// ScopeDev allows starting coding agents through the dev provider.
+	ScopeDev = "dev:run"
 )
+
+// Scopes lists every scope opsgate understands, in display order.
+var Scopes = []string{ScopeRead, ScopeWrite, ScopeDev}
+
+// KnownScope reports whether s is one of Scopes.
+func KnownScope(s string) bool { return slices.Contains(Scopes, s) }
 
 // Auth modes for the HTTP transport.
 const (
@@ -144,6 +153,72 @@ type Approval struct {
 type Providers struct {
 	Host       Host       `yaml:"host"`
 	Kubernetes Kubernetes `yaml:"kubernetes"`
+	Obsidian   Obsidian   `yaml:"obsidian"`
+	Dev        Dev        `yaml:"dev"`
+}
+
+// Dev lets clients start coding agents (Codex, Claude Code, ...) on the
+// host. opsgate never runs agents itself: it talks to `opsgate dev-runner`,
+// a separate process under its own account whose configuration (DevRunner)
+// alone decides which projects and agent commands exist. Starting a task
+// needs the dev:run scope and human approval.
+type Dev struct {
+	Enabled bool `yaml:"enabled"`
+	// RunnerSocket is the dev-runner's Unix socket.
+	RunnerSocket string `yaml:"runner_socket"`
+}
+
+// DevRunner is the configuration of `opsgate dev-runner`, kept in its own
+// file that the opsgate server cannot write.
+type DevRunner struct {
+	// Socket is the Unix socket to listen on (mode 0660).
+	Socket string `yaml:"socket"`
+	// SocketGroup is the group allowed to connect (the opsgate server's).
+	SocketGroup string `yaml:"socket_group"`
+	// WorkDir holds task worktrees, logs and results.
+	WorkDir  string       `yaml:"work_dir"`
+	Projects []DevProject `yaml:"projects"`
+	// Agents maps an agent name (e.g. "codex", "claude") to its command.
+	Agents map[string]DevAgent `yaml:"agents"`
+	// Timeout bounds one task.
+	Timeout       time.Duration `yaml:"timeout"`
+	MaxConcurrent int           `yaml:"max_concurrent"`
+	// MaxTasks bounds retained task records; the oldest finished go first.
+	MaxTasks int `yaml:"max_tasks"`
+}
+
+// DevProject is a git repository agents may work on.
+type DevProject struct {
+	Name string `yaml:"name"`
+	Path string `yaml:"path"`
+	// BaseRef is the ref new task branches start from (default HEAD).
+	BaseRef string `yaml:"base_ref"`
+}
+
+// DevAgent is an agent command. Command is argv; the runner substitutes
+// {workdir} (the task worktree) and {output} (a file for the final
+// message). The task prompt is written to stdin, never to argv.
+type DevAgent struct {
+	Command []string `yaml:"command"`
+	// Env holds extra KEY=VALUE pairs; the environment is otherwise minimal.
+	Env []string `yaml:"env"`
+}
+
+// Obsidian exposes a Markdown vault (Obsidian or any folder of notes) by
+// reading files directly; the Obsidian app does not need to run.
+type Obsidian struct {
+	Enabled bool `yaml:"enabled"`
+	// Vault is the absolute path of the vault root.
+	Vault string `yaml:"vault"`
+	// Exclude holds extra vault-relative globs that are never read or
+	// written. Internal folders (.obsidian, .trash, .git, sync metadata)
+	// and sync-conflict copies are always excluded.
+	Exclude []string `yaml:"exclude"`
+	// AllowWrite registers the note write tools (create, append, replace,
+	// trash). Every write still needs ops:write and human approval.
+	AllowWrite bool `yaml:"allow_write"`
+	// MaxNoteBytes caps the size of a note that is read or written.
+	MaxNoteBytes int `yaml:"max_note_bytes"`
 }
 
 type Host struct {
@@ -223,6 +298,9 @@ func Default() Config {
 			Kubernetes: Kubernetes{
 				MaxLogLines: 500,
 				MaxReplicas: 10,
+			},
+			Obsidian: Obsidian{
+				MaxNoteBytes: 1 << 20,
 			},
 		},
 	}
@@ -340,7 +418,7 @@ func isLoopback(host string) bool {
 
 func checkScopes(where string, scopes []string) error {
 	for _, s := range scopes {
-		if s != ScopeRead && s != ScopeWrite {
+		if !KnownScope(s) {
 			return fmt.Errorf("%s: unknown scope %q", where, s)
 		}
 	}

@@ -356,3 +356,20 @@ func TestGracefulShutdown(t *testing.T) {
 		t.Fatal("shutdown did not complete")
 	}
 }
+
+func TestAccessLogHidesApprovalIDsAndQueries(t *testing.T) {
+	var logs bytes.Buffer
+	prior := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(prior)
+	h := common(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) }))
+	for _, path := range []string{"/approve/approval-secret?token=query-secret", "/approve/%61pproval-secret?code=query-secret", "/oauth/callback?code=query-secret", "/mcp?token=query-secret"} {
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil))
+	}
+	if strings.Contains(logs.String(), "approval-secret") || strings.Contains(logs.String(), "query-secret") || strings.Contains(logs.String(), "?") {
+		t.Fatalf("secret in access log: %s", logs.String())
+	}
+	if strings.Count(logs.String(), `path="/approve/*"`) != 2 || !strings.Contains(logs.String(), `path="/oauth/callback"`) || !strings.Contains(logs.String(), `path="/mcp"`) {
+		t.Fatalf("missing sanitized paths: %s", logs.String())
+	}
+}

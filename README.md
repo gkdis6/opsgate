@@ -111,7 +111,11 @@ The shared `internal/redact` layer masks PEM private keys, Authorization/Proxy-A
 
 `builtin` delegates login to GitHub or OIDC (including Google), then issues opaque MCP tokens. It supports authorization code with PKCE S256 only, Dynamic Client Registration (DCR), per-client consent, refresh rotation and reuse revocation. The issuer is `http.public_url`; the resource is `<public_url>/mcp`. Optional state persistence retains client registrations and token hashes across restarts; protect its directory and backups, and use one process per state file.
 
-`external` validates JWT signatures using issuer discovery and JWKS, with issuer, audience, expiry and allowed algorithm checks. Audience defaults to the MCP resource URL. Scopes come from `scope` or `scp`; an optional `claim:<value>` user allowlist further restricts identities and intersects their scopes. `static` accepts pre-shared bearer tokens configured by SHA-256 digest; generate a token and digest with `opsgate -gen-token`. Store the raw token only in the client's secret storage. Static mode provides no DCR or OAuth login.
+Builtin OIDC users may match a verified `email:<address>` or an exact, case-sensitive immutable `oidc:<sub>` from the configured issuer. If both match, `oidc:<sub>` takes precedence and needs no email claim. Google email subjects require `gmail.com`/`googlemail.com`, or an `hd` claim matching the email domain (Google Workspace); `email_verified` alone is insufficient for other Google addresses. For the Google example above, use a Workspace address or configure `oidc:<sub>`.
+
+OAuth GET routes reject request bodies; POST body reads have a 10-second deadline. Authorization errors stay on a local page before consent; Deny on the consent page may redirect. At DCR capacity, registrations older than 10 minutes that never issued tokens and have no outstanding authorization are evicted oldest first. Pending authorizations are limited to 20 per client and 1000 overall, evicting the oldest affected entry; browser approval logins have a separate pool of 100.
+
+`external` validates JWT signatures using issuer discovery and JWKS, with issuer, audience, expiry and allowed algorithm checks. Issuer, discovery and JWKS URLs require HTTPS, except loopback HTTP. Audience defaults to the MCP resource URL. Scopes come from `scope` or `scp`; an optional `claim:<value>` user allowlist further restricts identities and intersects their scopes. `static` accepts pre-shared bearer tokens configured by SHA-256 digest; generate a token and digest with `opsgate -gen-token`. Store the raw token only in the client's secret storage. Static mode provides no DCR or OAuth login.
 
 Read tools require `ops:read`. Writes require their own action allowlist, `ops:write`, underlying OS/RBAC permission and human confirmation. HTTP access additionally requires `ops:read`, so remote writers need both scopes. Namespace allow/deny rules still apply to Kubernetes writes. Read unit allowlists do not authorize restarts.
 
@@ -148,7 +152,7 @@ Defaults below come from `config.Default()`. YAML is loaded over defaults with s
 | `auth.mode` | `""` | Required for HTTP: builtin, external or static |
 | `auth.builtin.state_file` | `""` | Optional 0600 persistence for clients and token hashes; empty loses state on restart |
 | `auth.builtin.users` | `[]` | Allowed upstream users; empty denies everyone |
-| `auth.builtin.users[].subject` | `""` | github:login or email:verified-email |
+| `auth.builtin.users[].subject` | `""` | github:login, email:verified-email or oidc:sub (exact OIDC subject) |
 | `auth.builtin.users[].scopes` | `[]` | Grants: ops:read and optionally ops:write |
 | `auth.builtin.upstream.provider` | `""` | github or oidc |
 | `auth.builtin.upstream.issuer` | `""` | Required OIDC issuer, e.g. https://accounts.google.com |

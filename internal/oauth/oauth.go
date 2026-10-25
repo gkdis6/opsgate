@@ -160,6 +160,9 @@ func (s *Server) Verify(ctx context.Context, token string, r *http.Request) (*au
 // login when no live session is present. Login returns only to local paths.
 func (s *Server) RequireUser(next func(http.ResponseWriter, *http.Request, string)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !rejectGETBody(w, r) {
+			return
+		}
 		path := r.URL.RequestURI()
 		if !localPath(path) {
 			htmlError(w, 400, "Invalid return path")
@@ -181,8 +184,9 @@ func (s *Server) RequireUser(next func(http.ResponseWriter, *http.Request, strin
 				}
 			}
 		}
-		s.startLogin(w, r, &pendingAuth{Kind: "login", ReturnPath: path})
+		reply := s.startLogin(&pendingAuth{Kind: "login", ReturnPath: path})
 		s.mu.Unlock()
+		reply(w, r)
 	})
 }
 

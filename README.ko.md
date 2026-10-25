@@ -111,7 +111,11 @@ Kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 거부됩
 
 `builtin`은 GitHub 또는 Google 등의 OIDC로 로그인한 뒤 불투명 MCP 토큰을 발급합니다. PKCE S256 전용 authorization code, 동적 클라이언트 등록(DCR), 클라이언트별 동의 화면, refresh 회전 및 재사용 시 폐기를 지원합니다. issuer는 `http.public_url`, resource는 `<public_url>/mcp`입니다. 선택적 상태 파일은 등록 정보와 토큰 해시를 재시작 후에도 유지합니다. 디렉터리와 백업을 보호하고 파일당 프로세스 하나만 사용하세요.
 
-`external`은 issuer discovery 및 JWKS로 JWT 서명, issuer, audience, 만료, 허용 알고리즘을 검증합니다. audience 기본값은 MCP resource URL입니다. 범위는 `scope` 또는 `scp`에서 읽으며 선택적 `claim:<value>` 사용자 목록을 설정하면 신원을 제한하고 토큰 범위와 허용 범위의 교집합을 사용합니다. `static`은 SHA-256 해시로 설정한 공유 Bearer 토큰을 사용합니다. `opsgate -gen-token`으로 토큰과 해시를 생성하고 원본은 클라이언트 비밀 저장소에만 보관하세요. static 모드에는 OAuth 로그인이나 DCR이 없습니다.
+Builtin OIDC 사용자는 검증된 `email:<주소>` 또는 설정한 issuer의 변경되지 않는 `oidc:<sub>`로 지정합니다. `oidc:<sub>`는 대소문자를 구분하며, 둘 다 일치하면 우선하고 이메일 claim은 필요하지 않습니다. Google 이메일은 `gmail.com`/`googlemail.com`이거나 이메일 도메인과 `hd` claim이 일치하는 Google Workspace 계정이어야 합니다. 다른 Google 주소에는 `email_verified`만으로 충분하지 않습니다. 위 Google 예시에는 Workspace 주소 또는 `oidc:<sub>`를 사용하세요.
+
+OAuth GET 경로는 요청 본문을 거부하고 POST 본문 읽기는 10초로 제한합니다. 동의 전 인증 오류는 로컬 페이지에 표시하며 동의 화면의 Deny는 리디렉션할 수 있습니다. DCR 상한에서는 토큰 발급 이력과 진행 중 인증이 없는 10분 초과 등록을 오래된 순서로 제거합니다. 대기 중 인증은 클라이언트당 20개, 전체 1000개로 제한하고 해당 풀의 가장 오래된 항목을 제거합니다. 브라우저 승인 로그인은 별도 100개 풀을 사용합니다.
+
+`external`은 issuer discovery 및 JWKS로 JWT 서명, issuer, audience, 만료, 허용 알고리즘을 검증합니다. issuer, discovery 및 JWKS URL은 루프백 HTTP를 제외하고 HTTPS가 필요합니다. audience 기본값은 MCP resource URL입니다. 범위는 `scope` 또는 `scp`에서 읽으며 선택적 `claim:<value>` 사용자 목록을 설정하면 신원을 제한하고 토큰 범위와 허용 범위의 교집합을 사용합니다. `static`은 SHA-256 해시로 설정한 공유 Bearer 토큰을 사용합니다. `opsgate -gen-token`으로 토큰과 해시를 생성하고 원본은 클라이언트 비밀 저장소에만 보관하세요. static 모드에는 OAuth 로그인이나 DCR이 없습니다.
 
 조회 도구에는 `ops:read`가 필요합니다. 쓰기는 별도 작업 허용 목록, `ops:write`, OS/RBAC 권한 및 사람의 승인이 모두 필요합니다. HTTP 진입에는 `ops:read`도 필요하므로 원격 쓰기 사용자에게 두 범위를 부여하세요. Kubernetes 네임스페이스 허용/거부 규칙은 쓰기에도 적용됩니다. 조회 유닛 목록은 재시작 권한을 부여하지 않습니다.
 
@@ -148,7 +152,7 @@ Kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 거부됩
 | `auth.mode` | `""` | HTTP 사용 시 필수: builtin, external 또는 static |
 | `auth.builtin.state_file` | `""` | 선택적 0600 상태 파일; 빈 값이면 재시작 시 등록 및 토큰 상태 소실 |
 | `auth.builtin.users` | `[]` | 허용 upstream 사용자 목록; 빈 목록은 모두 거부 |
-| `auth.builtin.users[].subject` | `""` | github:로그인 또는 email:검증된이메일 |
+| `auth.builtin.users[].subject` | `""` | github:로그인, email:검증된이메일 또는 oidc:sub (대소문자 구분) |
 | `auth.builtin.users[].scopes` | `[]` | ops:read 및 선택적 ops:write 권한 |
 | `auth.builtin.upstream.provider` | `""` | github 또는 oidc |
 | `auth.builtin.upstream.issuer` | `""` | OIDC issuer 필수, 예: https://accounts.google.com |

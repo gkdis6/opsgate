@@ -15,34 +15,29 @@ import (
 var errIdentity = errors.New("identity verification failed")
 
 // Caller holds mu. Credentials must use precisely the client's registered method.
-func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) *client {
+func (s *Server) authenticate(r *http.Request) (*client, response) {
 	id := r.PostForm.Get("client_id")
 	secret := r.PostForm.Get("client_secret")
 	method := "none"
 	if len(r.Header.Values("Authorization")) > 1 {
-		oauthError(w, 401, "invalid_client")
-		return nil
+		return nil, errorResponse(401, "invalid_client")
 	}
 	if header := r.Header.Get("Authorization"); header != "" {
 		basicID, basicSecret, ok := r.BasicAuth()
 		if !ok || r.PostForm.Has("client_secret") {
-			oauthError(w, 401, "invalid_client")
-			return nil
+			return nil, errorResponse(401, "invalid_client")
 		}
 		var err error
 		basicID, err = url.QueryUnescape(basicID)
 		if err != nil {
-			oauthError(w, 401, "invalid_client")
-			return nil
+			return nil, errorResponse(401, "invalid_client")
 		}
 		basicSecret, err = url.QueryUnescape(basicSecret)
 		if err != nil {
-			oauthError(w, 401, "invalid_client")
-			return nil
+			return nil, errorResponse(401, "invalid_client")
 		}
 		if id != "" && id != basicID {
-			oauthError(w, 401, "invalid_client")
-			return nil
+			return nil, errorResponse(401, "invalid_client")
 		}
 		id, secret, method = basicID, basicSecret, "client_secret_basic"
 	} else if r.PostForm.Has("client_secret") {
@@ -50,139 +45,125 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) *client {
 	}
 	c := s.clients[id]
 	if c == nil || c.Method != method || (method != "none" && subtle.ConstantTimeCompare([]byte(hash(secret)), []byte(c.SecretHash)) != 1) {
-		w.Header().Set("WWW-Authenticate", `Basic realm="opsgate"`)
-		oauthError(w, 401, "invalid_client")
-		return nil
+		return nil, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("WWW-Authenticate", `Basic realm="opsgate"`)
+			errorResponse(401, "invalid_client")(w, r)
+		}
 	}
-	return c
+	return c, nil
 }
 func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 	if !parseForm(w, r) {
 		return
 	}
+	s.tokenResponse(r)(w, r)
+}
+func (s *Server) tokenResponse(r *http.Request) response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.storageErr != nil || s.closed {
-		oauthError(w, 503, "server_error")
-		return
+		return errorResponse(503, "server_error")
 	}
-	c := s.authenticate(w, r)
-	if c == nil {
-		return
+	c, failure := s.authenticate(r)
+	if failure != nil {
+		return failure
 	}
 	grant := r.PostForm.Get("grant_type")
 	if grant == "" {
-		oauthError(w, 400, "invalid_request")
-		return
+		return errorResponse(400, "invalid_request")
 	}
 	if grant != "authorization_code" && grant != "refresh_token" {
-		oauthError(w, 400, "unsupported_grant_type")
-		return
+		return errorResponse(400, "unsupported_grant_type")
 	}
 	if !slices.Contains(c.GrantTypes, grant) {
-		oauthError(w, 400, "unauthorized_client")
-		return
+		return errorResponse(400, "unauthorized_client")
 	}
 	s.sweep()
 	if grant == "authorization_code" {
 		if r.PostForm.Get("code") == "" {
-			oauthError(w, 400, "invalid_request")
-			return
+			return errorResponse(400, "invalid_request")
 		}
-		s.redeemCode(w, r, c)
+		return s.redeemCode(r, c)
 	} else {
 		if r.PostForm.Get("refresh_token") == "" {
-			oauthError(w, 400, "invalid_request")
-			return
+			return errorResponse(400, "invalid_request")
 		}
-		s.rotate(w, r, c)
+		return s.rotate(r, c)
 	}
 }
-func (s *Server) redeemCode(w http.ResponseWriter, r *http.Request, c *client) {
+func (s *Server) redeemCode(r *http.Request, c *client) response {
 	code := s.codes[hash(r.PostForm.Get("code"))]
 	if code == nil || code.ClientID != c.ID {
-		oauthError(w, 400, "invalid_grant")
-		return
+		return errorResponse(400, "invalid_grant")
 	}
 	// Replays by the authenticated client invalidate all descendants, even if
 	// their original code expiry has passed. RetainUntil follows the family.
 	if code.Used {
 		s.revokeFamily(code.Family)
 		if s.save() != nil {
-			oauthError(w, 503, "server_error")
+			return errorResponse(503, "server_error")
 		} else {
-			oauthError(w, 400, "invalid_grant")
+			return errorResponse(400, "invalid_grant")
 		}
-		return
 	}
 	if r.PostForm.Has("resource") && r.PostForm.Get("resource") != s.resource {
-		oauthError(w, 400, "invalid_target")
-		return
+		return errorResponse(400, "invalid_target")
 	}
 	verifier := r.PostForm.Get("code_verifier")
 	if !s.now().Before(code.Expires) || code.RedirectURI != r.PostForm.Get("redirect_uri") || code.Resource != s.resource || !pkceSyntax(verifier) || !equal(oauth2.S256ChallengeFromVerifier(verifier), code.Challenge) {
-		oauthError(w, 400, "invalid_grant")
-		return
+		return errorResponse(400, "invalid_grant")
 	}
 	scopes, ok := s.user(code.Subject)
 	if !ok {
-		oauthError(w, 400, "invalid_grant")
-		return
+		return errorResponse(400, "invalid_grant")
 	}
 	if s.revoked(code.Family) {
-		oauthError(w, 400, "invalid_grant")
-		return
+		return errorResponse(400, "invalid_grant")
 	}
-	if !s.tokenCapacity(w) {
-		return
+	if len(s.access)+len(s.refresh)+2 > maxTokens {
+		return errorResponse(http.StatusServiceUnavailable, "temporarily_unavailable")
 	}
 	code.Used = true
-	s.issue(w, c, code.Subject, intersection(code.Scopes, scopes), code.Family)
+	return s.issue(c, code.Subject, intersection(code.Scopes, scopes), code.Family)
 }
-func (s *Server) rotate(w http.ResponseWriter, r *http.Request, c *client) {
+func (s *Server) rotate(r *http.Request, c *client) response {
 	refresh := s.refresh[hash(r.PostForm.Get("refresh_token"))]
 	if refresh == nil || refresh.ClientID != c.ID || s.revoked(refresh.Family) {
-		oauthError(w, 400, "invalid_grant")
-		return
+		return errorResponse(400, "invalid_grant")
 	}
 	if refresh.Used {
 		s.revokeFamily(refresh.Family)
 		if s.save() != nil {
-			oauthError(w, 503, "server_error")
+			return errorResponse(503, "server_error")
 		} else {
-			oauthError(w, 400, "invalid_grant")
+			return errorResponse(400, "invalid_grant")
 		}
-		return
 	}
 	if r.PostForm.Has("resource") && r.PostForm.Get("resource") != s.resource {
-		oauthError(w, 400, "invalid_target")
-		return
+		return errorResponse(400, "invalid_target")
 	}
 	if !s.now().Before(refresh.Expires) {
-		oauthError(w, 400, "invalid_grant")
-		return
+		return errorResponse(400, "invalid_grant")
 	}
 	current, ok := s.user(refresh.Subject)
 	if !ok {
-		oauthError(w, 400, "invalid_grant")
-		return
+		return errorResponse(400, "invalid_grant")
 	}
 	scopes := intersection(refresh.Scopes, current)
 	if r.PostForm.Has("scope") {
 		requested := strings.Fields(r.PostForm.Get("scope"))
 		if !subset(requested, scopes) {
-			oauthError(w, 400, "invalid_scope")
-			return
+			return errorResponse(400, "invalid_scope")
 		}
 		scopes = intersection(requested, scopes)
 	}
-	if !s.tokenCapacity(w) {
-		return
+	if len(s.access)+len(s.refresh)+2 > maxTokens {
+		return errorResponse(http.StatusServiceUnavailable, "temporarily_unavailable")
 	}
 	refresh.Used = true
-	s.issue(w, c, refresh.Subject, scopes, refresh.Family)
+	return s.issue(c, refresh.Subject, scopes, refresh.Family)
 }
-func (s *Server) issue(w http.ResponseWriter, c *client, subject string, scopes []string, family string) {
+func (s *Server) issue(c *client, subject string, scopes []string, family string) response {
 	now := s.now()
 	accessRaw, refreshRaw := "og_at_"+random(), "og_rt_"+random()
 	access := &accessToken{ClientID: c.ID, Subject: subject, Scopes: scopes, Family: family, Expires: now.Add(s.cfg.AccessTokenTTL)}
@@ -207,32 +188,32 @@ func (s *Server) issue(w http.ResponseWriter, c *client, subject string, scopes 
 	}
 	c.LastUsed = now
 	if s.save() != nil {
-		oauthError(w, 503, "server_error")
-		return
+		return errorResponse(503, "server_error")
 	}
 	out := map[string]any{"access_token": accessRaw, "token_type": "Bearer", "expires_in": int64(s.cfg.AccessTokenTTL / time.Second), "scope": strings.Join(scopes, " ")}
 	if slices.Contains(c.GrantTypes, "refresh_token") {
 		out["refresh_token"] = refreshRaw
 	}
-	jsonReply(w, 200, out)
+	return jsonResponse(200, out)
 }
 func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
 	if !parseForm(w, r) {
 		return
 	}
+	s.revokeResponse(r)(w, r)
+}
+func (s *Server) revokeResponse(r *http.Request) response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.storageErr != nil || s.closed {
-		oauthError(w, 503, "server_error")
-		return
+		return errorResponse(503, "server_error")
 	}
-	c := s.authenticate(w, r)
-	if c == nil {
-		return
+	c, failure := s.authenticate(r)
+	if failure != nil {
+		return failure
 	}
 	if r.PostForm.Get("token") == "" {
-		oauthError(w, 400, "invalid_request")
-		return
+		return errorResponse(400, "invalid_request")
 	}
 	key := hash(r.PostForm.Get("token"))
 	if t := s.refresh[key]; t != nil && t.ClientID == c.ID {
@@ -242,17 +223,10 @@ func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
 		delete(s.access, key)
 	}
 	if s.save() != nil {
-		oauthError(w, 503, "server_error")
-		return
+		return errorResponse(503, "server_error")
 	}
-	noStore(w)
-	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) tokenCapacity(w http.ResponseWriter) bool {
-	if len(s.access)+len(s.refresh)+2 > maxTokens {
-		oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable")
-		return false
+	return func(w http.ResponseWriter, _ *http.Request) {
+		noStore(w)
+		w.WriteHeader(http.StatusOK)
 	}
-	return true
 }

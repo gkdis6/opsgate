@@ -40,60 +40,55 @@ func htmlError(w http.ResponseWriter, status int, message string) {
 	htmlPage(w, status, pageData{Error: message})
 }
 func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
+	if !rejectGETBody(w, r) {
+		return
+	}
 	v, ok := query(r)
 	if !ok {
 		htmlError(w, 400, "Invalid authorization request")
 		return
 	}
+	s.authorizeResponse(v)(w, r)
+}
+func (s *Server) authorizeResponse(v url.Values) response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c := s.clients[v.Get("client_id")]
 	if c == nil || !slices.Contains(c.RedirectURIs, v.Get("redirect_uri")) {
-		htmlError(w, 400, "Unknown client or redirect URI")
-		return
+		return htmlErrorResponse(400, "Unknown client or redirect URI")
 	}
-	fail := func(code string) {
-		s.redirect(w, r, v.Get("redirect_uri"), v.Get("state"), url.Values{"error": {code}})
+	fail := func(code string) response {
+		return htmlErrorResponse(400, code)
 	}
 	if s.storageErr != nil || s.closed {
-		fail("server_error")
-		return
+		return fail("server_error")
 	}
 	if v.Get("response_type") == "" {
-		fail("invalid_request")
-		return
+		return fail("invalid_request")
 	}
 	if v.Get("response_type") != "code" {
-		fail("unsupported_response_type")
-		return
+		return fail("unsupported_response_type")
 	}
 	if !slices.Contains(c.GrantTypes, "authorization_code") {
-		fail("unauthorized_client")
-		return
+		return fail("unauthorized_client")
 	}
 	if v.Get("code_challenge_method") != "S256" || !pkceSyntax(v.Get("code_challenge")) {
-		fail("invalid_request")
-		return
+		return fail("invalid_request")
 	}
 	scopes := strings.Fields(v.Get("scope"))
 	if !supportedScopes(scopes) {
-		fail("invalid_scope")
-		return
+		return fail("invalid_scope")
 	}
 	if target := v.Get("resource"); v.Has("resource") && target != s.resource {
-		fail("invalid_target")
-		return
+		return fail("invalid_target")
 	}
-	s.startLogin(w, r, &pendingAuth{Kind: "authorize", ClientID: c.ID, RedirectURI: v.Get("redirect_uri"), Challenge: v.Get("code_challenge"), State: v.Get("state"), Requested: scopes})
+	return s.startLogin(&pendingAuth{Kind: "authorize", ClientID: c.ID, RedirectURI: v.Get("redirect_uri"), Challenge: v.Get("code_challenge"), State: v.Get("state"), Requested: scopes})
 }
 
 // Caller holds mu; the pending cookie binds the browser to this one transaction.
-func (s *Server) startLogin(w http.ResponseWriter, r *http.Request, p *pendingAuth) {
+func (s *Server) startLogin(p *pendingAuth) response {
 	s.sweep()
-	if len(s.pending) >= maxPending {
-		htmlError(w, 503, "Too many pending logins")
-		return
-	}
+	s.makePendingRoom(p)
 	id := random()
 	p.UpstreamState = random()
 	p.Verifier = oauth2.GenerateVerifier()
@@ -101,15 +96,16 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request, p *pendingAu
 	p.CSRF = random()
 	p.Expires = s.now().Add(10 * time.Minute)
 	s.pending[hash(id)] = p
-	cookie(w, pendingCookie, id, 600)
-	htmlHeaders(w)
 	opts := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(p.Verifier)}
 	if s.verifier != nil {
 		opts = append(opts, oidc.Nonce(p.Nonce))
 	}
-	http.Redirect(w, r, s.upstream.AuthCodeURL(p.UpstreamState, opts...), http.StatusSeeOther)
+	return redirectResponse(s.upstream.AuthCodeURL(p.UpstreamState, opts...)).withCookie(pendingCookie, id, 600)
 }
 func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
+	if !rejectGETBody(w, r) {
+		return
+	}
 	v, ok := query(r)
 	if !ok {
 		htmlError(w, 400, "Invalid callback")
@@ -133,45 +129,37 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 	verifier, nonce := p.Verifier, p.Nonce
 	s.mu.Unlock()
 	subject, err := s.resolveIdentity(r.Context(), v.Get("code"), verifier, nonce)
+	s.callbackResponse(key, p, subject, err)(w, r)
+}
+func (s *Server) callbackResponse(key string, p *pendingAuth, subject string, err error) response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.pending[key] != p || !s.now().Before(p.Expires) {
-		htmlError(w, 400, "Login expired")
-		return
+		return htmlErrorResponse(400, "Login expired")
 	}
 	if err != nil {
 		delete(s.pending, key)
-		cookie(w, pendingCookie, "", -1)
-		htmlError(w, 403, "Upstream identity verification failed")
-		return
+		return htmlErrorResponse(403, "Upstream identity verification failed").withCookie(pendingCookie, "", -1)
 	}
 	scopes, allowed := s.user(subject)
 	if !allowed || s.storageErr != nil || s.closed {
 		delete(s.pending, key)
-		cookie(w, pendingCookie, "", -1)
-		htmlError(w, 403, "User is not allowed")
-		return
+		return htmlErrorResponse(403, "User is not allowed").withCookie(pendingCookie, "", -1)
 	}
 	if p.Kind == "login" {
 		if !localPath(p.ReturnPath) || len(s.sessions) >= maxPending {
 			delete(s.pending, key)
-			htmlError(w, 400, "Cannot create browser session")
-			return
+			return htmlErrorResponse(400, "Cannot create browser session")
 		}
 		session := random()
 		s.sessions[hash(session)] = &browserSession{Subject: subject, Expires: s.now().Add(12 * time.Hour)}
-		cookie(w, sessionCookie, session, 12*60*60)
-		cookie(w, pendingCookie, "", -1)
 		delete(s.pending, key)
-		htmlHeaders(w)
-		http.Redirect(w, r, p.ReturnPath, http.StatusSeeOther)
-		return
+		return redirectResponse(p.ReturnPath).withCookie(sessionCookie, session, 12*60*60).withCookie(pendingCookie, "", -1)
 	}
 	client := s.clients[p.ClientID]
 	if client == nil {
 		delete(s.pending, key)
-		htmlError(w, 400, "Client no longer registered")
-		return
+		return htmlErrorResponse(400, "Client no longer registered")
 	}
 	p.Subject = subject
 	p.Scopes = scopes
@@ -183,7 +171,7 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 	if host == "" {
 		host = u.Scheme + ":"
 	}
-	htmlPage(w, 200, pageData{Name: client.Name, Host: host, URI: p.RedirectURI, Subject: subject, Scopes: p.Scopes, CSRF: p.CSRF})
+	return htmlResponse(200, pageData{Name: client.Name, Host: host, URI: p.RedirectURI, Subject: subject, Scopes: p.Scopes, CSRF: p.CSRF})
 }
 func (s *Server) resolveIdentity(ctx context.Context, code, verifier, nonce string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -202,14 +190,34 @@ func (s *Server) resolveIdentity(ctx context.Context, code, verifier, nonce stri
 		if !equal(id.Nonce, nonce) {
 			return "", errIdentity
 		}
+		// Immutable subjects take precedence when explicitly allowlisted. They do
+		// not depend on email availability, verification or mailbox ownership.
+		if id.Subject != "" {
+			subject := "oidc:" + id.Subject
+			s.mu.Lock()
+			_, allowed := s.user(subject)
+			s.mu.Unlock()
+			if allowed {
+				return subject, nil
+			}
+		}
 		var claims struct {
-			Email    string `json:"email"`
-			Verified bool   `json:"email_verified"`
+			HostedDomain string `json:"hd"`
+			Email        string `json:"email"`
+			Verified     bool   `json:"email_verified"`
 		}
 		if id.Claims(&claims) != nil || !claims.Verified || len(claims.Email) > 320 || !strings.Contains(claims.Email, "@") || strings.TrimSpace(claims.Email) != claims.Email {
 			return "", errIdentity
 		}
-		return "email:" + strings.ToLower(claims.Email), nil
+		email := strings.ToLower(claims.Email)
+		local, domain, ok := strings.Cut(email, "@")
+		if !ok || local == "" || domain == "" || strings.Contains(domain, "@") {
+			return "", errIdentity
+		}
+		if id.Issuer == "https://accounts.google.com" && domain != "gmail.com" && domain != "googlemail.com" && !strings.EqualFold(claims.HostedDomain, domain) {
+			return "", errIdentity
+		}
+		return "email:" + email, nil
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", s.githubUserURL, nil)
 	if err != nil {
@@ -248,39 +256,34 @@ func (s *Server) consent(w http.ResponseWriter, r *http.Request) {
 		htmlError(w, 403, "Missing consent cookie")
 		return
 	}
+	s.consentResponse(r, hash(cookieValue.Value))(w, r)
+}
+func (s *Server) consentResponse(r *http.Request, key string) response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	key := hash(cookieValue.Value)
 	p := s.pending[key]
 	if s.storageErr != nil || s.closed || p == nil || p.Kind != "authorize" || p.Subject == "" || !s.now().Before(p.Expires) || r.PostForm.Get("csrf_token") == "" || !equal(r.PostForm.Get("csrf_token"), p.CSRF) {
-		htmlError(w, 403, "Invalid consent request")
-		return
+		return htmlErrorResponse(403, "Invalid consent request")
 	}
 	decision := r.PostForm.Get("decision")
 	if decision != "approve" && decision != "deny" {
-		htmlError(w, 400, "Invalid decision")
-		return
+		return htmlErrorResponse(400, "Invalid decision")
 	}
 	delete(s.pending, key)
-	cookie(w, pendingCookie, "", -1)
 	if decision == "deny" {
-		s.redirect(w, r, p.RedirectURI, p.State, url.Values{"error": {"access_denied"}})
-		return
+		return s.redirectResponse(p.RedirectURI, p.State, url.Values{"error": {"access_denied"}}).withCookie(pendingCookie, "", -1)
 	}
 	scopes, ok := s.user(p.Subject)
 	if !ok {
-		htmlError(w, 403, "User is not allowed")
-		return
+		return htmlErrorResponse(403, "User is not allowed").withCookie(pendingCookie, "", -1)
 	}
 	if s.clients[p.ClientID] == nil || len(s.codes) >= maxTokens {
-		htmlError(w, 503, "Authorization unavailable")
-		return
+		return htmlErrorResponse(503, "Authorization unavailable").withCookie(pendingCookie, "", -1)
 	}
 	raw := random()
 	s.codes[hash(raw)] = &authorizationCode{ClientID: p.ClientID, RedirectURI: p.RedirectURI, Challenge: p.Challenge, Subject: p.Subject, Resource: s.resource, Family: random(), Scopes: intersection(p.Scopes, scopes), Expires: s.now().Add(time.Minute), RetainUntil: s.now().Add(s.cfg.RefreshTokenTTL + s.cfg.AccessTokenTTL + time.Minute)}
 	if s.save() != nil {
-		htmlError(w, 503, "Authorization unavailable")
-		return
+		return htmlErrorResponse(503, "Authorization unavailable").withCookie(pendingCookie, "", -1)
 	}
-	s.redirect(w, r, p.RedirectURI, p.State, url.Values{"code": {raw}})
+	return s.redirectResponse(p.RedirectURI, p.State, url.Values{"code": {raw}}).withCookie(pendingCookie, "", -1)
 }

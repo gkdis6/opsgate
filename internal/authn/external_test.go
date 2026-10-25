@@ -179,17 +179,17 @@ func (tr issuerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return recorder.Result(), nil
 }
 func newIssuerServer(handler http.Handler) *issuerServer {
-	return &issuerServer{URL: "http://issuer.example", client: &http.Client{Transport: issuerTransport{handler}}}
+	return &issuerServer{URL: "https://issuer.example", client: &http.Client{Transport: issuerTransport{handler}}}
 }
 func (s *issuerServer) Client() *http.Client { return s.client }
 
 func TestRFC8414IssuerPath(t *testing.T) {
-	const issuer = "http://issuer.example/tenant"
+	const issuer = "https://issuer.example/tenant"
 	var paths []string
 	server := newIssuerServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)
 		if r.URL.Path == "/.well-known/oauth-authorization-server/tenant" {
-			json.NewEncoder(w).Encode(map[string]string{"issuer": issuer, "jwks_uri": "http://issuer.example/keys"})
+			json.NewEncoder(w).Encode(map[string]string{"issuer": issuer, "jwks_uri": "https://issuer.example/keys"})
 		} else {
 			http.NotFound(w, r)
 		}
@@ -229,5 +229,45 @@ func TestTokenScopes(t *testing.T) {
 				t.Fatalf("scopes=%v valid=%v", got, valid)
 			}
 		})
+	}
+}
+
+func TestExternalEndpointTransportSecurity(t *testing.T) {
+	for _, tt := range []struct {
+		name, issuer, jwks string
+		allowed            bool
+	}{
+		{"HTTPS", "https://issuer.example", "https://issuer.example/keys", true},
+		{"HTTP issuer", "http://issuer.example", "https://issuer.example/keys", false},
+		{"HTTP JWKS", "https://issuer.example", "http://issuer.example/keys", false},
+		{"localhost", "http://localhost:8080", "http://localhost:8080/keys", true},
+		{"IPv4 loopback", "http://127.0.0.1:8080", "http://127.0.0.1:8080/keys", true},
+		{"IPv4 loopback range", "http://127.0.0.2:8080", "http://127.0.0.2:8080/keys", true},
+		{"IPv6 loopback", "http://[::1]:8080", "http://[::1]:8080/keys", true},
+		{"localhost suffix", "http://localhost.evil", "http://localhost.evil/keys", false},
+		{"private network", "http://192.168.1.1", "http://192.168.1.1/keys", false},
+		{"JWKS localhost suffix", "https://issuer.example", "http://localhost.evil/keys", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var fetched []string
+			client := &http.Client{Transport: issuerTransport{http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fetched = append(fetched, r.URL.String())
+				json.NewEncoder(w).Encode(map[string]string{"issuer": tt.issuer, "jwks_uri": tt.jwks})
+			})}}
+			_, err := External(oidc.ClientContext(context.Background(), client), config.ExternalAuth{Issuer: tt.issuer}, "resource")
+			if (err == nil) != tt.allowed {
+				t.Fatalf("allowed=%v error=%v", tt.allowed, err)
+			}
+			if !validEndpoint(tt.issuer) && len(fetched) != 0 {
+				t.Fatal("fetched insecure discovery endpoint")
+			}
+		})
+	}
+}
+
+func TestDiscoveryRejectsInsecureIssuerBeforeFetching(t *testing.T) {
+	client := &http.Client{Transport: issuerTransport{http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("insecure discovery request sent") })}}
+	if _, err := discover(context.Background(), client, "http://issuer.example"); err == nil {
+		t.Fatal("insecure discovery accepted")
 	}
 }

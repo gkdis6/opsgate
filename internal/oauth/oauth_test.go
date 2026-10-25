@@ -33,10 +33,26 @@ type fixture struct {
 	id, secret, verifier, redirect string
 }
 
+type fixtureIdentity struct {
+	issuer, subject, hostedDomain string
+	omitEmail                     bool
+}
+
 func newFixture(t *testing.T, oidcMode, verified, goodNonce bool, login string) *fixture {
+	return newFixtureIdentity(t, oidcMode, verified, goodNonce, login, fixtureIdentity{})
+}
+
+func newFixtureIdentity(t *testing.T, oidcMode, verified, goodNonce bool, login string, identity fixtureIdentity) *fixture {
 	t.Helper()
 	t.Setenv("OG_TEST_SECRET", "upstream-secret")
-	origin := "https://upstream.test"
+	origin := identity.issuer
+	if origin == "" {
+		origin = "https://upstream.test"
+	}
+	subject := identity.subject
+	if subject == "" {
+		subject = "123"
+	}
 	var nonce, upstreamChallenge string
 	router := &testTransport{handlers: map[string]http.Handler{}}
 	var signer jose.Signer
@@ -91,7 +107,11 @@ func newFixture(t *testing.T, oidcMode, verified, goodNonce bool, login string) 
 				if !goodNonce {
 					n = "wrong-nonce"
 				}
-				claims, _ := json.Marshal(map[string]any{"iss": origin, "sub": "123", "aud": "upstream-client", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix(), "nonce": n, "email": login, "email_verified": verified})
+				values := map[string]any{"iss": origin, "sub": subject, "aud": "upstream-client", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix(), "nonce": n, "email_verified": verified, "hd": identity.hostedDomain}
+				if !identity.omitEmail {
+					values["email"] = login
+				}
+				claims, _ := json.Marshal(values)
 				signed, err := signer.Sign(claims)
 				if err != nil {
 					t.Error(err)
@@ -242,30 +262,25 @@ func (f *fixture) verify(t *testing.T, token string, valid bool) {
 }
 
 func TestAuthorizeAttacks(t *testing.T) {
-	for _, tt := range []struct {
-		name, key, value, oauthError string
-		noRedirect                   bool
-	}{
-		{"unknown client", "client_id", "unknown", "", true}, {"redirect mismatch", "redirect_uri", "https://evil.example/cb", "", true},
-		{"plain PKCE", "code_challenge_method", "plain", "invalid_request", false}, {"missing PKCE method", "code_challenge_method", "", "invalid_request", false}, {"missing challenge", "code_challenge", "", "invalid_request", false},
-		{"resource", "resource", "https://evil.example/mcp", "invalid_target", false}, {"scope", "scope", "admin", "invalid_scope", false}, {"response type", "response_type", "token", "unsupported_response_type", false},
-		{"missing response type", "response_type", "", "invalid_request", false},
+	for _, tt := range []struct{ name, key, value, oauthError string }{
+		{"unknown client", "client_id", "unknown", "Unknown client"},
+		{"redirect mismatch", "redirect_uri", "https://evil.example/cb", "Unknown client"},
+		{"plain PKCE", "code_challenge_method", "plain", "invalid_request"},
+		{"missing PKCE method", "code_challenge_method", "", "invalid_request"},
+		{"missing challenge", "code_challenge", "", "invalid_request"},
+		{"resource", "resource", "https://evil.example/mcp", "invalid_target"},
+		{"scope", "scope", "admin", "invalid_scope"},
+		{"response type", "response_type", "token", "unsupported_response_type"},
+		{"missing response type", "response_type", "", "invalid_request"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFixture(t, false, true, true, "Alice")
 			v := f.authQuery()
 			v.Set(tt.key, tt.value)
 			r := f.request(t, "GET", "/oauth/authorize?"+v.Encode(), "", false)
-			loc := r.Header.Get("Location")
-			if tt.noRedirect {
-				if loc != "" || r.StatusCode < 400 {
-					t.Fatalf("unsafe redirect: %d %s", r.StatusCode, loc)
-				}
-				return
-			}
-			u, _ := url.Parse(loc)
-			if u.Query().Get("error") != tt.oauthError || u.Query().Get("iss") != f.web.URL || u.Query().Get("state") != "client-state" {
-				t.Fatalf("wrong OAuth error: %s", loc)
+			body, _ := io.ReadAll(r.Body)
+			if r.StatusCode != 400 || r.Header.Get("Location") != "" || !strings.HasPrefix(r.Header.Get("Content-Type"), "text/html") || !strings.Contains(string(body), tt.oauthError) {
+				t.Fatalf("authorization error must stay local: %d %s %s", r.StatusCode, r.Header.Get("Location"), body)
 			}
 		})
 	}

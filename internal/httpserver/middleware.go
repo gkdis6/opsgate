@@ -36,7 +36,11 @@ func common(next http.Handler) http.Handler {
 			if status == 0 {
 				status = http.StatusOK
 			}
-			log.Printf("http method=%q path=%q status=%d duration=%s", r.Method, r.URL.Path, status, time.Since(start))
+			path := r.URL.Path
+			if strings.HasPrefix(path, "/approve/") {
+				path = "/approve/*"
+			}
+			log.Printf("http method=%q path=%q status=%d duration=%s", r.Method, path, status, time.Since(start))
 		}()
 		defer func() {
 			if recovered := recover(); recovered != nil {

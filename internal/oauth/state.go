@@ -201,8 +201,9 @@ func (s *Server) sweep() {
 			delete(s.sessions, k)
 		}
 	}
+	protected := s.protectedClients()
 	for k, c := range s.clients {
-		if c.LastUsed.IsZero() && now.Sub(c.Created) >= 24*time.Hour || !c.LastUsed.IsZero() && now.Sub(c.LastUsed) >= 90*24*time.Hour {
+		if !protected[k] && (c.LastUsed.IsZero() && now.Sub(c.Created) >= 24*time.Hour || !c.LastUsed.IsZero() && now.Sub(c.LastUsed) >= 90*24*time.Hour) {
 			delete(s.clients, k)
 		}
 	}
@@ -241,4 +242,81 @@ func (s *Server) revokeFamily(family string) {
 		}
 	}
 	s.families[family] = expiry
+}
+
+// Caller holds mu. Pending browser approvals use a separate, smaller pool so
+// DCR clients cannot crowd out logins needed to approve existing operations.
+func (s *Server) makePendingRoom(in *pendingAuth) {
+	login := in.Kind == "login"
+	limit := maxPending
+	if login {
+		limit = maxLoginPending
+	}
+	for {
+		count, clientCount := 0, 0
+		oldest, clientOldest := "", ""
+		for key, p := range s.pending {
+			if (p.Kind == "login") != login {
+				continue
+			}
+			count++
+			if oldest == "" || p.Expires.Before(s.pending[oldest].Expires) {
+				oldest = key
+			}
+			if !login && p.ClientID == in.ClientID {
+				clientCount++
+				if clientOldest == "" || p.Expires.Before(s.pending[clientOldest].Expires) {
+					clientOldest = key
+				}
+			}
+		}
+		if clientCount >= maxClientPending {
+			delete(s.pending, clientOldest)
+		} else if count >= limit {
+			delete(s.pending, oldest)
+		} else {
+			return
+		}
+	}
+}
+
+func (s *Server) protectedClients() map[string]bool {
+	protected := make(map[string]bool)
+	for _, t := range s.access {
+		protected[t.ClientID] = true
+	}
+	for _, t := range s.refresh {
+		protected[t.ClientID] = true
+	}
+	for _, c := range s.codes {
+		protected[c.ClientID] = true
+	}
+	for _, p := range s.pending {
+		protected[p.ClientID] = true
+	}
+	return protected
+}
+
+// Caller holds mu. Reclaim only old registrations that never issued tokens and
+// have no outstanding authorization; active clients retain their registration.
+func (s *Server) pruneClients() {
+	if len(s.clients) < s.cfg.MaxClients {
+		return
+	}
+	protected := s.protectedClients()
+	for len(s.clients) >= s.cfg.MaxClients {
+		oldest := ""
+		for id, c := range s.clients {
+			if !c.LastUsed.IsZero() || protected[id] || s.now().Sub(c.Created) <= 10*time.Minute {
+				continue
+			}
+			if oldest == "" || c.Created.Before(s.clients[oldest].Created) {
+				oldest = id
+			}
+		}
+		if oldest == "" {
+			return
+		}
+		delete(s.clients, oldest)
+	}
 }

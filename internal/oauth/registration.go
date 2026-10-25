@@ -20,6 +20,9 @@ type registration struct {
 }
 
 func (s *Server) metadata(w http.ResponseWriter, r *http.Request) {
+	if !rejectGETBody(w, r) {
+		return
+	}
 	jsonReply(w, 200, map[string]any{
 		"issuer": s.issuer, "authorization_endpoint": s.issuer + "/oauth/authorize", "token_endpoint": s.issuer + "/oauth/token", "registration_endpoint": s.issuer + "/oauth/register", "revocation_endpoint": s.issuer + "/oauth/revoke",
 		"response_types_supported": []string{"code"}, "grant_types_supported": []string{"authorization_code", "refresh_token"}, "code_challenge_methods_supported": []string{"S256"}, "token_endpoint_auth_methods_supported": []string{"none", "client_secret_basic", "client_secret_post"}, "scopes_supported": []string{"ops:read", "ops:write"}, "authorization_response_iss_parameter_supported": true,
@@ -45,6 +48,7 @@ func validRedirect(raw string) bool {
 	}
 }
 func (s *Server) register(w http.ResponseWriter, r *http.Request) {
+	readDeadline(w)
 	if !s.registrationLimit.Allow() {
 		w.Header().Set("Retry-After", "3")
 		oauthError(w, 429, "slow_down")
@@ -107,16 +111,18 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, 400, "invalid_client_metadata")
 		return
 	}
+	s.registerResponse(in)(w, r)
+}
+func (s *Server) registerResponse(in registration) response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sweep()
 	if s.storageErr != nil || s.closed {
-		oauthError(w, 503, "server_error")
-		return
+		return errorResponse(503, "server_error")
 	}
+	s.pruneClients()
 	if len(s.clients) >= s.cfg.MaxClients {
-		oauthError(w, 400, "invalid_client_metadata")
-		return
+		return errorResponse(400, "invalid_client_metadata")
 	}
 	id := random()
 	c := &client{ID: id, RedirectURIs: in.RedirectURIs, Name: in.Name, Method: in.Method, GrantTypes: in.GrantTypes, Created: s.now()}
@@ -127,13 +133,12 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	}
 	s.clients[id] = c
 	if s.save() != nil {
-		oauthError(w, 503, "server_error")
-		return
+		return errorResponse(503, "server_error")
 	}
 	out := map[string]any{"client_id": id, "client_id_issued_at": c.Created.Unix(), "redirect_uris": c.RedirectURIs, "client_name": c.Name, "token_endpoint_auth_method": c.Method, "grant_types": c.GrantTypes, "response_types": []string{"code"}}
 	if secret != "" {
 		out["client_secret"] = secret
 		out["client_secret_expires_at"] = 0
 	}
-	jsonReply(w, http.StatusCreated, out)
+	return jsonResponse(http.StatusCreated, out)
 }

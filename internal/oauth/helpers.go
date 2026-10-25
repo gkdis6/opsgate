@@ -14,14 +14,17 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 )
 
 const (
-	pendingCookie = "__Host-og_auth"
-	sessionCookie = "__Host-og_session"
-	bodyLimit     = 64 << 10
-	maxPending    = 1000
-	maxTokens     = 100000
+	pendingCookie    = "__Host-og_auth"
+	sessionCookie    = "__Host-og_session"
+	bodyLimit        = 64 << 10
+	maxPending       = 1000
+	maxClientPending = 20
+	maxLoginPending  = 100
+	maxTokens        = 100000
 )
 
 func random() string {
@@ -74,7 +77,7 @@ func subset(a, b []string) bool {
 }
 func (s *Server) user(subject string) ([]string, bool) {
 	for _, u := range s.cfg.Users {
-		if strings.EqualFold(subject, u.Subject) {
+		if subject == u.Subject || !strings.HasPrefix(subject, "oidc:") && !strings.HasPrefix(u.Subject, "oidc:") && strings.EqualFold(subject, u.Subject) {
 			return intersection(u.Scopes, []string{"ops:read", "ops:write"}), true
 		}
 	}
@@ -112,6 +115,7 @@ func oauthError(w http.ResponseWriter, status int, code string) {
 	jsonReply(w, status, map[string]string{"error": code})
 }
 func parseForm(w http.ResponseWriter, r *http.Request) bool {
+	readDeadline(w)
 	noStore(w)
 	mediatype, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediatype != "application/x-www-form-urlencoded" {
@@ -149,7 +153,7 @@ func query(r *http.Request) (url.Values, bool) {
 func cookie(w http.ResponseWriter, name, value string, age int) {
 	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: age})
 }
-func (s *Server) redirect(w http.ResponseWriter, r *http.Request, uri, state string, params url.Values) {
+func (s *Server) redirectResponse(uri, state string, params url.Values) response {
 	u, _ := url.Parse(uri)
 	v := u.Query()
 	for k, values := range params {
@@ -158,8 +162,7 @@ func (s *Server) redirect(w http.ResponseWriter, r *http.Request, uri, state str
 	v.Set("state", state)
 	v.Set("iss", s.issuer)
 	u.RawQuery = v.Encode()
-	htmlHeaders(w)
-	http.Redirect(w, r, u.String(), http.StatusSeeOther)
+	return redirectResponse(u.String())
 }
 
 // OAuth libraries read bodies themselves; cap transport reads to bound hostile upstreams.
@@ -177,4 +180,19 @@ func (t boundedTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 type boundedBody struct {
 	io.Reader
 	io.Closer
+}
+
+// Bound POST parsing and any body draining performed when writing the response.
+func readDeadline(w http.ResponseWriter) {
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(10 * time.Second))
+}
+
+func rejectGETBody(w http.ResponseWriter, r *http.Request) bool {
+	if (r.Method == http.MethodGet || r.Method == http.MethodHead) && (r.ContentLength > 0 || len(r.TransferEncoding) > 0) {
+		// Do not drain an attacker-controlled body before returning the error.
+		w.Header().Set("Connection", "close")
+		htmlError(w, http.StatusBadRequest, "Request body is not allowed")
+		return false
+	}
+	return true
 }

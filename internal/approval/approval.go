@@ -34,6 +34,8 @@ type Manager struct {
 	publicURL string
 	browser   BrowserAuth
 	approvals map[string]*pending
+	key       []byte
+	used      map[string]time.Time
 	now       func() time.Time
 }
 
@@ -49,10 +51,15 @@ type pending struct {
 // New returns a Manager. browser may be nil, which disables web approval.
 // publicURL is the origin used to build approval links.
 func New(cfg config.Approval, publicURL string, browser BrowserAuth) *Manager {
-	return &Manager{
+	m := &Manager{
 		ttl: cfg.TTL, publicURL: strings.TrimRight(publicURL, "/"), browser: browser,
-		approvals: make(map[string]*pending), now: time.Now,
+		approvals: make(map[string]*pending), used: make(map[string]time.Time), now: time.Now,
 	}
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err == nil {
+		m.key = key
+	}
+	return m
 }
 
 // Confirm implements tool.Confirmer.
@@ -73,6 +80,14 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	}
 	r.Summary = redact.String(r.Summary)
 	hash := sha256.Sum256(args)
+	if req != nil && req.Params != nil {
+		if response, ok := req.Params.InputResponses[approvalInputID]; ok {
+			return m.confirmInput(req.Params.RequestState, response, r, hash)
+		}
+		if req.Params.RequestState != "" || len(req.Params.InputResponses) != 0 {
+			return "elicitation", tool.Denied("invalid or expired approval")
+		}
+	}
 	m.mu.Lock()
 	m.sweepLocked()
 	if r.ApprovalID != "" {
@@ -95,26 +110,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	m.mu.Unlock()
 
 	if supportsElicitation(req) {
-		waitCtx, cancel := context.WithTimeout(ctx, m.ttl)
-		result, err := req.Session.Elicit(waitCtx, &mcp.ElicitParams{
-			Mode: "form",
-			Message: fmt.Sprintf("opsgate approval request\n\n%s\n\nRequested by %s via %s. Approve?",
-				r.Summary, r.Caller.User, r.Caller.Transport),
-			RequestedSchema: map[string]any{
-				"type": "object", "required": []string{"approve"},
-				"properties": map[string]any{"approve": map[string]any{
-					"type": "boolean", "title": "Approve this action",
-				}},
-			},
-		})
-		waitErr := waitCtx.Err()
-		cancel()
-		if err == nil && waitErr == nil {
-			if result != nil && result.Action == "accept" && result.Content["approve"] == true {
-				return "elicitation", nil
-			}
-			return "elicitation", tool.Denied("rejected by human")
-		}
+		return "elicitation", m.requestInput(r, hash)
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -147,11 +143,11 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 }
 
 func supportsElicitation(req *mcp.CallToolRequest) bool {
-	if req == nil || req.Session == nil {
+	if req == nil {
 		return false
 	}
-	p := req.Session.InitializeParams()
-	return p != nil && p.Capabilities != nil && p.Capabilities.Elicitation != nil
+	caps := req.ClientCapabilities()
+	return caps != nil && caps.Elicitation != nil
 }
 
 func (m *Manager) pendingError(p *pending) error {
@@ -165,6 +161,11 @@ func (m *Manager) sweepLocked() {
 	for id, p := range m.approvals {
 		if !now.Before(p.expires) {
 			delete(m.approvals, id)
+		}
+	}
+	for nonce, expires := range m.used {
+		if !now.Before(expires) {
+			delete(m.used, nonce)
 		}
 	}
 }

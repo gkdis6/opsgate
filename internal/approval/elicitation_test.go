@@ -1,10 +1,11 @@
 package approval
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/config"
 	"github.com/gkdis6/opsgate/internal/tool"
 )
@@ -46,112 +48,160 @@ func connectApproval(t *testing.T, s *mcp.Server, opts *mcp.ClientOptions, versi
 	return cs
 }
 
+func newApprovalTool(t *testing.T, m *Manager, r tool.ConfirmRequest) (*mcp.Server, *atomic.Int32, string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "audit")
+	logger, err := audit.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { logger.Close() })
+	env := &tool.Env{Confirm: m, Audit: logger, Timeout: time.Second, MaxOutputBytes: 4096, Fallback: &r.Caller}
+	applies := new(atomic.Int32)
+	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	tool.AddWrite(s, env, tool.WriteSpec{Name: r.Tool}, tool.WriteHandler[restartInput]{
+		Plan: func(context.Context, tool.Caller, restartInput) (tool.Plan, error) {
+			return tool.Plan{Summary: r.Summary}, nil
+		},
+		Apply: func(context.Context, tool.Caller, restartInput) (string, error) {
+			applies.Add(1)
+			return "restarted", nil
+		},
+	})
+	return s, applies, path
+}
+
+func approvalCall(t *testing.T, cs *mcp.ClientSession, p *mcp.CallToolParams) *mcp.CallToolResult {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	r, err := cs.CallTool(ctx, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
 func TestElicitation(t *testing.T) {
-	for _, tc := range []struct {
-		name, action string
-		approve      any
-		noCapability bool
-		newProtocol  bool
-		clientErr    error
-		timeout, web bool
-		wantMethod   string
-		wantDenied   bool
-		wantPending  bool
-		wantMessage  string
-	}{
-		{name: "accept", action: "accept", approve: true, wantMethod: "elicitation"},
-		{name: "decline", action: "decline", wantMethod: "elicitation", wantDenied: true, wantMessage: "rejected by human"},
-		{name: "cancel", action: "cancel", wantMethod: "elicitation", wantDenied: true, wantMessage: "rejected by human"},
-		{name: "false", action: "accept", approve: false, wantMethod: "elicitation", wantDenied: true, wantMessage: "rejected by human"},
-		{name: "missing approve", action: "accept", wantMethod: "elicitation", wantDenied: true, wantMessage: "rejected by human"},
-		{name: "wrong type", action: "accept", approve: "true", wantDenied: true, wantMessage: "no human confirmation channel"},
-		{name: "no capability", noCapability: true, wantDenied: true, wantMessage: "no human confirmation channel"},
-		{name: "elicitation error", clientErr: errors.New("client error password=hidden"), wantDenied: true, wantMessage: "no human confirmation channel"},
-		{name: "error falls back to web", clientErr: errors.New("client error"), web: true, wantMethod: "web", wantPending: true},
-		{name: "no capability falls back to web", noCapability: true, web: true, wantMethod: "web", wantPending: true},
-		{name: "decline never falls back", action: "decline", web: true, wantMethod: "elicitation", wantDenied: true, wantMessage: "rejected by human"},
-		{name: "timeout", timeout: true, wantDenied: true, wantMessage: "no human confirmation channel"},
-		{name: "timeout falls back to web", timeout: true, web: true, wantMethod: "web", wantPending: true},
-		{name: "new protocol denies server elicitation", newProtocol: true, wantDenied: true, wantMessage: "no human confirmation channel"},
-		{name: "new protocol web fallback", newProtocol: true, web: true, wantMethod: "web", wantPending: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var browser BrowserAuth
-			if tc.web {
-				browser = fakeBrowser{}
-			}
-			ttl := 5 * time.Second
-			if tc.timeout {
-				ttl = 250 * time.Millisecond
-			}
-			m := New(config.Approval{TTL: ttl}, "https://ops.example", browser)
-			var elicited atomic.Int32
-			opts := &mcp.ClientOptions{}
-			if !tc.noCapability {
-				opts.ElicitationHandler = func(ctx context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
-					elicited.Add(1)
-					want := "opsgate approval request\n\nRestart nginx.service\n\nRequested by github:operator via http. Approve?"
-					if req.Params.Mode != "form" || req.Params.Message != want {
-						t.Errorf("elicitation params = %+v", req.Params)
+	for _, version := range []string{"2026-07-28", "2025-11-25"} {
+		t.Run(version, func(t *testing.T) {
+			for _, tc := range []struct {
+				name, action string
+				approve      any
+				noCapability bool
+				web          bool
+				wantDenied   bool
+			}{
+				{name: "accept", action: "accept", approve: true},
+				{name: "decline", action: "decline", wantDenied: true},
+				{name: "cancel", action: "cancel", wantDenied: true},
+				{name: "false", action: "accept", approve: false, wantDenied: true},
+				{name: "missing approve", action: "accept", wantDenied: true},
+				{name: "no capability", noCapability: true, wantDenied: true},
+				{name: "no capability web", noCapability: true, web: true},
+				{name: "decline with web", action: "decline", web: true, wantDenied: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					var browser BrowserAuth
+					if tc.web {
+						browser = fakeBrowser{}
 					}
-					data, err := json.Marshal(req.Params.RequestedSchema)
+					m := New(config.Approval{TTL: time.Minute}, "https://ops.example", browser)
+					var elicited atomic.Int32
+					opts := &mcp.ClientOptions{}
+					if !tc.noCapability {
+						opts.ElicitationHandler = func(ctx context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+							elicited.Add(1)
+							want := "opsgate approval request\n\nRestart nginx.service\n\nRequested by github:operator via http. Approve?"
+							if req.Params.Mode != "form" || req.Params.Message != want {
+								t.Errorf("elicitation params = %+v", req.Params)
+							}
+							data, err := json.Marshal(req.Params.RequestedSchema)
+							if err != nil {
+								t.Error(err)
+							}
+							var schema struct {
+								Type       string
+								Required   []string
+								Properties map[string]struct{ Type, Title string }
+							}
+							if err := json.Unmarshal(data, &schema); err != nil {
+								t.Error(err)
+							}
+							if schema.Type != "object" || len(schema.Required) != 1 || schema.Required[0] != "approve" || len(schema.Properties) != 1 ||
+								schema.Properties["approve"].Type != "boolean" || schema.Properties["approve"].Title != "Approve this action" {
+								t.Errorf("schema = %s", data)
+							}
+							result := &mcp.ElicitResult{Action: tc.action}
+							if tc.approve != nil {
+								result.Content = map[string]any{"approve": tc.approve}
+							}
+							return result, nil
+						}
+					}
+					s, applies, path := newApprovalTool(t, m, approvalRequest())
+					// Disabling client retries for the old protocol proves that the
+					// SDK's server middleware performs the elicitation and retry.
+					if version == "2025-11-25" {
+						opts.MultiRoundTrip = &mcp.MultiRoundTripOptions{Disabled: true}
+					}
+					cs := connectApproval(t, s, opts, version)
+					if got := cs.InitializeResult().ProtocolVersion; got != version {
+						t.Fatalf("protocol = %s, want %s", got, version)
+					}
+					params := &mcp.CallToolParams{Name: "restart", Arguments: map[string]any{"unit": "nginx.service"}}
+					result := approvalCall(t, cs, params)
+					wantApply := int32(0)
+					if !tc.wantDenied && !tc.noCapability {
+						wantApply = 1
+					}
+					if result.IsError != tc.wantDenied || applies.Load() != wantApply || result.NeedsInput() {
+						t.Fatalf("result = %+v; applies = %d", result, applies.Load())
+					}
+					if !tc.noCapability && tc.wantDenied && !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "rejected by human") {
+						t.Errorf("denial = %+v", result)
+					}
+					if tc.noCapability && tc.web && !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "/approve/") {
+						t.Errorf("web instructions = %+v", result)
+					}
+					wantElicited := int32(1)
+					if tc.noCapability {
+						wantElicited = 0
+					}
+					if elicited.Load() != wantElicited || len(params.InputResponses) != 0 || params.RequestState != "" {
+						t.Errorf("elicited = %d; original params = %+v", elicited.Load(), params)
+					}
+					data, err := os.ReadFile(path)
 					if err != nil {
-						t.Error(err)
+						t.Fatal(err)
 					}
-					var schema struct {
-						Type       string
-						Required   []string
-						Properties map[string]struct{ Type, Title string }
+					lines := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
+					if !tc.noCapability {
+						if len(lines) != 2 {
+							t.Fatalf("audit = %s", data)
+						}
+						var pending audit.Event
+						if err := json.Unmarshal(lines[0], &pending); err != nil {
+							t.Fatal(err)
+						}
+						if pending.Outcome != "pending" || pending.Approval != "elicitation" || pending.OutputSize != 0 || pending.Error != "" {
+							t.Errorf("pending audit = %+v", pending)
+						}
 					}
-					if err := json.Unmarshal(data, &schema); err != nil {
-						t.Error(err)
+					var last audit.Event
+					if err := json.Unmarshal(lines[len(lines)-1], &last); err != nil {
+						t.Fatal(err)
 					}
-					if schema.Type != "object" || len(schema.Required) != 1 || schema.Required[0] != "approve" || len(schema.Properties) != 1 ||
-						schema.Properties["approve"].Type != "boolean" || schema.Properties["approve"].Title != "Approve this action" {
-						t.Errorf("schema = %s", data)
+					wantOutcome := "ok"
+					if tc.wantDenied {
+						wantOutcome = "denied"
+					} else if tc.noCapability {
+						wantOutcome = "pending"
 					}
-					if tc.timeout {
-						<-ctx.Done()
-						return nil, ctx.Err()
+					if last.Outcome != wantOutcome {
+						t.Errorf("final audit = %+v", last)
 					}
-					if tc.clientErr != nil {
-						return nil, tc.clientErr
-					}
-					result := &mcp.ElicitResult{Action: tc.action}
-					if tc.approve != nil {
-						result.Content = map[string]any{"approve": tc.approve}
-					}
-					return result, nil
-				}
-			}
-			s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-			mcp.AddTool(s, &mcp.Tool{Name: "restart"}, func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
-				method, err := m.Confirm(ctx, req, approvalRequest())
-				if method != tc.wantMethod || errors.Is(err, tool.ErrDenied) != tc.wantDenied || errors.Is(err, tool.ErrApprovalPending) != tc.wantPending {
-					t.Errorf("Confirm = %q, %v", method, err)
-				}
-				if tc.wantMessage != "" && (err == nil || !strings.Contains(err.Error(), tc.wantMessage)) {
-					t.Errorf("Confirm error = %v, want %q", err, tc.wantMessage)
-				}
-				if err != nil && strings.Contains(err.Error(), "hidden") {
-					t.Error("client error leaked")
-				}
-				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprint(err)}}}, nil, nil
-			})
-			version := "2025-11-25"
-			if tc.newProtocol {
-				version = "2026-07-28"
-			}
-			cs := connectApproval(t, s, opts, version)
-			if _, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "restart", Arguments: map[string]any{}}); err != nil {
-				t.Fatal(err)
-			}
-			wantElicited := int32(1)
-			if tc.noCapability || tc.newProtocol {
-				wantElicited = 0
-			}
-			if elicited.Load() != wantElicited {
-				t.Errorf("elicitation handler called %d times, want %d", elicited.Load(), wantElicited)
+				})
 			}
 		})
 	}

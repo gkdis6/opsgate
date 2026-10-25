@@ -32,7 +32,7 @@ func (f confirmFunc) Confirm(ctx context.Context, req *mcp.CallToolRequest, r Co
 	return f(ctx, req, r)
 }
 
-func connectWrite(t *testing.T, env *Env, spec WriteSpec, h WriteHandler[writeTestInput]) *mcp.ClientSession {
+func connectWrite(t *testing.T, env *Env, spec WriteSpec, h WriteHandler[writeTestInput], opts ...*mcp.ClientOptions) *mcp.ClientSession {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	t.Cleanup(cancel)
@@ -44,13 +44,71 @@ func connectWrite(t *testing.T, env *Env, spec WriteSpec, h WriteHandler[writeTe
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { ss.Close() })
-	c := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "1"}, nil)
+	var options *mcp.ClientOptions
+	if len(opts) > 0 {
+		options = opts[0]
+	}
+	c := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "1"}, options)
 	cs, err := c.Connect(ctx, ct, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { cs.Close() })
 	return cs
+}
+
+func TestAddWriteInputRequired(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit")
+	logger, err := audit.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { logger.Close() })
+	input := &InputRequired{
+		Requests: mcp.InputRequestMap{"approval": &mcp.ElicitParams{
+			Mode: "form", Message: "Approve?", RequestedSchema: map[string]any{"type": "object"},
+		}},
+		State: "opaque-state-must-not-be-logged",
+	}
+	var applies atomic.Int32
+	env := &Env{
+		Audit: logger, Timeout: time.Second, MaxOutputBytes: 1024,
+		Fallback: &Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeWrite}},
+		Confirm: confirmFunc(func(context.Context, *mcp.CallToolRequest, ConfirmRequest) (string, error) {
+			return "", fmt.Errorf("wrapped: %w", input)
+		}),
+	}
+	cs := connectWrite(t, env, WriteSpec{Name: "change"}, WriteHandler[writeTestInput]{
+		Plan: func(context.Context, Caller, writeTestInput) (Plan, error) {
+			return Plan{Summary: "restart service"}, nil
+		},
+		Apply: func(context.Context, Caller, writeTestInput) (string, error) {
+			applies.Add(1)
+			return "changed", nil
+		},
+	}, &mcp.ClientOptions{MultiRoundTrip: &mcp.MultiRoundTripOptions{Disabled: true}})
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "change", Arguments: map[string]any{"target": "service", "password": "secret"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.NeedsInput() || result.IsError || len(result.Content) != 0 || result.StructuredContent != nil ||
+		result.RequestState != input.State || len(result.InputRequests) != 1 || applies.Load() != 0 {
+		t.Fatalf("result = %+v; applies = %d", result, applies.Load())
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ev audit.Event
+	if err := json.Unmarshal(data, &ev); err != nil {
+		t.Fatal(err)
+	}
+	if ev.Outcome != "pending" || ev.Approval != "elicitation" || ev.Error != "" || ev.OutputSize != 0 ||
+		strings.Contains(string(data), input.State) || strings.Contains(input.Error(), input.State) {
+		t.Errorf("pending audit = %s", data)
+	}
 }
 
 func TestAddWrite(t *testing.T) {

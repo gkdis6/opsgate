@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -265,8 +266,11 @@ func (c Config) Validate() error {
 			return err
 		}
 	}
-	for _, p := range c.Providers.Host.CommandPrefix {
-		if !strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "-") {
+	for i, p := range c.Providers.Host.CommandPrefix {
+		if i == 0 && !filepath.IsAbs(p) {
+			return fmt.Errorf("providers.host.command_prefix[0] must be an absolute executable path")
+		}
+		if !filepath.IsAbs(p) && !strings.HasPrefix(p, "-") {
 			return fmt.Errorf("providers.host.command_prefix: %q must be an absolute path or a flag", p)
 		}
 	}

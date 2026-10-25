@@ -61,13 +61,23 @@ type ConfirmRequest struct {
 // Confirmer obtains a human decision that the model cannot forge. It
 // returns the method used ("elicitation", "web") on approval, an error
 // wrapping ErrDenied on refusal, or an error wrapping ErrApprovalPending
-// whose message tells the model what the human must do next.
+// whose message tells the model what the human must do next. InputRequired
+// requests input through MCP's multi round-trip flow.
 type Confirmer interface {
 	Confirm(ctx context.Context, req *mcp.CallToolRequest, r ConfirmRequest) (method string, err error)
 }
 
 // ErrApprovalPending means a human has been asked but has not decided yet.
 var ErrApprovalPending = errors.New("approval pending")
+
+// InputRequired is returned by a Confirmer to ask the client for input.
+type InputRequired struct {
+	Requests mcp.InputRequestMap
+	State    string
+}
+
+// Error implements error without exposing the request state.
+func (e *InputRequired) Error() string { return "human approval input required" }
 
 // AddWrite registers a write tool on s. Without env.Confirm every call is
 // denied, so writes can never run unconfirmed.
@@ -82,6 +92,7 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 	}
 	mcp.AddTool(s, t, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
 		start := time.Now()
+		var input *InputRequired
 		args, argsErr := writeArgs(in)
 		ev := audit.Event{Time: start, Tool: spec.Name, Args: args}
 		c, ok := env.caller(req)
@@ -121,6 +132,9 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 				Caller: c, Tool: spec.Name, Args: args, Summary: ev.Plan, ApprovalID: in.approvalID(),
 			})
 			if err != nil {
+				if errors.As(err, &input) && input != nil {
+					ev.Approval = "elicitation"
+				}
 				return "", err
 			}
 			applyCtx, cancel := context.WithTimeout(ctx, env.Timeout)
@@ -132,6 +146,11 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 		}()
 
 		ev.DurationMS = time.Since(start).Milliseconds()
+		if input != nil {
+			ev.Outcome = "pending"
+			env.Audit.Record(ev)
+			return &mcp.CallToolResult{InputRequests: input.Requests, RequestState: input.State}, nil, nil
+		}
 		ev.Outcome = "ok"
 		if err != nil {
 			ev.Outcome = "error"

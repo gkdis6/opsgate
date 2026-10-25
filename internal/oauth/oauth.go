@@ -1,54 +1,200 @@
-// Package oauth is opsgate's built-in OAuth 2.1 authorization server.
-//
-// Scope is deliberately small: authorization code with PKCE (S256 only),
-// refresh token rotation, Dynamic Client Registration and a per-client
-// consent screen. People authenticate at an upstream identity provider
-// (GitHub or any OIDC provider); opsgate issues its own opaque tokens and
-// stores only their hashes.
+// Package oauth implements opsgate's built-in OAuth authorization server.
 package oauth
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/url"
+	"os"
+	"strings"
+	"sync"
+	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/modelcontextprotocol/go-sdk/auth"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/github"
+	"golang.org/x/time/rate"
 
 	"github.com/gkdis6/opsgate/internal/config"
 )
 
 // Server is the authorization server. It is safe for concurrent use.
 type Server struct {
-	// TODO(codex): implement.
+	mu                sync.Mutex
+	cfg               config.BuiltinAuth
+	issuer, resource  string
+	clients           map[string]*client
+	access            map[string]*accessToken
+	refresh           map[string]*refreshToken
+	families          map[string]time.Time
+	codes             map[string]*authorizationCode
+	pending           map[string]*pendingAuth
+	sessions          map[string]*browserSession
+	upstream          oauth2.Config
+	verifier          *oidc.IDTokenVerifier
+	httpClient        *http.Client
+	githubUserURL     string
+	registrationLimit *rate.Limiter
+	now               func() time.Time
+	storageErr        error
+	stop              chan struct{}
+	done              chan struct{}
+	closeErr          error
+	closed            bool
+	closeOnce         sync.Once
 }
 
 // New returns a Server whose issuer is issuer (an https origin) and whose
 // tokens are only valid for resource (the MCP endpoint URL).
 func New(cfg config.BuiltinAuth, issuer, resource string) (*Server, error) {
-	// TODO(codex): implement.
-	return &Server{}, nil
+	return newServer(cfg, issuer, resource, nil)
+}
+
+func newServer(cfg config.BuiltinAuth, issuer, resource string, transport http.RoundTripper) (*Server, error) {
+	u, err := url.Parse(issuer)
+	if err != nil || u.Hostname() == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.ForceQuery || strings.Contains(issuer, "#") || (u.Scheme != "https" && !(u.Scheme == "http" && loopbackOrigin(u.Hostname()))) {
+		return nil, fmt.Errorf("issuer must be an https origin")
+	}
+	if resource != issuer+"/mcp" {
+		return nil, fmt.Errorf("resource must be the issuer's /mcp endpoint")
+	}
+	if len(cfg.Users) == 0 {
+		return nil, fmt.Errorf("at least one user is required")
+	}
+	for _, user := range cfg.Users {
+		if user.Subject == "" || !supportedScopes(user.Scopes) {
+			return nil, fmt.Errorf("invalid user configuration")
+		}
+	}
+	var secret string
+	if cfg.Upstream.ClientSecretFile != "" {
+		b, e := os.ReadFile(cfg.Upstream.ClientSecretFile)
+		if e != nil {
+			return nil, fmt.Errorf("cannot read upstream secret file")
+		}
+		secret = strings.TrimSpace(string(b))
+	} else if cfg.Upstream.ClientSecretEnv != "" {
+		secret = strings.TrimSpace(os.Getenv(cfg.Upstream.ClientSecretEnv))
+	}
+	if secret == "" || cfg.Upstream.ClientID == "" {
+		return nil, fmt.Errorf("upstream client ID and secret are required")
+	}
+	if cfg.AccessTokenTTL <= 0 || cfg.RefreshTokenTTL <= 0 || cfg.MaxClients <= 0 {
+		return nil, fmt.Errorf("token TTLs and max clients must be positive")
+	}
+	s := &Server{cfg: cfg, issuer: issuer, resource: resource, clients: map[string]*client{}, access: map[string]*accessToken{}, refresh: map[string]*refreshToken{}, families: map[string]time.Time{}, codes: map[string]*authorizationCode{}, pending: map[string]*pendingAuth{}, sessions: map[string]*browserSession{}, registrationLimit: rate.NewLimiter(rate.Every(3*time.Second), 5), now: time.Now, githubUserURL: "https://api.github.com/user", stop: make(chan struct{}), done: make(chan struct{})}
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	s.httpClient = &http.Client{Timeout: 15 * time.Second, Transport: boundedTransport{base: transport}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	s.upstream = oauth2.Config{ClientID: cfg.Upstream.ClientID, ClientSecret: secret, RedirectURL: issuer + "/oauth/callback"}
+	switch cfg.Upstream.Provider {
+	case "github":
+		s.upstream.Endpoint = github.Endpoint
+		s.upstream.Scopes = []string{"read:user"}
+	case "oidc":
+		upstreamIssuer, parseErr := url.Parse(cfg.Upstream.Issuer)
+		if parseErr != nil || !secureEndpoint(cfg.Upstream.Issuer) || upstreamIssuer.RawQuery != "" || upstreamIssuer.ForceQuery {
+			return nil, fmt.Errorf("invalid upstream OIDC issuer")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		provider, e := oidc.NewProvider(oidc.ClientContext(ctx, s.httpClient), cfg.Upstream.Issuer)
+		if e != nil {
+			return nil, fmt.Errorf("upstream OIDC discovery failed")
+		}
+		s.upstream.Endpoint = provider.Endpoint()
+		if !secureEndpoint(s.upstream.Endpoint.AuthURL) || !secureEndpoint(s.upstream.Endpoint.TokenURL) {
+			return nil, fmt.Errorf("insecure upstream OIDC endpoint")
+		}
+		s.upstream.Scopes = []string{oidc.ScopeOpenID, "email"}
+		s.verifier = provider.Verifier(&oidc.Config{ClientID: cfg.Upstream.ClientID})
+	default:
+		return nil, fmt.Errorf("unsupported upstream provider")
+	}
+	if err := s.load(); err != nil {
+		return nil, err
+	}
+	if err := s.save(); err != nil {
+		return nil, err
+	}
+	go s.sweepLoop()
+	return s, nil
 }
 
 // Routes registers /.well-known/oauth-authorization-server and /oauth/*.
 func (s *Server) Routes(mux *http.ServeMux) {
-	// TODO(codex): implement.
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.metadata)
+	mux.HandleFunc("POST /oauth/register", s.register)
+	mux.HandleFunc("GET /oauth/authorize", s.authorize)
+	mux.HandleFunc("GET /oauth/callback", s.callback)
+	mux.HandleFunc("POST /oauth/consent", s.consent)
+	mux.HandleFunc("POST /oauth/token", s.token)
+	mux.HandleFunc("POST /oauth/revoke", s.revoke)
 }
 
 // Verify implements auth.TokenVerifier for access tokens issued by s.
 func (s *Server) Verify(ctx context.Context, token string, r *http.Request) (*auth.TokenInfo, error) {
-	// TODO(codex): implement.
-	return nil, auth.ErrInvalidToken
+	if len(token) > 256 || !strings.HasPrefix(token, "og_at_") {
+		return nil, auth.ErrInvalidToken
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t := s.access[hash(token)]
+	if s.storageErr != nil || s.closed || t == nil || !s.now().Before(t.Expires) || s.revoked(t.Family) {
+		return nil, auth.ErrInvalidToken
+	}
+	scopes, ok := s.user(t.Subject)
+	if !ok {
+		return nil, auth.ErrInvalidToken
+	}
+	if c := s.clients[t.ClientID]; c != nil {
+		c.LastUsed = s.now()
+	}
+	return &auth.TokenInfo{Scopes: intersection(t.Scopes, scopes), Expiration: t.Expires, UserID: t.Subject, Extra: map[string]any{"client_id": t.ClientID}}, nil
 }
 
-// RequireUser implements approval.BrowserAuth: it runs next with the
-// signed-in upstream subject (e.g. "github:octocat"), first sending the
-// browser through upstream login if needed. Only configured users pass.
-func (s *Server) RequireUser(next func(w http.ResponseWriter, r *http.Request, subject string)) http.Handler {
-	// TODO(codex): implement.
-	return http.NotFoundHandler()
+// RequireUser runs next with an allowed upstream subject, starting a browser
+// login when no live session is present. Login returns only to local paths.
+func (s *Server) RequireUser(next func(http.ResponseWriter, *http.Request, string)) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.RequestURI()
+		if !localPath(path) {
+			htmlError(w, 400, "Invalid return path")
+			return
+		}
+		s.mu.Lock()
+		if s.storageErr != nil || s.closed {
+			s.mu.Unlock()
+			htmlError(w, 503, "Authorization unavailable")
+			return
+		}
+		if c, err := r.Cookie(sessionCookie); err == nil {
+			if session := s.sessions[hash(c.Value)]; session != nil && s.now().Before(session.Expires) {
+				if _, ok := s.user(session.Subject); ok {
+					subject := session.Subject
+					s.mu.Unlock()
+					next(w, r, subject)
+					return
+				}
+			}
+		}
+		s.startLogin(w, r, &pendingAuth{Kind: "login", ReturnPath: path})
+		s.mu.Unlock()
+	})
 }
 
-// Close flushes state to disk.
+// Close stops background sweeping and flushes state to disk.
 func (s *Server) Close() error {
-	// TODO(codex): implement.
-	return nil
+	s.closeOnce.Do(func() {
+		close(s.stop)
+		<-s.done
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.closeErr = s.save()
+		s.closed = true
+	})
+	return s.closeErr
 }

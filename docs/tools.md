@@ -1,5 +1,7 @@
 # Tool reference
 
+[한국어](ko/tools.md)
+
 Host, Kubernetes and Obsidian read tools require `ops:read`; dev tools require `dev:run`. Tools are registered only when their provider is enabled. Host units and Kubernetes namespaces are filtered by configuration; namespace denies win. Kubernetes has no Secrets tool. Read-only metadata and logs can still disclose sensitive information.
 
 | Tool | Purpose | Main arguments, defaults and limits |

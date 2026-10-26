@@ -1,5 +1,7 @@
 # Deploying opsgate
 
+[한국어](ko/deploy.md)
+
 Use the native Linux binary for host inspection and the container for Kubernetes
 inspection. The distroless image contains no shell, sudo, systemctl or journalctl;
 the host provider does not represent a node when run inside a pod. Darwin builds
@@ -70,8 +72,8 @@ source control. Give `ops:write` only to operators who need it. Each write also
 requires an allowed target, OS/RBAC permissions and human approval.
 
 On a host, bind opsgate to `127.0.0.1:8787` and terminate TLS at a local reverse
-proxy. Proxy `/mcp`, `/.well-known/*`, `/oauth/*`, `/approve/*` and
-`/admin/clients` without changing the path, query, Host, Authorization, Origin or MCP headers. Preserve response
+proxy. Proxy `/mcp`, `/.well-known/*`, `/oauth/*`, `/passkey/*`, `/passkey.js`,
+`/approve/*` and `/admin/clients` without changing the path, query, Host, Authorization, Origin or MCP headers. Preserve response
 headers, cookies and redirects. Support GET, POST, DELETE and streaming responses;
 disable buffering and caching, and allow long-lived MCP connections. Do not log
 authorization headers, cookies, OAuth query strings, request bodies or approval
@@ -96,7 +98,7 @@ For example, Caddy obtains TLS certificates and streams responses with:
 
 ```caddyfile
 mcp.example.com {
-    @opsgate path /mcp /.well-known/* /oauth/* /approve/* /admin/clients
+    @opsgate path /mcp /.well-known/* /oauth/* /passkey/* /passkey.js /approve/* /admin/clients
     reverse_proxy @opsgate 127.0.0.1:8787 {
         flush_interval -1
     }

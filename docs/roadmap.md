@@ -1,9 +1,13 @@
 # Roadmap
 
+[한국어](ko/roadmap.md)
+
 The features below are implemented for the first public release. They have not yet been security-reviewed by third parties. There are no promised dates for future work.
 
 ## Done
 
+- Passkey sign-in for builtin auth with upstream provider `passkey` and one-time registration invites via `opsgate passkey invite`.
+- Stateless serving of the sessionless MCP protocol `2026-07-28`, required by ChatGPT.
 - Stdio host and Kubernetes inspection, allowlists, namespace denies, scope checks, bounded output, redaction and JSONL audit persistence.
 - Streamable HTTP at `/mcp`, mandatory authentication and Protected Resource Metadata.
 - Builtin OAuth 2.1: authorization code with PKCE S256, DCR, consent, upstream GitHub/OIDC login (including Google), hashed opaque tokens, refresh rotation/reuse detection and optional state persistence.

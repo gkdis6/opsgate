@@ -1,5 +1,7 @@
 # Connecting clients
 
+[한국어](ko/clients.md)
+
 opsgate supports stdio and authenticated Streamable HTTP at `<public_url>/mcp`. The documented features are implemented for the first public release; third-party security review is pending. Use [deployment](deploy.md) to configure TLS, authentication and upstream callbacks.
 
 For stdio, the client launches the binary and exchanges MCP messages through stdin/stdout. Use absolute executable/config paths. Keep stdout free of banners; diagnostics and the default audit destination use stderr.
@@ -77,9 +79,11 @@ Set up host-key verification and noninteractive SSH authentication first. Do not
 
 ## claude.ai and ChatGPT over HTTP
 
+opsgate serves the sessionless MCP protocol `2026-07-28` used by ChatGPT statelessly.
+
 Add a custom connector in the client's connector/integration settings, select OAuth, and enter the full MCP URL, for example `https://mcp.example.com/mcp`. The client uses Protected Resource Metadata and authorization-server discovery; builtin mode supports OAuth Dynamic Client Registration (DCR), so no manual MCP client ID or secret provisioning is needed. A configured redirect-host policy may reject the client or hold it pending review at `/admin/clients`; `notify_url` can notify an administrator. An empty host list accepts any otherwise valid redirect host. The upstream Google/GitHub application credentials belong only on the server. Sign in upstream as an allowlisted user and inspect the consent screen's client, redirect destination and scopes before granting access. Connector availability and setting names depend on the client/account.
 
-Register `<public_url>/oauth/callback` at the upstream identity provider, not the MCP URL. The proxy must forward `/mcp`, `/.well-known/*`, `/oauth/*`, `/approve/*` and `/admin/clients` and support streaming. Preserve the public Host, including any explicit port; other hosts receive 421 except local-loopback requests on a loopback listener. The SDK localhost check is replaced by this validation. External mode depends on the external authorization server's client registration support; static mode does not supply OAuth/DCR.
+Register `<public_url>/oauth/callback` at the upstream identity provider, not the MCP URL. The proxy must forward `/mcp`, `/.well-known/*`, `/oauth/*`, `/passkey/*`, `/passkey.js`, `/approve/*` and `/admin/clients` and support streaming. Preserve the public Host, including any explicit port; other hosts receive 421 except local-loopback requests on a loopback listener. The SDK localhost check is replaced by this validation. External mode depends on the external authorization server's client registration support; static mode does not supply OAuth/DCR.
 
 ## Claude Code over HTTP
 

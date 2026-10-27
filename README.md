@@ -19,23 +19,41 @@ an audit log.
 
 ## Why opsgate
 
-- **No arbitrary commands.** Only purpose-built tools exist. There is no shell
-  tool and no Kubernetes Secrets tool.
-- **Everything starts off.** Providers, write actions and allowlists are disabled
-  until you enable them in configuration.
-- **Changes need a person.** Write tools first plan the exact change, then wait
-  for human approval in the client or in the browser by default. Optional approval
-  windows are explained below.
-- **Remote access is authenticated.** A builtin OAuth 2.1 server works with
-  claude.ai and ChatGPT connectors. Sign in with passkeys, GitHub or OIDC
-  (Google included), or verify external JWTs.
-- **Results are data for analysis.** AI clients are instructed not to follow
-  instructions embedded in logs or other results. Returned results are redacted
-  and size-limited. The audit log records who called each tool and its outcome,
-  with one JSON object per line.
-- **It remembers what happened.** The optional note provider keeps runbooks and
-  past incidents in plain Markdown. Assistants are instructed to consult past
-  records and offer to record the outcome. See [notes](docs/notes.md).
+
+### No arbitrary commands
+
+Only purpose-built tools exist. There is no shell
+tool and no Kubernetes Secrets tool.
+
+### Everything starts off
+
+Providers, write actions and allowlists are disabled
+until you enable them in configuration.
+
+### Changes need a person
+
+Write tools first plan the exact change, then wait
+for human approval in the client or in the browser by default. Optional approval
+windows are explained below.
+
+### Remote access is authenticated
+
+A builtin OAuth 2.1 server works with
+claude.ai and ChatGPT connectors. Sign in with passkeys, GitHub or OIDC
+(Google included), or verify external JWTs.
+
+### Results are data for analysis
+
+AI clients are instructed not to follow
+instructions embedded in logs or other results. Returned results are redacted
+and size-limited. The audit log records who called each tool and its outcome,
+with one JSON object per line.
+
+### It remembers what happened
+
+The optional note provider keeps runbooks and
+past incidents in plain Markdown. Assistants are instructed to consult past
+records and offer to record the outcome. See [notes](docs/notes.md).
 
 ## What it can do
 

@@ -8,7 +8,7 @@
 
 opsgate is an open-source MCP server written in Go. It gives clients such as
 Claude, ChatGPT, Claude Code and Cursor a fixed set of operations tools for Linux
-hosts and Kubernetes, with explicit policy, human approval for every change and
+hosts and Kubernetes, with explicit policy, human-approved changes and
 an audit log.
 
 > **Status:** features for the first public release are implemented. Changes
@@ -24,8 +24,8 @@ an audit log.
 - **Everything starts off.** Providers, write actions and allowlists are disabled
   until you enable them in configuration.
 - **Changes need a person.** Write tools first plan the exact change, then wait
-  for human approval in the client or in the browser. Approval is bound to the
-  exact arguments and plan.
+  for human approval in the client or in the browser by default. Optional approval
+  windows are explained below.
 - **Remote access is authenticated.** A builtin OAuth 2.1 server works with
   claude.ai and ChatGPT connectors. Sign in with passkeys, GitHub or OIDC
   (Google included), or verify external JWTs.
@@ -34,10 +34,12 @@ an audit log.
   and size-limited. The audit log records who called each tool and its outcome,
   with one JSON object per line.
 - **It remembers what happened.** The optional note provider keeps runbooks and
-  past incidents in plain Markdown. Assistants look up how a symptom was handled
-  before and, with approval, record what they did. See [notes](docs/notes.md).
+  past incidents in plain Markdown. Assistants are instructed to consult past
+  records and offer to record the outcome. See [notes](docs/notes.md).
 
 ## What it can do
+
+Providers are groups of tools; enable only the groups you need.
 
 | Provider | Read tools | Write tools (approval required) |
 | --- | --- | --- |
@@ -46,14 +48,32 @@ an audit log.
 | Notes: runbooks and memory, Markdown folder or Obsidian vault *(experimental)* | search, read, list, recent, links, tags | create, append, replace, move to `.trash` |
 | Dev *(experimental)* | projects, task status, log, diff, list | start a coding agent (Codex or Claude) in a Git worktree |
 
-Each write tool also needs the `ops:write` scope and its own allowlist entry. See
-the [tool reference](docs/tools.md) for every argument and limit.
+Scopes define the kinds of work a user can perform: `ops:read` for inspection,
+`ops:write` for operations and note changes, and `dev:run` for coding-agent tasks.
+Allowlists restrict tools and targets such as services and Kubernetes workloads.
+A scope alone does not enable an operation prohibited by configuration.
+
+Notes can be created only inside the configured notes folder. There is no tool
+for creating general files at arbitrary server paths or changing Kubernetes CPU
+and memory requests or limits. Those resource settings can be inspected with
+Kubernetes detail tools. See the [tool reference](docs/tools.md) for arguments
+and limits.
 
 ## How it works
 
 <img src="docs/images/architecture.svg" alt="opsgate architecture: client transports, authentication, tool processing, providers and OS account / RBAC trust boundaries" width="830">
 
-Clients connect over local stdio or HTTPS through a TLS reverse proxy. opsgate
+The AI client analyzes results and chooses the next operation. opsgate itself
+does not run or call an AI model; it checks and executes requested tools.
+
+Host tools inspect and manage the server where opsgate runs. If you run it on
+your local PC, that PC is the host target; host tools require Linux. Kubernetes
+tools connect to the Kubernetes API using kubeconfig or in-cluster credentials.
+A local instance can therefore inspect a remote cluster when network access
+and permissions allow it.
+
+Clients connect over local stdio (the client starts opsgate and communicates
+through standard input/output) or HTTPS through a TLS reverse proxy. opsgate
 checks identity and policy, plans and approves writes, then handles output and
 auditing. OS accounts and Kubernetes RBAC constrain access to the providers.
 
@@ -62,17 +82,23 @@ Details: [architecture](docs/architecture.md) · [approval](docs/approval.md) ·
 
 ### How approval works
 
-Write tools calculate a side-effect-free plan first. Without an active approval
-window, they require in-client or web confirmation. One-call approval binds the
-arguments and plan.
+Write tools first prepare a plan showing the target and change. By default,
+a person reviews and approves it in the client or on a web approval page before
+execution. One-call approval binds the exact arguments and plan.
+
+Optional approval windows let a person approve a particular tool for a limited
+time. During that window, subsequent calls by the same user can skip a new
+approval prompt, including calls with different targets or arguments. Permission
+and target checks still run on every call. Windows are disabled by default.
 
 <img src="docs/images/approval-flow.svg" alt="Write approval flow: plan, approval window or client / web confirmation, retry verification, Apply and denial exits" width="830">
 
 ### Notes: runbooks and memory
 
-With the note provider enabled, assistants search past incidents before acting
-and, with approval, record what they did, so the next investigation starts from
-history instead of from scratch. See [notes](docs/notes.md).
+With the note provider enabled, assistants are instructed to search past
+incidents before acting and offer to record the outcome afterward. The AI client
+decides whether to follow this guidance; it is not an enforced workflow. Note
+changes require approval, and saved records can inform later investigations. See [notes](docs/notes.md).
 
 <img src="docs/images/note-memory.svg" alt="Notes memory loop: search upstream timeout history, propose a past fix, approve and apply, then record an approved note for next time" width="830">
 

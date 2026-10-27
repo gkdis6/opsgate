@@ -2,14 +2,14 @@
 
 [English](README.md)
 
-**셸을 내주지 않고도 AI 어시스턴트가 서버 운영을 돕게 합니다.**
+**셸을 열어 주지 않고도 AI 어시스턴트의 도움을 받아 서버를 운영할 수 있습니다.**
 
 opsgate는 Go로 작성한 오픈 소스 MCP 서버입니다. Claude, ChatGPT, Claude Code,
-Cursor 같은 클라이언트에 Linux 호스트와 Kubernetes용 운영 도구를 정해진 범위 안에서만
-제공합니다. 명시적인 정책과 감사 로그를 갖추고, 모든 변경에는 사람의 승인을 받습니다.
+Cursor 같은 클라이언트에 Linux 호스트와 Kubernetes를 운영하는 정해진 도구를
+제공합니다. 정책을 명시하고 감사 로그를 남기며, 모든 변경에는 사람의 승인을 받습니다.
 
-> **상태:** 첫 공개 릴리스에 필요한 기능은 모두 구현했지만, 아직 제3자 보안 검토를
-> 받지 않았습니다. 비밀값 마스킹은 최선의 노력 수준이며, 도구 출력에는 프롬프트
+> **상태:** 첫 공개 릴리스에 필요한 기능은 모두 구현했지만, 외부 보안 검토는 아직
+> 받지 않았습니다. 마스킹으로 모든 비밀값을 가린다고 보장하지 않으며, 도구 출력에는 프롬프트
 > 인젝션이 섞여 있을 수 있습니다. 배포 전에 [보안 정책](docs/ko/security.md)을 읽으세요.
 
 ## 왜 opsgate인가
@@ -18,17 +18,17 @@ Cursor 같은 클라이언트에 Linux 호스트와 Kubernetes용 운영 도구�
   Kubernetes Secret 조회 도구도 없습니다.
 - **모든 기능이 꺼진 상태로 시작합니다.** provider, 쓰기 작업, 허용 목록은 설정에서
   직접 켜기 전까지 동작하지 않습니다.
-- **변경에는 사람이 필요합니다.** 쓰기 도구는 먼저 바꿀 내용을 정확히 계산하고,
+- **변경에는 사람의 승인이 필요합니다.** 쓰기 도구는 먼저 바꿀 내용을 정확히 계산하고,
   클라이언트 안이나 브라우저에서 사람의 승인을 기다립니다. 승인은 그 인자와 계획에만
   유효합니다.
 - **원격 접속은 인증을 거칩니다.** 내장 OAuth 2.1 서버가 claude.ai와 ChatGPT
-  커넥터를 지원합니다. 로그인은 패스키, GitHub, OIDC(Google 포함) 중에서 고르거나,
-  외부 JWT를 검증하도록 설정할 수 있습니다.
+  커넥터를 지원합니다. 패스키, GitHub, OIDC(Google 포함)로 로그인하거나 외부 JWT를
+  검증하도록 설정할 수 있습니다.
 - **출력은 신뢰하지 않습니다.** 결과는 마스킹하고 크기를 제한한 뒤 JSONL 감사 로그에
   남깁니다.
-- **있었던 일을 기억합니다.** 선택 기능인 note provider가 런북과 지난 장애 기록을
+- **지난 조치를 기록하고 다시 참고합니다.** 선택 기능인 note provider가 런북과 지난 장애 기록을
   일반 Markdown으로 보관합니다. AI는 같은 증상을 전에 어떻게 처리했는지 먼저 찾아보고,
-  승인을 받아 이번 조치를 기록합니다. [노트](docs/ko/notes.md)를 참고합니다.
+  승인을 받아 이번 조치를 기록합니다. [노트](docs/ko/notes.md)를 참고하세요.
 
 ## 할 수 있는 일
 
@@ -39,15 +39,16 @@ Cursor 같은 클라이언트에 Linux 호스트와 Kubernetes용 운영 도구�
 | 노트: 런북과 메모리, Markdown 폴더 또는 Obsidian 볼트 *(실험적)* | 검색, 읽기, 목록, 최근 노트, 링크, 태그 | 생성, 덧붙이기, 치환, `.trash`로 이동 |
 | Dev *(실험적)* | 프로젝트, 작업 상태, 로그, diff, 목록 | Git worktree에서 코딩 에이전트(Codex, Claude) 실행 |
 
-쓰기 도구는 `ops:write` 스코프와 도구별 허용 목록 항목도 필요합니다. 인자와 제한은
-[도구 문서](docs/ko/tools.md)에 모두 정리되어 있습니다.
+쓰기 도구를 쓰려면 `ops:write` 스코프가 있어야 하고 도구별 허용 목록에도 항목이 있어야 합니다.
+전체 인자와 제한은 [도구 문서](docs/ko/tools.md)를 참고하세요.
 
 ## 동작 방식
 
 <img src="docs/images/ko/architecture.svg" alt="클라이언트 연결, 인증과 도구 처리, provider 및 OS 계정·RBAC 신뢰 경계를 보여 주는 opsgate 구조" width="830">
 
 클라이언트는 로컬 stdio 또는 TLS 리버스 프록시를 거치는 HTTPS로 연결합니다.
-opsgate는 인증과 정책을 확인하고, 쓰기를 계획·승인·실행한 뒤 출력 처리와 감사를 적용합니다.
+opsgate는 신원과 정책을 확인하고, 쓰기 작업을 계획한 뒤 승인을 받아 실행합니다.
+이후 출력을 처리하고 감사 로그를 남깁니다.
 실제 접근 범위는 OS 계정과 Kubernetes RBAC가 제한합니다.
 
 자세한 내용: [구조](docs/ko/architecture.md) · [승인](docs/ko/approval.md) ·
@@ -55,28 +56,29 @@ opsgate는 인증과 정책을 확인하고, 쓰기를 계획·승인·실행한
 
 ### 승인 흐름
 
-쓰기 도구는 부작용 없는 계획을 먼저 계산합니다. 유효한 승인 시간 창이 없으면
-클라이언트 내 확인이나 웹 승인을 거치며, 일회성 승인은 인자와 계획에 묶입니다.
+쓰기 도구는 실제 상태를 바꾸지 않는 계획(Plan)을 먼저 계산합니다. 유효한 승인 시간 창이
+없으면 클라이언트 내 확인이나 웹 승인을 받아야 합니다. 일회성 승인은 승인한 인자와
+계획에만 유효합니다.
 
 <img src="docs/images/ko/approval-flow.svg" alt="쓰기 호출의 계획, 승인 시간 창·클라이언트·웹 승인, 재호출 검증과 실행 및 거부 경로" width="830">
 
 ### 노트: 런북과 메모리
 
 note provider를 활성화하면 AI는 조치하기 전에 지난 장애 기록을 찾아보고, 승인을 받아
-이번 조치를 기록합니다. 그래서 다음 조사는 처음부터가 아니라 기록에서 시작합니다.
-[노트](docs/ko/notes.md)를 참고합니다.
+이번 조치를 기록합니다. 다음에 조사할 때는 이 기록을 바탕으로 시작할 수 있습니다.
+[노트](docs/ko/notes.md)를 참고하세요.
 
 <img src="docs/images/ko/note-memory.svg" alt="OOMKilled 검색으로 지난 조치를 참고하고, 사람의 승인 후 실행과 노트 기록을 거쳐 다음 조사에 활용하는 흐름" width="830">
 
 ## 빠른 시작: 로컬(stdio)
 
-Go 1.26 이상으로 빌드합니다.
+Go 1.26 이상으로 빌드하세요.
 
 ```sh
 go install github.com/gkdis6/opsgate/cmd/opsgate@latest   # 또는: make build
 ```
 
-설정 파일을 저장합니다. 예: `/path/opsgate.yaml`
+설정 파일을 저장하세요. 아래 예제에서는 `/path/opsgate.yaml`을 사용합니다.
 
 ```yaml
 stdio:
@@ -87,19 +89,19 @@ providers:
     units: [ssh.service, "nginx*"]
 ```
 
-Claude Code에 등록합니다. 경로는 절대 경로로 쓰세요.
+Claude Code에 등록하세요. 경로는 절대 경로로 쓰세요.
 
 ```sh
 claude mcp add opsgate -- /path/to/opsgate -config /path/opsgate.yaml
 ```
 
-stdio는 실행한 계정의 권한으로 동작하므로 권한이 낮은 계정으로 실행하세요. 다른
+stdio는 실행한 계정의 권한으로 동작하므로 관리자 권한이 없는 일반 계정으로 실행하세요. 다른
 클라이언트는 [클라이언트 설정](docs/ko/clients.md)을 참고하세요.
 
 ## 빠른 시작: 원격(HTTP + 패스키)
 
 패스키는 별도의 ID 제공자가 필요 없습니다. Face ID, Touch ID, Windows Hello,
-휴대폰, 보안 키로 로그인합니다.
+휴대폰, 보안 키로 로그인할 수 있습니다.
 
 ```yaml
 http:
@@ -128,12 +130,12 @@ opsgate -transport http -config /etc/opsgate/opsgate.yaml
 
 1. 처음 시작하면 패스키가 없는 사용자마다 일회용 등록 링크(24시간 유효)가 로그에
    남습니다. 링크를 열고 **Create passkey**를 누르세요. 링크를 새로 만들려면
-   `sudo -u opsgate opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`를 실행합니다.
-2. 앞단에 `Host` 헤더를 그대로 전달하는 TLS 리버스 프록시를 둡니다. 공개 호스트는
+   `sudo -u opsgate opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`를 실행하세요.
+2. 앞단에 `Host` 헤더를 그대로 전달하는 TLS 리버스 프록시를 두세요. 공개 호스트는
    `public_url`과 같아야 하며, 다른 호스트로 온 요청은 421로 거부됩니다.
-3. 클라이언트를 `https://mcp.example.com/mcp`에 연결합니다. 예:
+3. 클라이언트를 `https://mcp.example.com/mcp`에 연결하세요. 예:
    `claude mcp add --transport http opsgate https://mcp.example.com/mcp`.
-   claude.ai나 ChatGPT에서는 커넥터로 추가합니다.
+   claude.ai나 ChatGPT에서는 커넥터로 추가하세요.
 
 외부에 공개하기 전에 클라이언트 리다이렉트 호스트를 제한하세요
 (`allowed_redirect_hosts`). GitHub, Google 등 다른 로그인 방식은
@@ -145,9 +147,9 @@ opsgate -transport http -config /etc/opsgate/opsgate.yaml
 - 인스턴스 하나가 신뢰 그룹 하나입니다. `ops:read`는 켜진 provider 전체에 적용됩니다.
   운영 서버, 개인 노트, 코딩 에이전트처럼 신뢰 수준이 다른 대상은 인스턴스와 OS
   계정을 나누세요.
-- 권한 검사는 여러 겹입니다. 스코프, 서버 도구 정책, 사용자별 도구 목록, provider
-  허용 목록을 거친 뒤 마지막으로 OS 권한과 Kubernetes RBAC가 적용됩니다.
-- 손상된 클라이언트는 클라이언트 안에 뜬 승인 요청을 스스로 수락할 수 있습니다.
+- 스코프, 서버 도구 정책, 사용자별 도구 목록, provider 허용 목록을 차례로 검사하고,
+  마지막으로 OS 권한과 Kubernetes RBAC가 접근을 제한합니다.
+- 공격자가 장악한 클라이언트는 클라이언트 안에 뜬 승인 요청을 스스로 수락할 수 있습니다.
   브라우저 승인만 허용하려면 `approval.require_web: true`로 설정하세요.
 
 자세한 내용: [보안 정책](docs/ko/security.md)

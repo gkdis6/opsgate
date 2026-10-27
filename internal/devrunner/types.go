@@ -8,6 +8,8 @@ const (
 	// MaxReadBytes bounds a log or diff response before JSON encoding.
 	MaxReadBytes = 256 << 10
 	maxLogBytes  = 20 << 20
+	// logRedactMargin is the context scanned on each side of a log page.
+	logRedactMargin = 1 << 20
 )
 
 // Project is an allowlisted project, without its filesystem path.

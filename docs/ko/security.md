@@ -14,7 +14,7 @@ opsgate는 원격 HTTP, 인증, 사람이 승인한 쓰기를 구현했으며 �
 
 지나치게 넓은 RBAC이나 kubeconfig 권한은 버그와 침해의 영향을 키웁니다. 필요한 읽기 및 선택적 쓰기 권한만 있는 전용 자격 증명을 사용하고, 제공된 RBAC 매니페스트를 검토합니다. kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 거부됩니다. kubeconfig 파일과 설정 경로는 신뢰할 수 있는 소유자가 관리해야 합니다. 네임스페이스 허용/거부 규칙은 네임스페이스 범위 리소스와 Namespace 객체를 이름으로 필터링합니다. Nodes나 PersistentVolumes는 제한하지 않으며, `k8s_overview`의 노드도 마찬가지입니다. 클러스터 범위 종류에는 `namespace`를 생략합니다. 제공된 ClusterRoleBinding은 클러스터 전체 읽기를 허용합니다. 가능하면 네임스페이스 RoleBinding을 사용합니다. provider와 그 자격 증명을 공격자가 제어할 수 없어야 합니다. root 실행은 권장하지 않습니다. 필요한 journal 및 클러스터 접근만 가진 일반 계정을 사용합니다.
 
-[도구 참조](tools.md#redaction-and-object-sanitization)는 구현된 텍스트 패턴과 객체 정리를 설명합니다. ConfigMap의 data 및 binaryData 값은 기본적으로 숨깁니다. Pod와 워크로드의 리터럴 환경 변수 값은 이름에 pass, secret, token, key, credential, auth, dsn, private, cert, database_url이 포함되면 마스킹합니다. 대소문자는 구분하지 않습니다. 다른 값은 그대로 보일 수 있습니다. `valueFrom` 참조는 보이며 값을 조회하지 않습니다.
+[도구 참조](tools.md#redaction-and-object-sanitization)는 구현된 텍스트 패턴과 객체 정리를 설명합니다. 작업 로그 페이지, 노트 줄 페이지, 검색 스니펫은 크기가 제한된 전체 원문에서 민감한 범위를 감지하여 페이지 경계를 가로지르는 시크릿도 마스킹합니다. 부분 출력은 마스킹한 범위 안의 줄바꿈을 유지합니다. BEGIN 또는 END 마커가 없는 개인 키 PEM 블록은 사용 가능한 원문의 시작부터 또는 끝까지 마스킹합니다. 두 마커가 모두 없는 내용은 PEM으로 식별할 수 없습니다. ConfigMap의 data 및 binaryData 값은 기본적으로 숨깁니다. Pod와 워크로드의 리터럴 환경 변수 값은 이름에 pass, secret, token, key, credential, auth, dsn, private, cert, database_url이 포함되면 마스킹합니다. 대소문자는 구분하지 않습니다. 다른 값은 그대로 보일 수 있습니다. `valueFrom` 참조는 보이며 값을 조회하지 않습니다.
 
 마스킹은 최선의 노력에 따른 처리이며 시크릿의 유출 방지를 보장하지 않습니다. 로그, 메타데이터, 프로세스 정보에 예상하지 못한 형식의 자격 증명이 포함될 수 있습니다. 애초에 시크릿을 수집하지 않습니다. 감사 로그도 보호합니다. 인자와 오류에 민감한 정보가 남을 수 있습니다. 감사 기록은 변조 방지 원장이 아니며 쓰기가 실패할 때 내구성 있는 전달을 보장하지 않습니다. 컨텍스트 기한은 핸들러와 의존 구성 요소의 협력이 필요합니다. 출력 제한이 모든 리소스 고갈 위험을 없애지는 않습니다.
 

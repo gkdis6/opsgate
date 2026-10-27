@@ -2,6 +2,7 @@ package obsidian
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 )
 
@@ -212,5 +214,63 @@ func TestReadPreservesLineEndings(t *testing.T) {
 		if !ok || body != text {
 			t.Fatalf("got %q want %q", body, text)
 		}
+	}
+}
+
+func TestReadRedactsPEMPages(t *testing.T) {
+	for _, newline := range []string{"\n", "\r\n"} {
+		text := strings.Join([]string{"before", "-----BEGIN PRIVATE KEY-----", "abc", "def", "-----END PRIVATE KEY-----", "after", ""}, newline)
+		p := fixture(t, map[string]string{"note.md": text})
+		for _, tc := range []struct {
+			offset, max int
+			want        string
+		}{
+			{3, 1, redact.Mask + newline},
+			{3, 2, redact.Mask + newline + redact.Mask + newline},
+			{2, 5, strings.Repeat(redact.Mask+newline, 4) + "after" + newline},
+			{6, 1, "after" + newline},
+		} {
+			out, err := p.read(context.Background(), tool.Caller{}, readInput{Path: "note", OffsetLine: tc.offset, MaxLines: tc.max})
+			if err != nil {
+				t.Fatal(err)
+			}
+			header, body, ok := strings.Cut(out, "\n\n")
+			lineRange := fmt.Sprintf("lines: %d-%d (total 6)", tc.offset, tc.offset+tc.max-1)
+			if !ok || body != tc.want || !strings.Contains(header, lineRange) {
+				t.Fatalf("read %+v: %q", tc, out)
+			}
+		}
+	}
+}
+
+func TestSearchRedactsSecretSnippets(t *testing.T) {
+	for _, tc := range []struct{ name, text string }{
+		{"token", "ghp_" + strings.Repeat("a", 250) + "needle" + strings.Repeat("b", 250)},
+		{"invalid UTF-8 prefix", strings.Repeat("\xff", 250) + " password=" + strings.Repeat("a", 250) + "needle" + strings.Repeat("b", 250)},
+		{"JWT", "eyJhbGci." + strings.Repeat("a", 250) + "needle" + strings.Repeat("b", 250) + ".signature"},
+		{"authorization", "Authorization: Digest " + strings.Repeat("a", 250) + "needle" + strings.Repeat("b", 250)},
+		{"assignment", "password=" + strings.Repeat("a", 250) + "needle" + strings.Repeat("b", 250)},
+		{"PEM", "-----BEGIN PRIVATE KEY-----\n" + strings.Repeat("a", 250) + "needle" + strings.Repeat("b", 250) + "\n-----END PRIVATE KEY-----"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := fixture(t, map[string]string{"note.md": tc.text})
+			out, err := p.search(context.Background(), tool.Caller{}, searchInput{Query: "needle"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			line := 1
+			if tc.name == "PEM" {
+				line = 2
+			}
+			want := fmt.Sprintf("note.md:%d: %s\ntotal matches: 1; files scanned: 1; stopped at limit: false\n", line, redact.Mask)
+			if out != want {
+				t.Fatalf("search = %q, want %q", out, want)
+			}
+			if tc.name != "PEM" {
+				if got := snippet(tc.text, "needle", true); got != redact.Mask {
+					t.Fatalf("snippet = %q", got)
+				}
+			}
+		})
 	}
 }

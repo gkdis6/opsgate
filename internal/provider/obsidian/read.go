@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 )
 
@@ -65,10 +66,16 @@ func (p *provider) read(ctx context.Context, _ tool.Caller, in readInput) (strin
 	}
 	start := offset - 1
 	end := start + min(max, len(lines)-start)
+	byteStart := 0
+	for _, line := range lines[:start] {
+		byteStart += len(line) + 1
+	}
+	byteStart = min(byteStart, len(n.text))
 	text := strings.Join(lines[start:end], "\n")
 	if end > start && (end < len(lines) || strings.HasSuffix(n.text, "\n")) {
 		text += "\n"
 	}
+	text = redact.Fragment(n.text, redact.Ranges(n.text), byteStart, byteStart+len(text))
 	lineRange := fmt.Sprintf("%d-%d", offset, end)
 	if start == end {
 		lineRange = "none"

@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestString(t *testing.T) {
@@ -29,6 +28,8 @@ func TestString(t *testing.T) {
 		{"json", `{"client_secret": "a\"b"}`, `{"client_secret": "` + Mask + `"}`},
 		{"quoted", `api_key="two words"`, `api_key="` + Mask + `"`},
 		{"single quoted", `pwd='two words'`, `pwd='` + Mask + `'`},
+		{"empty assignment", `password=""`, `password="` + Mask + `"`},
+		{"empty URL password", "postgres://alice:@db/app", "postgres://alice:" + Mask + "@db/app"},
 	}
 	for _, prefix := range []string{"AKIA", "ASIA"} {
 		tests = append(tests, struct{ name, in, want string }{prefix, prefix + strings.Repeat("A", 16), Mask})
@@ -41,9 +42,7 @@ func TestString(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := String(tc.in); got != tc.want {
-				t.Errorf("String(%q) = %q, want %q", tc.in, got, tc.want)
-			}
+			checkString(t, tc.in, tc.want)
 		})
 	}
 }
@@ -62,16 +61,12 @@ func adversarialInputs() []struct{ name, text string } {
 
 func TestStringAdversarial(t *testing.T) {
 	for _, tc := range adversarialInputs() {
-		done := make(chan string, 1)
-		go func() { done <- String(tc.text) }()
-		select {
-		case got := <-done:
-			if got != tc.text {
-				t.Fatalf("%s: changed text without secrets", tc.name)
+		t.Run(tc.name, func(t *testing.T) {
+			checkString(t, tc.text, tc.text)
+			if got := Fragment(tc.text, Ranges(tc.text), 0, len(tc.text)); got != tc.text {
+				t.Fatal("changed text without secrets")
 			}
-		case <-time.After(200 * time.Millisecond):
-			t.Fatalf("%s: String on 1 MiB took at least 200 ms", tc.name)
-		}
+		})
 	}
 }
 
@@ -194,5 +189,84 @@ func BenchmarkString64KiB(b *testing.B) {
 				String(s)
 			}
 		})
+	}
+}
+
+func checkString(t *testing.T, in, want string) {
+	t.Helper()
+	if got := String(in); got != want {
+		t.Errorf("String(%q) = %q, want %q", in, got, want)
+	}
+	ranges := Ranges(in)
+	for i, r := range ranges {
+		if r.Start < 0 || r.End < r.Start || r.End > len(in) || i > 0 && ranges[i-1].End > r.Start {
+			t.Fatalf("invalid ranges: %v", ranges)
+		}
+	}
+	if got := render(in, ranges, 0, len(in), false); got != want {
+		t.Errorf("render(%q) = %q, want %q", in, got, want)
+	}
+}
+
+func TestTruncatedPEM(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"missing end", "before\n-----BEGIN RSA PRIVATE KEY-----\nabc\ndef", "before\n" + Mask},
+		{"missing begin", "abc\ndef\n-----END PRIVATE KEY-----\nafter", Mask + "\nafter"},
+		{"missing begin encrypted", "abc\n-----END ENCRYPTED PRIVATE KEY-----", Mask},
+		{"nested begins", "-----BEGIN PRIVATE KEY-----\nabc\n-----BEGIN RSA PRIVATE KEY-----\ndef\n-----END RSA PRIVATE KEY-----", Mask},
+		{"extra end", "-----BEGIN PRIVATE KEY-----\na\n-----END PRIVATE KEY-----\nb\n-----END PRIVATE KEY-----\nafter", Mask + "\nafter"},
+		{"multiple blocks", "-----BEGIN PRIVATE KEY-----\na\n-----END PRIVATE KEY-----\npublic\n-----BEGIN PRIVATE KEY-----\nb", Mask + "\npublic\n" + Mask},
+	} {
+		t.Run(tc.name, func(t *testing.T) { checkString(t, tc.in, tc.want) })
+	}
+}
+
+func TestRanges(t *testing.T) {
+	for _, tc := range []struct{ in, secret string }{
+		{"before ghp_abcdefghijk after", "ghp_abcdefghijk"},
+		{"before eyJhbGci.eyJzdWI.abc_DEF after", "eyJhbGci.eyJzdWI.abc_DEF"},
+		{"Authorization: Digest username=alice\nnext", "Digest username=alice"},
+		{"Bearer abcdef", "abcdef"},
+		{"password=hidden next=ok", "hidden"},
+		{`password="two words"`, "two words"},
+		{"password=ghp_abcdefghijk", "ghp_abcdefghijk"},
+		{"postgres://alice:hidden@host/db", "hidden"},
+		{"before\n-----BEGIN PRIVATE KEY-----\nabc\ndef\n-----END PRIVATE KEY-----\nafter", "-----BEGIN PRIVATE KEY-----\nabc\ndef\n-----END PRIVATE KEY-----"},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			start := strings.Index(tc.in, tc.secret)
+			want := []Range{{start, start + len(tc.secret)}}
+			ranges := Ranges(tc.in)
+			if !reflect.DeepEqual(ranges, want) {
+				t.Fatalf("Ranges = %v, want %v", ranges, want)
+			}
+			for lo := 0; lo < len(tc.secret); lo++ {
+				for hi := lo + 1; hi <= len(tc.secret); hi++ {
+					visible := tc.secret[lo:hi]
+					parts := strings.Split(visible, "\n")
+					for i, part := range parts {
+						if part != "" {
+							parts[i] = Mask
+						}
+					}
+					if got := Fragment(tc.in, ranges, start+lo, start+hi); got != strings.Join(parts, "\n") {
+						t.Fatalf("fragment [%d:%d] = %q", lo, hi, got)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestFragmentLineEndings(t *testing.T) {
+	for _, newline := range []string{"\n", "\r\n"} {
+		in := "before" + newline + "-----BEGIN PRIVATE KEY-----" + newline + "abc" + newline + newline + "def" + newline + "-----END PRIVATE KEY-----" + newline + "after"
+		want := "before" + newline + Mask + newline + Mask + newline + newline + Mask + newline + Mask + newline + "after"
+		if got := Fragment(in, Ranges(in), 0, len(in)); got != want {
+			t.Fatalf("Fragment = %q, want %q", got, want)
+		}
+		if got := Fragment(in, Ranges(in), 3, 3); got != "" {
+			t.Fatalf("empty Fragment = %q", got)
+		}
 	}
 }

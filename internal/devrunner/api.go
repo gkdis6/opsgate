@@ -263,7 +263,11 @@ func (r *runner) log(w http.ResponseWriter, req *http.Request) {
 	if !ok {
 		return
 	}
-	b, err := readRegular(r.root, "tasks/"+t.ID+"/log.txt", offset, int(limit)+1)
+	// Detect secrets in a window around the page so ones crossing its edges
+	// stay masked without rescanning the whole log for every page. A private
+	// key cut by the window is masked to the window edge.
+	lo := max(0, offset-logRedactMargin)
+	b, err := readRegular(r.root, "tasks/"+t.ID+"/log.txt", lo, int(offset-lo+limit+logRedactMargin))
 	if os.IsNotExist(err) {
 		reply(w, 200, Log{NextOffset: offset})
 		return
@@ -272,11 +276,11 @@ func (r *runner) log(w http.ResponseWriter, req *http.Request) {
 		bad(w, 503, "task log unavailable")
 		return
 	}
-	truncated := len(b) > int(limit)
-	if truncated {
-		b = b[:limit]
-	}
-	reply(w, 200, Log{Text: redactedText(b), NextOffset: offset + int64(len(b)), Truncated: truncated})
+	start := min(int(offset-lo), len(b))
+	end := start + min(int(limit), len(b)-start)
+	s := string(b)
+	text := redact.Fragment(s, redact.Ranges(s), start, end)
+	reply(w, 200, Log{Text: redactedText([]byte(text)), NextOffset: offset + int64(end-start), Truncated: end < len(b)})
 }
 func (r *runner) diff(w http.ResponseWriter, req *http.Request) {
 	if !queryOnly(req) {

@@ -6,6 +6,7 @@ package redact
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -13,7 +14,7 @@ import (
 const Mask = "[REDACTED]"
 
 var (
-	pem             = regexp.MustCompile(`(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----`)
+	pemMarker       = regexp.MustCompile(`-----(BEGIN|END) [A-Z0-9 ]*PRIVATE KEY-----`)
 	header          = regexp.MustCompile(`(?im)(\b(?:proxy-)?authorization[ \t]*:[ \t]*)[^\r\n]+`)
 	auth            = regexp.MustCompile(`(?i)\b(Bearer|Basic)[ \t]+[A-Za-z0-9._~+/=-]+`)
 	jwt             = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)
@@ -22,36 +23,138 @@ var (
 	assignmentValue = regexp.MustCompile(`^("(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\s,;"'<>{}]+)`)
 )
 
-// String returns s with known secret patterns replaced by Mask.
-func String(s string) string {
-	if strings.Contains(s, "-----BEGIN ") {
-		s = pem.ReplaceAllString(s, Mask)
+// Range is a sensitive byte interval [Start, End) in the original text.
+type Range struct {
+	Start int
+	End   int
+}
+
+// Ranges returns sorted, non-overlapping sensitive ranges in s.
+// Incomplete private-key PEM blocks extend to the source boundary.
+func Ranges(s string) []Range {
+	var ranges []Range
+	if strings.Contains(s, "PRIVATE KEY-----") {
+		start := -1
+		for _, m := range pemMarker.FindAllStringSubmatchIndex(s, -1) {
+			if s[m[2]:m[3]] == "BEGIN" {
+				if start < 0 {
+					start = m[0]
+				}
+			} else {
+				if start < 0 {
+					start = 0
+				}
+				ranges = append(ranges, Range{start, m[1]})
+				start = -1
+			}
+		}
+		if start >= 0 {
+			ranges = append(ranges, Range{start, len(s)})
+		}
 	}
 	lower := strings.ToLower(s)
 	if strings.Contains(lower, "authorization") {
-		s = header.ReplaceAllString(s, "${1}"+Mask)
+		for _, m := range header.FindAllStringSubmatchIndex(s, -1) {
+			ranges = append(ranges, Range{m[3], m[1]})
+		}
 	}
-	s = redactAssignments(s)
+	ranges = append(ranges, assignmentRanges(s)...)
 	if strings.Contains(lower, "bearer") || strings.Contains(lower, "basic") {
-		s = auth.ReplaceAllString(s, "${1} "+Mask)
+		for _, m := range auth.FindAllStringSubmatchIndex(s, -1) {
+			start := m[3]
+			for s[start] == ' ' || s[start] == '\t' {
+				start++
+			}
+			ranges = append(ranges, Range{start, m[1]})
+		}
 	}
 	if strings.Contains(s, "eyJ") {
-		s = jwt.ReplaceAllString(s, Mask)
+		for _, m := range jwt.FindAllStringIndex(s, -1) {
+			ranges = append(ranges, Range{m[0], m[1]})
+		}
 	}
 	if hasToken(s) {
-		s = tokens.ReplaceAllString(s, Mask)
+		for _, m := range tokens.FindAllStringIndex(s, -1) {
+			ranges = append(ranges, Range{m[0], m[1]})
+		}
 	}
 	if strings.Contains(s, "://") {
-		s = urlPassword.ReplaceAllString(s, "${1}"+Mask+"${2}")
+		for _, m := range urlPassword.FindAllStringSubmatchIndex(s, -1) {
+			ranges = append(ranges, Range{m[3], m[4]})
+		}
 	}
-	return s
+	sort.Slice(ranges, func(i, j int) bool { return ranges[i].Start < ranges[j].Start })
+	merged := ranges[:0]
+	for _, r := range ranges {
+		if len(merged) > 0 && r.Start < merged[len(merged)-1].End {
+			merged[len(merged)-1].End = max(merged[len(merged)-1].End, r.End)
+		} else {
+			merged = append(merged, r)
+		}
+	}
+	return merged
+}
+
+// String returns s with known secret patterns replaced by Mask.
+func String(s string) string {
+	return render(s, Ranges(s), 0, len(s), false)
+}
+
+// Fragment renders s[start:end] using ranges computed over the full s.
+// Each visible part of an intersecting secret is masked, even at page boundaries.
+// CR and LF bytes are preserved, masking each nonempty part of a secret line
+// separately so line numbers and line endings remain stable.
+// Bounds must satisfy 0 <= start <= end <= len(s); ranges must come from Ranges(s).
+func Fragment(s string, ranges []Range, start, end int) string {
+	return render(s, ranges, start, end, true)
+}
+
+func render(s string, ranges []Range, start, end int, preserveLines bool) string {
+	var out strings.Builder
+	cursor := start
+	first := sort.Search(len(ranges), func(i int) bool { return ranges[i].End >= start })
+	for _, r := range ranges[first:] {
+		if r.Start >= end {
+			break
+		}
+		lo, hi := max(start, r.Start), min(end, r.End)
+		if lo > hi || lo == hi && r.Start != r.End {
+			continue
+		}
+		out.WriteString(s[cursor:lo])
+		if !preserveLines {
+			out.WriteString(Mask)
+		} else {
+			for lo < hi {
+				next := strings.IndexAny(s[lo:hi], "\r\n")
+				if next < 0 {
+					out.WriteString(Mask)
+					break
+				}
+				if next > 0 {
+					out.WriteString(Mask)
+				}
+				out.WriteByte(s[lo+next])
+				lo += next + 1
+			}
+			if r.Start == r.End {
+				out.WriteString(Mask)
+			}
+		}
+		cursor = hi
+	}
+	if cursor == start && out.Len() == 0 {
+		return s[start:end]
+	}
+	out.WriteString(s[cursor:end])
+	return out.String()
 }
 
 // Scan separators directly rather than running a large regexp over every log
 // word. Whitespace is a separator only for long flags and uppercase env keys.
-func redactAssignments(s string) string {
-	var out strings.Builder
-	cursor, pos, authorityEnd := 0, 0, 0
+func assignmentRanges(s string) []Range {
+	var ranges []Range
+	pos, authorityEnd := 0, 0
 	hasFlags := strings.Contains(s, "--")
 	separators := ":="
 	if hasFlags {
@@ -130,22 +233,15 @@ func redactAssignments(s string) string {
 		if value == "" {
 			continue
 		}
-		out.WriteString(s[cursor:pos])
+		valueStart, valueEnd := pos, pos+len(value)
 		if value[0] == '"' || value[0] == '\'' {
-			out.WriteByte(value[0])
-			out.WriteString(Mask)
-			out.WriteByte(value[0])
-		} else {
-			out.WriteString(Mask)
+			valueStart++
+			valueEnd--
 		}
-		cursor = pos + len(value)
-		pos = cursor
+		ranges = append(ranges, Range{valueStart, valueEnd})
+		pos += len(value)
 	}
-	if cursor == 0 {
-		return s
-	}
-	out.WriteString(s[cursor:])
-	return out.String()
+	return ranges
 }
 
 func sensitiveKey(k string) bool {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 )
 
@@ -62,7 +63,11 @@ func (p *provider) search(ctx context.Context, _ tool.Caller, in searchInput) (s
 				return stopWalk
 			}
 		}
+		ranges := redact.Ranges(n.text)
+		lineEnd := -1
 		for i, line := range noteLines(n.text) {
+			lineStart := lineEnd + 1
+			lineEnd = lineStart + len(line)
 			if err := ctx.Err(); err != nil {
 				return err
 			}
@@ -77,7 +82,7 @@ func (p *provider) search(ctx context.Context, _ tool.Caller, in searchInput) (s
 				}
 				center := utf8.RuneCountInString(folded[:cursor+at])
 				hits++
-				fmt.Fprintf(&out, "%s:%d: %s\n", e.name, i+1, snippetAt(line, center))
+				fmt.Fprintf(&out, "%s:%d: %s\n", e.name, i+1, snippetRange(n.text, ranges, lineStart, lineEnd, center))
 				if hits >= max {
 					return stopWalk
 				}
@@ -97,7 +102,7 @@ func snippet(text, query string, sensitive bool) string {
 	text = strings.TrimSpace(text)
 	runes := []rune(text)
 	if len(runes) <= 200 {
-		return text
+		return redact.String(text)
 	}
 	folded := text
 	if !sensitive {
@@ -113,11 +118,23 @@ func snippet(text, query string, sensitive bool) string {
 }
 
 func snippetAt(text string, center int) string {
-	runes := []rune(text)
-	if len(runes) <= 200 {
-		return strings.TrimSpace(text)
+	return snippetRange(text, redact.Ranges(text), 0, len(text), center)
+}
+
+func snippetRange(text string, ranges []redact.Range, start, end, center int) string {
+	if count := utf8.RuneCountInString(text[start:end]); count > 200 {
+		first := min(max(0, center-80), count-200)
+		lineStart, n := start, 0
+		for i := range text[lineStart:end] {
+			if n == first {
+				start = lineStart + i
+			}
+			if n == first+200 {
+				end = lineStart + i
+				break
+			}
+			n++
+		}
 	}
-	start := max(0, center-80)
-	start = min(start, len(runes)-200)
-	return strings.TrimSpace(string(runes[start : start+200]))
+	return strings.TrimSpace(redact.Fragment(text, ranges, start, end))
 }

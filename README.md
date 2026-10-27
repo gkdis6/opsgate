@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/logo.png" alt="opsgate mascot: a haetae guardian with an approval check" width="240"></p>
+
 # opsgate
 
 [한국어](README.ko.md)

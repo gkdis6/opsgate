@@ -14,3 +14,12 @@ func TestMessageEscapesText(t *testing.T) {
 		t.Fatalf("message: %d %s", w.Code, body)
 	}
 }
+
+func TestLayoutIcon(t *testing.T) {
+	w := httptest.NewRecorder()
+	Message(w, 200, "Title", "Message")
+	body := w.Body.String()
+	if strings.Count(body, `"data:image/png;base64,`) != 2 || !strings.Contains(body, `<link rel="icon" type="image/png"`) {
+		t.Fatalf("icon missing: %s", body[:min(len(body), 400)])
+	}
+}

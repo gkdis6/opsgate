@@ -43,7 +43,7 @@ func htmlPage(w http.ResponseWriter, status int, data pageData) {
 }
 func htmlHeaders(w http.ResponseWriter) {
 	noStore(w)
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; "+ui.ImageSource+"; frame-ancestors 'none'")
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Content-Type-Options", "nosniff")

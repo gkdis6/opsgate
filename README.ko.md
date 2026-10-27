@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/logo.png" alt="opsgate 마스코트: 승인 체크 패를 든 해태" width="240"></p>
+
 # opsgate
 
 [English](README.md)

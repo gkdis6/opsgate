@@ -33,7 +33,7 @@ func TestApprovalPagesEscaping(t *testing.T) {
 			}
 			w := webRequest(mux, method, id, user, form, nil)
 			body := w.Body.String()
-			if strings.Contains(strings.ToLower(body), "<script") || !strings.Contains(body, `name="viewport"`) || !strings.Contains(body, `class="brand">opsgate`) {
+			if strings.Contains(strings.ToLower(body), "<script") || !strings.Contains(body, `name="viewport"`) || !strings.Contains(body, `class="brand"><img`) {
 				t.Fatalf("unsafe or unstyled page: %s", body)
 			}
 			wantStatus := http.StatusOK

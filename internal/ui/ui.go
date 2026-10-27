@@ -6,6 +6,7 @@ package ui
 import (
 	"bytes"
 	_ "embed"
+	"encoding/base64"
 	"html/template"
 	"net/http"
 )
@@ -13,10 +14,20 @@ import (
 //go:embed layout.html
 var layout string
 
+//go:embed icon.png
+var icon []byte
+
+// ImageSource is the CSP directive pages need for the inline icon. Inline
+// data keeps pages free of extra routes that proxies would have to forward.
+const ImageSource = "img-src data:"
+
+var iconURL = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(icon))
+
 // NewTemplate adds trusted title and content definitions to the shared layout.
 // All request data must be passed to Execute, never interpolated into source.
 func NewTemplate(source string) *template.Template {
-	return template.Must(template.Must(template.New("layout").Parse(layout)).Parse(source))
+	funcs := template.FuncMap{"icon": func() template.URL { return iconURL }}
+	return template.Must(template.Must(template.New("layout").Funcs(funcs).Parse(layout)).Parse(source))
 }
 
 // Render buffers a page before writing the response so render errors cannot

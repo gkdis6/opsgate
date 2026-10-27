@@ -606,7 +606,7 @@ func TestBrowserPagesEscaping(t *testing.T) {
 			w := httptest.NewRecorder()
 			htmlPage(w, 200, tc.data)
 			body := w.Body.String()
-			if strings.Contains(strings.ToLower(body), "<script") || !strings.Contains(body, "&lt;script&gt;") || !strings.Contains(body, `class="brand">opsgate`) {
+			if strings.Contains(strings.ToLower(body), "<script") || !strings.Contains(body, "&lt;script&gt;") || !strings.Contains(body, `class="brand"><img`) {
 				t.Fatalf("unsafe or unstyled page: %s", body)
 			}
 			if tc.name == "consent" {
@@ -616,7 +616,7 @@ func TestBrowserPagesEscaping(t *testing.T) {
 					}
 				}
 			}
-			if w.Header().Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'" || w.Header().Get("Cache-Control") != "no-store" {
+			if w.Header().Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'" || w.Header().Get("Cache-Control") != "no-store" {
 				t.Fatal("security headers changed")
 			}
 		})

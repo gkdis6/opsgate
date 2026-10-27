@@ -27,7 +27,7 @@ var passkeyScript []byte
 
 // Passkey pages are the only ones that run script: the same-origin
 // /passkey.js, nothing inline, no other origins.
-const passkeyCSP = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src 'none'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'"
+const passkeyCSP = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; " + ui.ImageSource + "; frame-ancestors 'none'; form-action 'self'; base-uri 'none'"
 
 const passkeyCeremonyTTL = 5 * time.Minute
 

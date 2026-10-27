@@ -4,13 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{template "title" .}} · opsgate</title>
+<link rel="icon" type="image/png" href="{{icon}}">
 <style>
 :root{color-scheme:light dark;--bg:#f2f5f8;--card:#fff;--fg:#172334;--muted:#536479;--line:#cbd5df;--accent:#185ac0;--on-accent:#fff;--target:#f4f7fb;--danger:#b42332;--added:#e1f4e7;--removed:#ffe5e7}
 @media(prefers-color-scheme:dark){:root{--bg:#10161e;--card:#19222e;--fg:#edf2f8;--muted:#a9b8ca;--line:#425167;--accent:#a1c7ff;--on-accent:#10213b;--target:#121c29;--danger:#ffabb3;--added:#183e2c;--removed:#49232d}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:1rem/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 main{max-width:36rem;margin:0 auto;padding:1.25rem 1rem 2.5rem}
-.brand{color:var(--muted);font-weight:650;letter-spacing:.04em;margin:0 0 .75rem}
+.brand{color:var(--muted);font-weight:650;letter-spacing:.04em;margin:0 0 .75rem;display:flex;align-items:center;gap:.5rem}.brand img{width:2rem;height:2rem}
 .card{background:var(--card);border:1px solid var(--line);border-radius:1rem;padding:clamp(1rem,4vw,1.75rem)}
 h1{font-size:1.65rem;line-height:1.25;overflow-wrap:anywhere;margin:0 0 1rem;letter-spacing:-.02em}
 h2{font-size:1rem;margin:0 0 .5rem}
@@ -37,5 +38,5 @@ button:hover{filter:brightness(.94)}button:focus-visible,summary:focus-visible{o
 .error{color:var(--danger,#b42318)}[hidden]{display:none}
 </style>
 </head>
-<body><main><header class="brand">opsgate</header><section class="card">{{template "content" .}}</section></main>{{block "scripts" .}}{{end}}</body>
+<body><main><header class="brand"><img src="{{icon}}" alt="">opsgate</header><section class="card">{{template "content" .}}</section></main>{{block "scripts" .}}{{end}}</body>
 </html>

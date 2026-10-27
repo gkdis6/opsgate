@@ -240,7 +240,7 @@ func TestWebPageSecurity(t *testing.T) {
 			if w.Code != tc.want {
 				t.Errorf("status = %d, want %d: %s", w.Code, tc.want, w.Body.String())
 			}
-			if w.Header().Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'self'" ||
+			if w.Header().Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'; form-action 'self'" ||
 				w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("X-Frame-Options") != "DENY" {
 				t.Errorf("security headers = %v", w.Header())
 			}

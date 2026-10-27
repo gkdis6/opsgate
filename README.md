@@ -17,6 +17,8 @@ an audit log.
 > is pending; the [security policy](SECURITY.md) explains the protections and
 > remaining limitations.
 
+
+
 ## Why opsgate
 
 
@@ -55,6 +57,8 @@ The optional note provider keeps runbooks and
 past incidents in plain Markdown. Assistants are instructed to consult past
 records and offer to record the outcome. See [notes](docs/notes.md).
 
+
+
 ## What it can do
 
 Providers are groups of tools; enable only the groups you need.
@@ -76,6 +80,8 @@ for creating general files at arbitrary server paths or changing Kubernetes CPU
 and memory requests or limits. Those resource settings can be inspected with
 Kubernetes detail tools. See the [tool reference](docs/tools.md) for arguments
 and limits.
+
+
 
 ## How it works
 
@@ -120,6 +126,8 @@ changes require approval, and saved records can inform later investigations. See
 
 <img src="docs/images/note-memory.svg" alt="Notes memory loop: search upstream timeout history, propose a past fix, approve and apply, then record an approved note for next time" width="830">
 
+
+
 ## Quick start: local (stdio)
 
 Build with Go 1.26 or later:
@@ -147,6 +155,8 @@ claude mcp add opsgate -- /path/to/opsgate -config /path/opsgate.yaml
 
 Stdio runs with the permissions of the account that launches it. Run it
 unprivileged. Other clients: [client setup](docs/clients.md).
+
+
 
 ## Quick start: remote (HTTP with passkeys)
 
@@ -192,6 +202,8 @@ Before exposing the server publicly, restrict client redirect hosts
 in [authentication](docs/authentication.md). Proxy routes, systemd units and
 release verification are in [deployment](docs/deploy.md).
 
+
+
 ## Security model in brief
 
 - One instance is one trust group: `ops:read` covers every enabled provider. Use
@@ -203,6 +215,8 @@ release verification are in [deployment](docs/deploy.md).
   `approval.require_web: true` to require browser approval instead.
 
 Full details: [SECURITY.md](SECURITY.md).
+
+
 
 ## Documentation
 
@@ -218,6 +232,8 @@ Full details: [SECURITY.md](SECURITY.md).
 | [Deployment](docs/deploy.md) | Release verification, systemd, Kubernetes, reverse proxy |
 | [Dev provider](docs/dev.md) | Running coding agents through the separate runner |
 | [Roadmap](docs/roadmap.md) | What is done and what may come |
+
+
 
 ## Contributing and license
 

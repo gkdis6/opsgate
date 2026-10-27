@@ -15,6 +15,8 @@ Cursor 같은 클라이언트에 Linux 호스트와 Kubernetes를 운영하는 �
 > 노출을 줄입니다. 외부 보안 검토는 아직 받지 않았으며, 보호 범위와 남아 있는 한계는
 > [보안 정책](docs/ko/security.md)에 설명합니다.
 
+
+
 ## 왜 opsgate인가
 
 
@@ -52,6 +54,8 @@ AI 클라이언트에는 로그나 조회 결과 안의 지시문을
 일반 Markdown으로 보관합니다. AI에 과거 기록을 먼저 참고하고,
 이번 조치를 기록할지 사용자에게 제안하도록 안내합니다. [노트](docs/ko/notes.md)를 참고하세요.
 
+
+
 ## 할 수 있는 일
 
 각 기능 묶음을 provider라고 부르며, 필요한 것만 설정에서 켤 수 있습니다.
@@ -72,6 +76,8 @@ AI 클라이언트에는 로그나 조회 결과 안의 지시문을
 만들거나 Kubernetes의 CPU·메모리 requests·limits를 변경하는 도구는 없습니다.
 requests·limits 설정값은 Kubernetes 상세 조회로 확인할 수 있습니다.
 전체 인자와 제한은 [도구 문서](docs/ko/tools.md)를 참고하세요.
+
+
 
 ## 동작 방식
 
@@ -117,6 +123,8 @@ note provider를 활성화하면 AI에 조치 전 과거 기록을 검색하고,
 
 <img src="docs/images/ko/note-memory.svg" alt="upstream timeout 검색으로 지난 조치를 참고하고, 사람의 승인 후 실행과 노트 기록을 거쳐 다음 조사에 활용하는 흐름" width="830">
 
+
+
 ## 빠른 시작: 로컬(stdio)
 
 Go 1.26 이상으로 빌드하세요.
@@ -144,6 +152,8 @@ claude mcp add opsgate -- /path/to/opsgate -config /path/opsgate.yaml
 
 stdio는 실행한 계정의 권한으로 동작하므로 관리자 권한이 없는 일반 계정으로 실행하세요. 다른
 클라이언트는 [클라이언트 설정](docs/ko/clients.md)을 참고하세요.
+
+
 
 ## 빠른 시작: 원격(HTTP + 패스키)
 
@@ -189,6 +199,8 @@ opsgate -transport http -config /etc/opsgate/opsgate.yaml
 [인증 문서](docs/ko/authentication.md)에, 프록시 경로·systemd 유닛·릴리스 검증은
 [배포 문서](docs/ko/deploy.md)에 있습니다.
 
+
+
 ## 보안 모델 요약
 
 - 인스턴스 하나가 신뢰 그룹 하나입니다. `ops:read`는 켜진 provider 전체에 적용됩니다.
@@ -200,6 +212,8 @@ opsgate -transport http -config /etc/opsgate/opsgate.yaml
   브라우저 승인만 허용하려면 `approval.require_web: true`로 설정하세요.
 
 자세한 내용: [보안 정책](docs/ko/security.md)
+
+
 
 ## 문서
 
@@ -215,6 +229,8 @@ opsgate -transport http -config /etc/opsgate/opsgate.yaml
 | [배포](docs/ko/deploy.md) | 릴리스 검증, systemd, Kubernetes, 리버스 프록시 |
 | [Dev provider](docs/ko/dev.md) | 별도 runner로 코딩 에이전트 실행 |
 | [로드맵](docs/ko/roadmap.md) | 완료한 기능과 앞으로의 계획 |
+
+
 
 ## 기여와 라이선스
 

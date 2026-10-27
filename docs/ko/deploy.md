@@ -202,7 +202,7 @@ PVC와 백업을 자격 증명으로 취급해 보호합니다.
 
 매니페스트의 Google 클라이언트 ID, HTTPS 오리진, 신원 및 네임스페이스 허용 목록을 수정합니다.
 예시 이미지 태그를 검증된 이미지 다이제스트로 교체합니다.
-아래 설명에 따라 모든 HTTP 프로브에 공개 Host 헤더를 추가합니다.
+모든 HTTP 프로브에 제공된 Host 헤더를 공개 호스트와 일치하도록 수정합니다.
 네임스페이스를 생성하고 보호된 로컬 파일에서 Secret을 준비합니다.
 
 ```sh
@@ -221,11 +221,10 @@ TLS ingress/리버스 프록시가 Service `opsgate:8787`로 연결되도록 설
 앞서 설명한 경로와 스트리밍 동작을 보존합니다.
 
 프로브는 내부 `/healthz` 엔드포인트를 사용합니다.
-매니페스트가 `0.0.0.0`에 바인딩하므로 제공된 HTTP 프로브의 **각** `httpGet` 아래에
-`httpHeaders: [{name: Host, value: mcp.example.com}]`가 필요합니다.
-공개 호스트를 사용하고, 명시된 포트가 있으면 포함합니다.
-이렇게 변경하지 않으면 kubelet은 Pod IP를 Host로 사용해 421을 받습니다.
-이 checkout의 매니페스트에는 아직 이 헤더가 없습니다. 적용 전에 수정합니다.
+매니페스트가 `0.0.0.0`에 바인딩하므로 제공된 각 HTTP 프로브의 `httpGet` 아래에
+`httpHeaders: [{name: Host, value: mcp.example.com}]`가 포함되어 있습니다.
+Host 값은 `http.public_url`의 호스트와 일치해야 하며, 명시된 포트가 있으면 포함해야 합니다.
+이 헤더가 없으면 kubelet은 Pod IP를 Host로 사용해 421을 받습니다.
 Service/Pod-IP에 직접 보내는 상태 확인 요청에도 같은 요구사항이 적용됩니다.
 
 일회용 개발 환경에서만 `state` 볼륨의 `persistentVolumeClaim`을 `emptyDir: {}`로 바꾸고 PVC 문서를 생략합니다.

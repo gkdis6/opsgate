@@ -195,7 +195,7 @@ explicitly on the PVC. Protect the PVC and its backups as credentials.
 
 Edit the manifest's Google client ID, HTTPS origin, identity and namespace
 allowlists. Replace its illustrative image tag with the verified image digest,
-and add the public Host header to every HTTP probe as described below.
+and update the supplied Host header on every HTTP probe to match your public host.
 Create the namespace and provision the Secret from a protected local file:
 
 ```sh
@@ -212,11 +212,11 @@ the manifest. Restrict Secret RBAC and enable encryption at rest. Logs go to
 stderr for your cluster log collector. Configure a TLS ingress/reverse proxy to
 Service `opsgate:8787`, preserving the routes and streaming behavior above.
 Probes use the internal `/healthz` endpoint. The manifest binds to `0.0.0.0`, so
-its supplied HTTP probes need `httpHeaders: [{name: Host, value: mcp.example.com}]`
-under **each** `httpGet` (use your public host, including an explicit port).
-Without that change, the kubelet uses the Pod IP as Host and receives 421. The
-manifest in this checkout does not yet include those headers; adjust it before
-applying. The same requirement applies to direct Service/Pod-IP health checks.
+each supplied HTTP probe includes
+`httpHeaders: [{name: Host, value: mcp.example.com}]` under `httpGet`.
+The Host value must match the host in `http.public_url`, including any explicit
+port. Without that header, the kubelet uses the Pod IP as Host and receives 421.
+The same requirement applies to direct Service/Pod-IP health checks.
 
 For disposable development only, replace the `state` volume's
 `persistentVolumeClaim` with `emptyDir: {}` and omit the PVC document. Pod

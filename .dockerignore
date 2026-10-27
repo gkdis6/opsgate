@@ -9,5 +9,6 @@
 !internal/**/
 !internal/**/*.go
 !internal/**/*.html
+!internal/**/*.js
 !scripts/
 !scripts/third-party-licenses.sh

@@ -119,17 +119,20 @@ spec:
             httpGet:
               path: /healthz
               port: http
+              httpHeaders: [{name: Host, value: mcp.example.com}]
             periodSeconds: 5
             failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /healthz
               port: http
+              httpHeaders: [{name: Host, value: mcp.example.com}]
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /healthz
               port: http
+              httpHeaders: [{name: Host, value: mcp.example.com}]
             periodSeconds: 20
           volumeMounts:
             - name: config

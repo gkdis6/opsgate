@@ -72,7 +72,7 @@ note provider를 활성화하면 AI는 조치하기 전에 지난 장애 기록�
 이번 조치를 기록합니다. 다음에 조사할 때는 이 기록을 바탕으로 시작할 수 있습니다.
 [노트](docs/ko/notes.md)를 참고하세요.
 
-<img src="docs/images/ko/note-memory.svg" alt="OOMKilled 검색으로 지난 조치를 참고하고, 사람의 승인 후 실행과 노트 기록을 거쳐 다음 조사에 활용하는 흐름" width="830">
+<img src="docs/images/ko/note-memory.svg" alt="upstream timeout 검색으로 지난 조치를 참고하고, 사람의 승인 후 실행과 노트 기록을 거쳐 다음 조사에 활용하는 흐름" width="830">
 
 ## 빠른 시작: 로컬(stdio)
 

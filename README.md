@@ -74,7 +74,7 @@ With the note provider enabled, assistants search past incidents before acting
 and, with approval, record what they did, so the next investigation starts from
 history instead of from scratch. See [notes](docs/notes.md).
 
-<img src="docs/images/note-memory.svg" alt="Notes memory loop: search OOMKilled history, propose a past fix, approve and apply, then record an approved note for next time" width="830">
+<img src="docs/images/note-memory.svg" alt="Notes memory loop: search upstream timeout history, propose a past fix, approve and apply, then record an approved note for next time" width="830">
 
 ## Quick start: local (stdio)
 

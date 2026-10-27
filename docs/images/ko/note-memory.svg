@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 626" role="img" aria-labelledby="title desc" lang="ko">
 <title id="title">노트: 런북과 메모리 순환</title>
-<desc id="desc">AI가 api 파드의 OOMKilled 재시작을 발견하고, 노트에서 같은 문구를 검색합니다. 2026-10-12에 메모리 제한을 512Mi에서 1Gi로 올려 해결한 기록을 참고해 같은 조치를 제안하고 사람의 승인을 받아 실행합니다. 별도 노트 쓰기도 diff 미리보기와 승인을 거쳐 증상·원인·조치·결과를 History에 덧붙입니다. 다음 검색에서 공유된 Markdown 기록을 다시 참고합니다.</desc>
+<desc id="desc">AI가 api 로그의 upstream timeout을 발견하고 과거 replica 증설 기록을 검색합니다. 현재 상태, 클러스터 여유 용량과 HPA 설정을 확인한 뒤 k8s_scale로 replica 2개를 4개로 늘리는 조치를 제안합니다. 허용 목록과 권한 검사 및 사람의 승인 후 실행하고 복구를 확인합니다. 처리 이력은 별도 승인을 받아 노트에 기록합니다.</desc>
 <style>
 svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
 text { fill: #202936; }
@@ -45,29 +45,29 @@ text { fill: #202936; }
 <text x="24" y="54" class="small muted">리터럴 검색으로 지난 조치를 참고합니다. 노트는 권한을 부여하지 않습니다.</text>
 <rect x="24" y="104" width="228" height="110" rx="9" class="box"/>
 <text x="40" y="132" class="head">1  증상 발견</text>
-<text x="40" y="158">api 파드 재시작</text>
-<text x="40" y="179">OOMKilled</text>
+<text x="40" y="158">api 요청 실패</text>
+<text x="40" y="179">upstream timeout</text>
 <path d="M252 158 H300" class="line "/>
 <rect x="300" y="104" width="228" height="110" rx="9" class="accent"/>
 <text x="316" y="132" class="head">2  노트 검색</text>
-<text x="316" y="158" class="small">note_search &quot;OOMKilled&quot;</text>
+<text x="316" y="158" class="small">&quot;upstream timeout&quot;</text>
 <text x="316" y="184" class="small muted">실제 증상 / 오류 문구</text>
 <path d="M528 158 H576" class="line "/>
 <rect x="576" y="104" width="230" height="140" rx="9" class="box"/>
 <text x="592" y="132" class="head">3  지난 장애 기록 발견</text>
-<text x="592" y="157" class="small">incidents/api-oomkilled.md</text>
+<text x="592" y="157" class="small">incidents/api-timeout.md</text>
 <text x="592" y="183" class="small">2026-10-12:</text>
-<text x="592" y="207" class="small">제한 512Mi → 1Gi, 해결</text>
+<text x="592" y="207" class="small">replica 2 → 4, 해결</text>
 <path d="M691 244 V284" class="line "/>
 <rect x="576" y="284" width="230" height="104" rx="9" class="accent"/>
-<text x="592" y="311" class="head">4  같은 조치 제안</text>
-<text x="592" y="338" class="small">메모리 제한 상향</text>
-<text x="592" y="359" class="small">512Mi → 1Gi · rollout</text>
+<text x="592" y="311" class="head">4  현재 상태 확인 후 제안</text>
+<text x="592" y="338" class="small">k8s_scale: api/api</text>
+<text x="592" y="359" class="small">replica 2 → 4</text>
 <path d="M576 336 H528" class="line "/>
 <rect x="300" y="284" width="228" height="104" rx="9" class="good"/>
 <text x="316" y="311" class="head">5  사람의 승인</text>
 <text x="316" y="338" class="small">대상과 변경 내용 확인</text>
-<text x="316" y="359" class="small">제안한 조치 승인</text>
+<text x="316" y="359" class="small">대상 허용 목록·권한 필요</text>
 <path d="M300 336 H252" class="line allow"/>
 <rect x="24" y="284" width="228" height="104" rx="9" class="good"/>
 <text x="40" y="311" class="head">6  실행</text>

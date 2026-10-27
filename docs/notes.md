@@ -40,10 +40,11 @@ it; add to an existing note for the same symptom instead of duplicating it.
 A typical investigation then looks like this:
 
 ```text
-symptom: api pods restart with OOMKilled
-  -> note_search "OOMKilled" -> incidents/api-oomkilled.md
-     "2026-10-12: memory limit 512Mi -> 1Gi, resolved"
-  -> the assistant proposes the same fix -> human approval -> apply
+symptom: api logs show upstream timeout
+  -> note_search "upstream timeout" -> incidents/api-timeout.md
+     "2026-10-12: replicas 2 -> 4, resolved"
+  -> check current state and capacity -> propose k8s_scale (2 -> 4)
+  -> human approval -> apply -> verify recovery
   -> note_append under "## History" -> diff preview -> human approval
 ```
 
@@ -57,7 +58,7 @@ Any layout works, and search covers the whole folder. For example:
 
 ```text
 runbooks/postgres.md
-incidents/api-oomkilled.md
+incidents/api-timeout.md
 decisions/2026-10-25-passkey-login.md
 ```
 
@@ -68,19 +69,22 @@ problems collect in one place. An incident note might look like this:
 ---
 tags: [incident, api]
 ---
-# api pods OOMKilled
+# api upstream timeout
 
 ## Symptom
-Pods in namespace api restart; events show `OOMKilled`.
+API logs show `upstream timeout` during peak traffic.
 
 ## Cause
-Memory limit too low for peak traffic.
+Insufficient API replicas for peak traffic; confirmed by investigation.
 
 ## Action
-Raise the memory limit from 512Mi to 1Gi and roll out.
+After checking current load, cluster capacity and HPA settings, use
+`k8s_scale` to scale deployment api/api from 2 to 4 replicas.
+Requires the scale allowlist, ops:write and human approval.
+Verify recovery after scaling.
 
 ## History
-- 2026-10-12: first seen; limit raised; resolved.
+- 2026-10-12: first seen; scaled from 2 to 4 replicas; timeouts resolved.
 - 2026-11-03: recurred after a traffic spike; see decisions/api-sizing.md.
 ```
 

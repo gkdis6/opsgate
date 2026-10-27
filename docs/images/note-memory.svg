@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 626" role="img" aria-labelledby="title desc" lang="en">
 <title id="title">Notes: runbooks and memory loop</title>
-<desc id="desc">An assistant finds api pods restarting with OOMKilled, searches literal note text, and finds the 2026-10-12 incident where raising the memory limit from 512Mi to 1Gi resolved it. It proposes the same fix, seeks human approval, and applies the approved action. A separate approved note append previews a diff and records symptom, cause, action and outcome under History. The next search can reuse this shared Markdown history.</desc>
+<desc id="desc">An assistant investigates upstream timeout logs and searches past scaling records. After checking current state, cluster capacity and HPA settings, it proposes k8s_scale from 2 to 4 replicas. Execution requires allowlist and scope checks and human approval, followed by recovery verification. Recording the outcome in a note requires separate approval.</desc>
 <style>
 svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
 text { fill: #202936; }
@@ -45,29 +45,29 @@ text { fill: #202936; }
 <text x="24" y="54" class="small muted">Literal search reuses past fixes; notes do not grant permission.</text>
 <rect x="24" y="104" width="228" height="110" rx="9" class="box"/>
 <text x="40" y="132" class="head">1  Find a symptom</text>
-<text x="40" y="158">api pods restart</text>
-<text x="40" y="179">OOMKilled</text>
+<text x="40" y="158">api request failures</text>
+<text x="40" y="179">upstream timeout</text>
 <path d="M252 158 H300" class="line "/>
 <rect x="300" y="104" width="228" height="110" rx="9" class="accent"/>
 <text x="316" y="132" class="head">2  Search notes</text>
-<text x="316" y="158" class="small">note_search &quot;OOMKilled&quot;</text>
+<text x="316" y="158" class="small">&quot;upstream timeout&quot;</text>
 <text x="316" y="184" class="small muted">Exact symptom / error text</text>
 <path d="M528 158 H576" class="line "/>
 <rect x="576" y="104" width="230" height="140" rx="9" class="box"/>
 <text x="592" y="132" class="head">3  Past incident found</text>
-<text x="592" y="157" class="small">incidents/api-oomkilled.md</text>
+<text x="592" y="157" class="small">incidents/api-timeout.md</text>
 <text x="592" y="183" class="small">2026-10-12:</text>
-<text x="592" y="207" class="small">limit 512Mi → 1Gi, resolved</text>
+<text x="592" y="207" class="small">replicas 2 → 4, resolved</text>
 <path d="M691 244 V284" class="line "/>
 <rect x="576" y="284" width="230" height="104" rx="9" class="accent"/>
-<text x="592" y="311" class="head">4  Propose the same fix</text>
-<text x="592" y="338" class="small">Raise memory limit</text>
-<text x="592" y="359" class="small">512Mi → 1Gi; roll out</text>
+<text x="592" y="311" class="head">4  Check + propose scaling</text>
+<text x="592" y="338" class="small">k8s_scale: api/api</text>
+<text x="592" y="359" class="small">replicas 2 → 4</text>
 <path d="M576 336 H528" class="line "/>
 <rect x="300" y="284" width="228" height="104" rx="9" class="good"/>
 <text x="316" y="311" class="head">5  Human approval</text>
 <text x="316" y="338" class="small">Review target + change</text>
-<text x="316" y="359" class="small">Approve the proposed action</text>
+<text x="316" y="359" class="small">Allowlist + scope required</text>
 <path d="M300 336 H252" class="line allow"/>
 <rect x="24" y="284" width="228" height="104" rx="9" class="good"/>
 <text x="40" y="311" class="head">6  Apply</text>

@@ -48,7 +48,7 @@ Providers are groups of tools; enable only the groups you need.
 | Notes: runbooks and memory, Markdown folder or Obsidian vault *(experimental)* | search, read, list, recent, links, tags | create, append, replace, move to `.trash` |
 | Dev *(experimental)* | projects, task status, log, diff, list | start a coding agent (Codex or Claude) in a Git worktree |
 
-Scopes define the kinds of work a user can perform: `ops:read` for inspection,
+Scopes define the kinds of work a user can perform through opsgate: `ops:read` for inspection,
 `ops:write` for operations and note changes, and `dev:run` for coding-agent tasks.
 Allowlists restrict tools and targets such as services and Kubernetes workloads.
 A scope alone does not enable an operation prohibited by configuration.

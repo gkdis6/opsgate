@@ -21,7 +21,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: echo "public=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.private | not')" >> "$GITHUB_OUTPUT"
       - if: steps.visibility.outputs.public == 'true'
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - if: steps.visibility.outputs.public == 'true'

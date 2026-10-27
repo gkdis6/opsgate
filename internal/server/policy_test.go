@@ -135,7 +135,7 @@ func TestPolicyInventoryIsPerServer(t *testing.T) {
 
 func TestToolGlobConfigValidation(t *testing.T) {
 	for _, location := range []string{"allow", "deny", "builtin", "external", "static"} {
-		for _, pattern := range []string{"host_*", "obsidian_?ead", "host_[a-z]*", "[", "host_\\"} {
+		for _, pattern := range []string{"host_*", "note_?ead", "host_[a-z]*", "[", "host_\\"} {
 			t.Run(location+"/"+pattern, func(t *testing.T) {
 				cfg := config.Default()
 				cfg.HTTP.PublicURL, cfg.Auth.Mode = "https://ops.example", config.AuthBuiltin

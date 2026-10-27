@@ -55,7 +55,7 @@ providers:
     scale: []
     delete_pod: []
     max_replicas: 3
-  obsidian:
+  note:
     enabled: false # Optional experimental vault provider.
     allow_write: false
   dev:

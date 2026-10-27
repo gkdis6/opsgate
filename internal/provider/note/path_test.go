@@ -1,4 +1,4 @@
-package obsidian
+package note
 
 import (
 	"context"
@@ -19,7 +19,7 @@ func fixture(t *testing.T, files map[string]string) *provider {
 	for name, text := range files {
 		put(t, dir, name, text)
 	}
-	cfg := config.Default().Providers.Obsidian
+	cfg := config.Default().Providers.Note
 	cfg.Vault = dir
 	cfg.AllowWrite = true
 	p, err := openVault(cfg)
@@ -126,7 +126,7 @@ func TestSymlinkRetargetAfterApproval(t *testing.T) {
 
 func TestOpenVaultValidation(t *testing.T) {
 	dir := t.TempDir()
-	for _, cfg := range []config.Obsidian{{Vault: "relative", MaxNoteBytes: 10}, {Vault: dir + "/missing", MaxNoteBytes: 10}, {Vault: dir, MaxNoteBytes: 0}, {Vault: dir, MaxNoteBytes: 10, Exclude: []string{"["}}, {Vault: dir, MaxNoteBytes: 10, Exclude: []string{"../secret"}}} {
+	for _, cfg := range []config.Note{{Vault: "relative", MaxNoteBytes: 10}, {Vault: dir + "/missing", MaxNoteBytes: 10}, {Vault: dir, MaxNoteBytes: 0}, {Vault: dir, MaxNoteBytes: 10, Exclude: []string{"["}}, {Vault: dir, MaxNoteBytes: 10, Exclude: []string{"../secret"}}} {
 		if p, err := openVault(cfg); err == nil {
 			p.root.Close()
 			t.Fatalf("accepted %+v", cfg)

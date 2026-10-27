@@ -88,7 +88,7 @@ providers:
     scale: []
     delete_pod: []
     max_replicas: 10 # Nonnegative; zero allows only scaling to zero.
-  obsidian: # Optional experimental Markdown vault provider; no Obsidian app needed.
+  note: # Optional experimental notes: runbooks and incident memory in a Markdown folder (Obsidian vault works).
     enabled: false
     vault: "" # Absolute existing directory when enabled; access confined with os.Root.
     exclude: [] # Additional vault-relative path.Match globs; dot paths/conflicts hidden.
@@ -123,7 +123,7 @@ providers:
 #     scale: [apps/myapp]
 #     delete_pod: [apps/REPLACE_WITH_EXACT_POD]
 #     max_replicas: 3
-#   obsidian:
+#   note:
 #     enabled: true
 #     vault: /absolute/path/to/vault
 #     allow_write: true # Use sync version history; check/rename has an external-edit race.

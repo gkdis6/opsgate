@@ -9,7 +9,7 @@ Darwin 빌드는 로컬 클라이언트용으로 제공합니다. systemd 배포
 
 Streamable HTTP, OAuth, 인증, 사람의 승인, 쓰기 도구가 구현되어 있습니다.
 이 checkout은 첫 공개 릴리스를 준비하고 있으며, 제3자 보안 검토는 아직 진행되지 않았습니다.
-선택 사항인 Obsidian 및 dev provider는 실험적입니다.
+선택 사항인 note 및 dev provider는 실험적입니다.
 외부에 노출하기 전에 인증, 승인, 프록시 동작을 검증합니다.
 업스트림 로그인 콜백은 정확히 `<public_url>/oauth/callback`입니다.
 

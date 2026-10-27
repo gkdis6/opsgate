@@ -60,11 +60,11 @@ Defaults below come from `config.Default()`. YAML is loaded over defaults with s
 | `providers.kubernetes.scale` | `[]` | namespace/name globs; empty disables tool |
 | `providers.kubernetes.delete_pod` | `[]` | namespace/name globs; empty disables tool |
 | `providers.kubernetes.max_replicas` | `10` | Scale maximum; nonnegative, zero permits only zero replicas |
-| `providers.obsidian.enabled` | `false` | Enable the Markdown vault provider; no Obsidian app or CLI needed |
-| `providers.obsidian.vault` | `""` | Absolute existing vault directory; all access confined with os.Root |
-| `providers.obsidian.exclude` | `[]` | Additional vault-relative path.Match globs matching a path or any parent; dot-prefixed segments and sync-conflict copies always excluded |
-| `providers.obsidian.allow_write` | `false` | Register four note write tools; each requires ops:write and human approval |
-| `providers.obsidian.max_note_bytes` | `1048576` | Positive per-note size limit for reads/writes; oversized notes skipped in content scans |
+| `providers.note.enabled` | `false` | Enable the note provider for a Markdown folder or Obsidian vault; no note app or CLI needed |
+| `providers.note.vault` | `""` | Absolute existing vault directory; all access confined with os.Root |
+| `providers.note.exclude` | `[]` | Additional vault-relative path.Match globs matching a path or any parent; dot-prefixed segments and sync-conflict copies always excluded |
+| `providers.note.allow_write` | `false` | Register four note write tools; each requires ops:write and human approval |
+| `providers.note.max_note_bytes` | `1048576` | Positive per-note size limit for reads/writes; oversized notes skipped in content scans |
 | `providers.dev.enabled` | `false` | Enable dev provider; all tools require dev:run |
 | `providers.dev.runner_socket` | `""` | Absolute Unix socket path of the separate dev-runner |
 | `server.tools.allow` / `server.tools.deny` | `[]` / `[]` | Tool-name `path.Match` globs; empty allow permits all offered tools, deny wins; excluded tools are absent from tools/list |
@@ -78,9 +78,9 @@ Defaults below come from `config.Default()`. YAML is loaded over defaults with s
 
 Server policy patterns must match a tool offered by an enabled provider after its action gates, or startup fails. Per-user/token tool patterns are syntax-checked and enforced on calls; they do not filter tools/list. Scopes, server policy, per-user tool policy and provider resource allowlists all apply. Empty tool allowlists add no restriction, unlike empty provider resource allowlists. Configuration changes require a restart.
 
-All providers are disabled by default. Enabling the host provider exposes overview/process tools even with no allowed units; enabling Kubernetes permits cluster-scoped reads subject to RBAC. `ops:read` covers all enabled read providers, including the optional experimental Obsidian provider. `dev:run` covers dev tools, with HTTP additionally requiring `ops:read`. See [the trust model](../SECURITY.md).
+All providers are disabled by default. Enabling the host provider exposes overview/process tools even with no allowed units; enabling Kubernetes permits cluster-scoped reads subject to RBAC. `ops:read` covers all enabled read providers, including the optional experimental note provider. `dev:run` covers dev tools, with HTTP additionally requiring `ops:read`. See [the trust model](../SECURITY.md).
 
-Obsidian writes run as the server account, so notes it creates or rewrites are owned by that account. Grant it access with ACLs rather than ownership, and keep the vault owner able to replace those files (write access to their directories). A sync tool running as the vault owner cannot chmod files it does not own: in Syncthing, set the vault folder's Ignore Permissions option, or permission-only changes from other devices fail with "operation not permitted".
+Note writes run as the server account, so notes it creates or rewrites are owned by that account. Grant it access with ACLs rather than ownership, and keep the vault owner able to replace those files (write access to their directories). A sync tool running as the vault owner cannot chmod files it does not own: in Syncthing, set the vault folder's Ignore Permissions option, or permission-only changes from other devices fail with "operation not permitted".
 
 See [the complete example](../opsgate.example.yaml) for a read-only starting point and separate commented write opt-ins. The [tool reference](tools.md#shared-limits) describes argument, approval and output limits.
 

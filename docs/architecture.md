@@ -27,7 +27,7 @@ AI client (claude.ai, ChatGPT, Claude Code, or another MCP client)
                   |
        +----------+----------+------------+
        |          |          |            |
-      host       kube     obsidian       dev
+      host       kube       note         dev
                                           |
                                       Unix socket
                                           |
@@ -59,7 +59,7 @@ The command selects one transport per process. stdio is the default. HTTP requir
 | `internal/ui` | Shared page layout for consent, approval, passkeys and administration |
 | `internal/provider/host` | systemd status/logs, processes, disk information and allowlisted unit restarts |
 | `internal/provider/kube` | Kubernetes objects, events and logs; allowlisted rollout restarts, scaling and pod deletion within namespace policy |
-| `internal/provider/obsidian` | Searches and reads a Markdown vault; optional create/append/replace/trash tools with content/diff previews and snapshot checks |
+| `internal/provider/note` | Searches and reads a Markdown vault; optional create/append/replace/trash tools with content/diff previews and snapshot checks |
 | `internal/provider/dev`, `internal/devrunner` | Sends requests to a separate runner; the runner chooses configured projects/agents and executes tasks in Git worktrees |
 
 ## Tool execution

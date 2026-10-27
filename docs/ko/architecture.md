@@ -27,7 +27,7 @@ AI 클라이언트 (claude.ai, ChatGPT, Claude Code 등 MCP 클라이언트)
                   |
        +----------+----------+------------+
        |          |          |            |
-      host       kube     obsidian       dev
+      host       kube       note         dev
                                           |
                                       Unix 소켓
                                           |
@@ -59,7 +59,7 @@ HTTP 리스너는 일반 HTTP를 제공합니다. 공개 HTTPS에는 리버스 �
 | `internal/ui` | 동의, 승인, 패스키, 관리 페이지의 공통 레이아웃을 제공합니다. |
 | `internal/provider/host` | systemd 상태/로그, 프로세스, 디스크 정보, 허용된 유닛 재시작을 제공합니다. |
 | `internal/provider/kube` | Kubernetes 오브젝트, 이벤트, 로그를 제공합니다. 네임스페이스 정책 안에서 허용된 rollout restart, scale, 파드 삭제를 수행합니다. |
-| `internal/provider/obsidian` | Markdown 볼트를 검색하고 읽습니다. 선택적인 create/append/replace/trash 도구는 내용/diff 미리보기와 스냅샷 검사를 사용합니다. |
+| `internal/provider/note` | Markdown 볼트를 검색하고 읽습니다. 선택적인 create/append/replace/trash 도구는 내용/diff 미리보기와 스냅샷 검사를 사용합니다. |
 | `internal/provider/dev`, `internal/devrunner` | 별도 runner에 요청을 보냅니다. runner는 설정된 프로젝트/에이전트를 선택하고 Git worktree에서 작업을 실행합니다. |
 
 ## 도구 실행

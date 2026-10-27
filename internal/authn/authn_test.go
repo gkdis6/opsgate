@@ -43,7 +43,7 @@ func TestStatic(t *testing.T) {
 		t.Fatal(err)
 	}
 	token.Scopes[0] = config.ScopeWrite
-	token.Tools[0] = "obsidian_*"
+	token.Tools[0] = "note_*"
 	for _, raw := range []string{"secret", "invalid", "", strings.Repeat("x", maxTokenBytes+1)} {
 		info, err := v(context.Background(), raw, nil)
 		if raw != "secret" {

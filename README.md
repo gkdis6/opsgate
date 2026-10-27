@@ -27,6 +27,9 @@ an audit log.
   (Google included), or verify external JWTs.
 - **Output is treated as untrusted.** Results are redacted, size-limited and
   recorded in a JSONL audit log.
+- **It remembers what happened.** The optional note provider keeps runbooks and
+  past incidents in plain Markdown. Assistants look up how a symptom was handled
+  before and, with approval, record what they did. See [notes](docs/notes.md).
 
 ## What it can do
 
@@ -34,7 +37,7 @@ an audit log.
 | --- | --- | --- |
 | Host (systemd, journald, `/proc`) | overview, services, unit status, logs, top processes | restart an allowed unit |
 | Kubernetes | overview, list, get, events, pod logs | rollout restart, scale, delete pod |
-| Obsidian vault *(experimental)* | search, read, list, recent, links, tags | create, append, replace, move to `.trash` |
+| Notes: runbooks and memory, Markdown folder or Obsidian vault *(experimental)* | search, read, list, recent, links, tags | create, append, replace, move to `.trash` |
 | Dev *(experimental)* | projects, task status, log, diff, list | start a coding agent (Codex or Claude) in a Git worktree |
 
 Each write tool also needs the `ops:write` scope and its own allowlist entry. See
@@ -50,7 +53,7 @@ the [tool reference](docs/tools.md) for every argument and limit.
                                  ├─ redact and size-limit output
                                  └─ audit log (JSONL)
                                        │
-                 host · kubernetes · obsidian · dev-runner (separate account)
+                 host · kubernetes · note · dev-runner (separate account)
 ```
 
 Details: [architecture](docs/architecture.md) · [approval](docs/approval.md) ·
@@ -150,6 +153,7 @@ Full details: [SECURITY.md](SECURITY.md).
 | [Client setup](docs/clients.md) | Claude Code, Claude Desktop, claude.ai, ChatGPT, Cursor |
 | [Configuration](docs/configuration.md) | Every configuration key, defaults and audit log format |
 | [Tools](docs/tools.md) | Tool arguments, limits, redaction |
+| [Notes](docs/notes.md) | Runbooks and incident memory in a Markdown folder |
 | [Deployment](docs/deploy.md) | Release verification, systemd, Kubernetes, reverse proxy |
 | [Dev provider](docs/dev.md) | Running coding agents through the separate runner |
 | [Roadmap](docs/roadmap.md) | What is done and what may come |

@@ -27,13 +27,13 @@ func (f confirmerFunc) Confirm(ctx context.Context, req *mcp.CallToolRequest, r 
 	return f(ctx, req, r)
 }
 
-func TestObsidianLargeNoteThroughMCP(t *testing.T) {
+func TestLargeNoteThroughMCP(t *testing.T) {
 	for _, realApproval := range []bool{false, true} {
 		t.Run(map[bool]string{false: "approving confirmer", true: "approval manager"}[realApproval], func(t *testing.T) {
 			cfg := config.Default()
-			cfg.Providers.Obsidian.Enabled = true
-			cfg.Providers.Obsidian.AllowWrite = true
-			cfg.Providers.Obsidian.Vault = t.TempDir()
+			cfg.Providers.Note.Enabled = true
+			cfg.Providers.Note.AllowWrite = true
+			cfg.Providers.Note.Vault = t.TempDir()
 			auditPath := filepath.Join(t.TempDir(), "audit")
 			logger, err := audit.Open(auditPath)
 			if err != nil {
@@ -48,7 +48,7 @@ func TestObsidianLargeNoteThroughMCP(t *testing.T) {
 				Fallback: &tool.Caller{User: "local", Transport: "stdio", Scopes: config.Scopes},
 				Confirm: confirmerFunc(func(ctx context.Context, req *mcp.CallToolRequest, r tool.ConfirmRequest) (string, error) {
 					maxArgs.Store(int64(r.MaxArgBytes))
-					if r.Args["content"] != content || r.Tool != "obsidian_create" || !strings.Contains(r.Summary, "create note large.md") {
+					if r.Args["content"] != content || r.Tool != "note_create" || !strings.Contains(r.Summary, "create note large.md") {
 						t.Error("approval did not receive the complete note arguments and plan")
 					}
 					if realApproval {
@@ -65,11 +65,11 @@ func TestObsidianLargeNoteThroughMCP(t *testing.T) {
 				prompts.Add(1)
 				return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}, nil
 			}})
-			result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "obsidian_create", Arguments: map[string]any{"path": "large", "content": content}})
+			result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "note_create", Arguments: map[string]any{"path": "large", "content": content}})
 			if err != nil || result.IsError {
 				t.Fatalf("create = %+v, error = %v", result, err)
 			}
-			data, err := os.ReadFile(filepath.Join(cfg.Providers.Obsidian.Vault, "large.md"))
+			data, err := os.ReadFile(filepath.Join(cfg.Providers.Note.Vault, "large.md"))
 			if err != nil || string(data) != content {
 				t.Fatalf("note size = %d, error = %v", len(data), err)
 			}

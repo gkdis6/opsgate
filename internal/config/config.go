@@ -193,7 +193,7 @@ type Approval struct {
 type Providers struct {
 	Host       Host       `yaml:"host"`
 	Kubernetes Kubernetes `yaml:"kubernetes"`
-	Obsidian   Obsidian   `yaml:"obsidian"`
+	Note       Note       `yaml:"note"`
 	Dev        Dev        `yaml:"dev"`
 }
 
@@ -246,9 +246,9 @@ type DevAgent struct {
 	Env []string `yaml:"env"`
 }
 
-// Obsidian exposes a Markdown vault (Obsidian or any folder of notes) by
-// reading files directly; the Obsidian app does not need to run.
-type Obsidian struct {
+// Note exposes a folder of Markdown notes (an Obsidian vault works as is)
+// by reading files directly; no note app needs to run.
+type Note struct {
 	Enabled bool `yaml:"enabled"`
 	// Vault is the absolute path of the vault root.
 	Vault string `yaml:"vault"`
@@ -341,7 +341,7 @@ func Default() Config {
 				MaxLogLines: 500,
 				MaxReplicas: 10,
 			},
-			Obsidian: Obsidian{
+			Note: Note{
 				MaxNoteBytes: 1 << 20,
 			},
 		},

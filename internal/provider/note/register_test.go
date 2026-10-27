@@ -1,4 +1,4 @@
-package obsidian
+package note
 
 import (
 	"context"
@@ -22,7 +22,7 @@ func (f confirmerFunc) Confirm(_ context.Context, _ *mcp.CallToolRequest, r tool
 func TestRegisterAndMCPCalls(t *testing.T) {
 	for _, write := range []bool{false, true} {
 		t.Run(map[bool]string{false: "read", true: "write"}[write], func(t *testing.T) {
-			cfg := config.Default().Providers.Obsidian
+			cfg := config.Default().Providers.Note
 			cfg.Vault = t.TempDir()
 			cfg.AllowWrite = write
 			put(t, cfg.Vault, "note.md", "hello\n")
@@ -72,29 +72,29 @@ func TestRegisterAndMCPCalls(t *testing.T) {
 				if !strings.Contains(spec.Description, "untrusted data") {
 					t.Fatal(spec.Description)
 				}
-				isWrite := spec.Name == "obsidian_create" || spec.Name == "obsidian_append" || spec.Name == "obsidian_replace" || spec.Name == "obsidian_trash"
+				isWrite := spec.Name == "note_create" || spec.Name == "note_append" || spec.Name == "note_replace" || spec.Name == "note_trash"
 				if spec.Annotations == nil || spec.Annotations.ReadOnlyHint == isWrite {
 					t.Fatalf("bad annotation: %+v", spec)
 				}
 			}
-			result, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "obsidian_read", Arguments: map[string]any{"path": "note"}})
+			result, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "note_read", Arguments: map[string]any{"path": "note"}})
 			if err != nil || result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "hello") {
 				t.Fatalf("%+v %v", result, err)
 			}
 			if write {
-				result, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "obsidian_create", Arguments: map[string]any{"path": "new", "content": "created"}})
+				result, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "note_create", Arguments: map[string]any{"path": "new", "content": "created"}})
 				if err != nil || result.IsError || calls != 1 {
 					t.Fatalf("%+v %v calls=%d", result, err, calls)
 				}
 				env.Confirm = nil
-				result, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "obsidian_append", Arguments: map[string]any{"path": "note", "content": "denied"}})
+				result, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "note_append", Arguments: map[string]any{"path": "note", "content": "denied"}})
 				if err != nil || !result.IsError {
 					t.Fatalf("%+v %v", result, err)
 				}
 			}
 		})
 	}
-	cfg := config.Default().Providers.Obsidian
+	cfg := config.Default().Providers.Note
 	cfg.Vault = t.TempDir() + "/missing"
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
 	if err := Register(s, &tool.Env{}, cfg); err == nil {

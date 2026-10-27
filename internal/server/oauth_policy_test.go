@@ -22,7 +22,7 @@ func TestBuiltinVerifierCarriesToolPolicy(t *testing.T) {
 	}{
 		{"unrestricted", "github:alice", "github:alice", nil},
 		{"github case folding", "github:alice", "github:ALICE", []string{"host_*"}},
-		{"email case folding", "email:alice@example.com", "email:Alice@Example.com", []string{"obsidian_read", "obsidian_list"}},
+		{"email case folding", "email:alice@example.com", "email:Alice@Example.com", []string{"note_read", "note_list"}},
 		{"OIDC subject", "oidc:issuer:Alice", "oidc:issuer:Alice", []string{"host_overview"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

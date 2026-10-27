@@ -60,11 +60,11 @@
 | `providers.kubernetes.scale` | `[]` | namespace/name glob입니다. 비어 있으면 도구를 비활성화합니다 |
 | `providers.kubernetes.delete_pod` | `[]` | namespace/name glob입니다. 비어 있으면 도구를 비활성화합니다 |
 | `providers.kubernetes.max_replicas` | `10` | 스케일 조정의 최댓값입니다. 음수가 아니어야 하며, 0이면 복제본 수 0만 허용합니다 |
-| `providers.obsidian.enabled` | `false` | Markdown 볼트 provider를 활성화합니다. Obsidian 앱이나 CLI는 필요하지 않습니다 |
-| `providers.obsidian.vault` | `""` | 기존 볼트 디렉터리의 절대 경로입니다. 모든 접근은 os.Root로 제한합니다 |
-| `providers.obsidian.exclude` | `[]` | 볼트 상대 경로에 적용할 추가 path.Match glob입니다. 경로나 그 상위 경로와 일치하면 제외합니다. 점으로 시작하는 경로 구성 요소와 동기화 충돌 사본은 항상 제외합니다 |
-| `providers.obsidian.allow_write` | `false` | 노트 쓰기 도구 4개를 등록합니다. 각각 ops:write와 사람의 승인이 필요합니다 |
-| `providers.obsidian.max_note_bytes` | `1048576` | 읽기/쓰기 시 노트별 크기 제한입니다. 양수여야 합니다. 콘텐츠 검색에서 제한을 넘는 노트는 건너뜁니다 |
+| `providers.note.enabled` | `false` | Markdown 폴더나 Obsidian 볼트용 note provider를 활성화합니다. 노트 앱이나 CLI는 필요하지 않습니다 |
+| `providers.note.vault` | `""` | 기존 볼트 디렉터리의 절대 경로입니다. 모든 접근은 os.Root로 제한합니다 |
+| `providers.note.exclude` | `[]` | 볼트 상대 경로에 적용할 추가 path.Match glob입니다. 경로나 그 상위 경로와 일치하면 제외합니다. 점으로 시작하는 경로 구성 요소와 동기화 충돌 사본은 항상 제외합니다 |
+| `providers.note.allow_write` | `false` | 노트 쓰기 도구 4개를 등록합니다. 각각 ops:write와 사람의 승인이 필요합니다 |
+| `providers.note.max_note_bytes` | `1048576` | 읽기/쓰기 시 노트별 크기 제한입니다. 양수여야 합니다. 콘텐츠 검색에서 제한을 넘는 노트는 건너뜁니다 |
 | `providers.dev.enabled` | `false` | dev provider를 활성화합니다. 모든 도구에 dev:run이 필요합니다 |
 | `providers.dev.runner_socket` | `""` | 별도 dev-runner의 Unix 소켓 절대 경로입니다 |
 | `server.tools.allow` / `server.tools.deny` | `[]` / `[]` | 도구 이름의 `path.Match` glob입니다. allow가 비어 있으면 제공되는 모든 도구를 허용하며 deny가 우선합니다. 제외한 도구는 tools/list에 나타나지 않습니다 |
@@ -78,9 +78,9 @@
 
 서버 정책 패턴은 활성화된 provider에서 작업별 활성화 조건을 적용한 뒤 제공되는 도구와 일치해야 합니다. 그렇지 않으면 시작에 실패합니다. 사용자/토큰별 도구 패턴은 구문을 검사하고 호출 시 적용합니다. tools/list를 필터링하지는 않습니다. 스코프, 서버 정책, 사용자별 도구 정책, provider 리소스 허용 목록을 모두 적용합니다. 빈 도구 허용 목록은 추가 제한을 두지 않습니다. 빈 provider 리소스 허용 목록과는 의미가 다릅니다. 설정을 변경하면 재시작해야 합니다.
 
-모든 provider는 기본적으로 비활성화되어 있습니다. host provider를 활성화하면 허용한 유닛이 없어도 개요/프로세스 도구를 노출합니다. Kubernetes를 활성화하면 RBAC에 따라 클러스터 범위의 읽기를 허용합니다. `ops:read`는 선택적인 실험적 Obsidian provider를 포함해 활성화된 모든 읽기 provider에 적용됩니다. `dev:run`은 dev 도구에 적용되며, HTTP에서는 `ops:read`도 필요합니다. [신뢰 모델](security.md)을 참고하세요.
+모든 provider는 기본적으로 비활성화되어 있습니다. host provider를 활성화하면 허용한 유닛이 없어도 개요/프로세스 도구를 노출합니다. Kubernetes를 활성화하면 RBAC에 따라 클러스터 범위의 읽기를 허용합니다. `ops:read`는 선택적인 실험적 note provider를 포함해 활성화된 모든 읽기 provider에 적용됩니다. `dev:run`은 dev 도구에 적용되며, HTTP에서는 `ops:read`도 필요합니다. [신뢰 모델](security.md)을 참고하세요.
 
-Obsidian 쓰기는 서버 계정으로 실행합니다. 따라서 생성하거나 다시 쓴 노트는 해당 계정이 소유합니다. 소유권 대신 ACL로 접근 권한을 부여하고, 볼트 소유자가 해당 파일을 교체할 수 있도록 디렉터리 쓰기 권한을 유지하세요. 볼트 소유자로 실행하는 동기화 도구는 자신이 소유하지 않은 파일에 chmod를 적용할 수 없습니다. Syncthing에서는 볼트 폴더의 Ignore Permissions 옵션을 설정하세요. 그렇지 않으면 다른 기기의 권한만 변경된 내용을 반영할 때 "operation not permitted"로 실패합니다.
+노트 쓰기는 서버 계정으로 실행합니다. 따라서 생성하거나 다시 쓴 노트는 해당 계정이 소유합니다. 소유권 대신 ACL로 접근 권한을 부여하고, 볼트 소유자가 해당 파일을 교체할 수 있도록 디렉터리 쓰기 권한을 유지하세요. 볼트 소유자로 실행하는 동기화 도구는 자신이 소유하지 않은 파일에 chmod를 적용할 수 없습니다. Syncthing에서는 볼트 폴더의 Ignore Permissions 옵션을 설정하세요. 그렇지 않으면 다른 기기의 권한만 변경된 내용을 반영할 때 "operation not permitted"로 실패합니다.
 
 읽기 전용 시작점과 주석으로 분리된 쓰기 활성화 설정은 [전체 예제](../../opsgate.example.yaml)를 참고하세요. 인자, 승인, 출력 제한은 [도구 레퍼런스](tools.md)에서 설명합니다.
 

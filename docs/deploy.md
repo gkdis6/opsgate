@@ -9,7 +9,7 @@ are provided for local clients; the systemd deployment requires Linux.
 
 Streamable HTTP, OAuth, authentication, human approval and write tools are
 implemented. This checkout is preparing for its first public release; third-party
-security review is pending. The optional Obsidian and dev providers are
+security review is pending. The optional note and dev providers are
 experimental. Verify authentication, approval and proxy behavior before exposure.
 The upstream login callback is exactly `<public_url>/oauth/callback`.
 

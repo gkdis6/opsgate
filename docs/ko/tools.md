@@ -2,7 +2,7 @@
 
 [English](../tools.md)
 
-호스트, Kubernetes, Obsidian 읽기 도구에는 `ops:read`가 필요합니다. dev 도구에는 `dev:run`이 필요합니다. 도구는 해당 provider가 활성화된 경우에만 등록됩니다. 호스트 unit과 Kubernetes 네임스페이스는 설정으로 필터링하며, 네임스페이스 거부 목록이 우선합니다. Kubernetes Secrets 도구는 없습니다. 읽기 전용 메타데이터와 로그도 민감한 정보를 노출할 수 있습니다.
+호스트, Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. dev 도구에는 `dev:run`이 필요합니다. 도구는 해당 provider가 활성화된 경우에만 등록됩니다. 호스트 unit과 Kubernetes 네임스페이스는 설정으로 필터링하며, 네임스페이스 거부 목록이 우선합니다. Kubernetes Secrets 도구는 없습니다. 읽기 전용 메타데이터와 로그도 민감한 정보를 노출할 수 있습니다.
 
 | 도구 | 용도 | 주요 인자, 기본값, 제한 |
 | --- | --- | --- |
@@ -20,16 +20,16 @@
 | `k8s_rollout_restart` | Pod 템플릿을 갱신해 워크로드 재시작 | 필수 `kind`(deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` 조건 |
 | `k8s_scale` | 워크로드 복제본 수 설정 | 필수 `kind`(deployment/statefulset), `namespace`, `name`, `replicas`(0–`max_replicas`, 기본 상한 10); `scale` 조건 |
 | `k8s_delete_pod` | UID 사전 조건으로 특정 Pod 삭제 | 필수 `namespace`, `name`; `delete_pod` 조건 |
-| `obsidian_search` | 리터럴 노트 내용/파일명 검색. 발췌문과 검색한 항목 수를 제공합니다. | 필수 `query`(1–4096 UTF-8 바이트); 선택 `folder`, `tag`, `case_sensitive=false`; `limit=20`, 최대 100 |
-| `obsidian_read` | 노트 텍스트와 파일/줄 메타데이터 | 필수 `path`, `.md` 생략 가능; `offset_line=1`, `max_lines=400`, 최대 2000 |
-| `obsidian_list` | 폴더를 먼저 표시한 뒤 .md/.canvas/.base 파일 표시 | `folder=""`(볼트 루트), `recursive=false`, `limit=200`, 최대 1000; 잘림 여부 보고 |
-| `obsidian_recent` | 수정 시간순 노트 | `limit=20`, 최대 100; `days=7`, 최대 365 |
-| `obsidian_links` | 나가는 위키 링크/임베드/상대 Markdown 링크와 백링크 | 필수 `path`; 정확한 경로나 유일한 기본 파일명으로 해석; 해석하지 못한 대상 보고 |
-| `obsidian_tags` | frontmatter/인라인 태그 수 또는 일치하는 노트 | 선택 `tag`; 중첩 태그 포함; 코드 펜스와 제목 무시 |
-| `obsidian_create` | 노트와 없는 상위 폴더 생성 | 필수 `path`, `content`; `allow_write=true`, ops:write, 사람의 승인 필요 |
-| `obsidian_append` | 끝부분이나 유일하게 정확히 일치하는 제목 아래에 추가 | 필수 `path`, `content`; 선택 `heading`(최대 1024바이트); 같은 쓰기 조건 |
-| `obsidian_replace` | 정확한 부분 문자열 치환 | 필수 `path`, 비어 있지 않은 `old_text`, `new_text`; `expected_count=1`과 일치해야 함; 같은 쓰기 조건 |
-| `obsidian_trash` | 충돌 시 접미사를 붙여 로컬 .trash에 노트 보존 | 필수 `path`; 같은 쓰기 조건; 영구 삭제하지 않음 |
+| `note_search` | 리터럴 노트 내용/파일명 검색. 발췌문과 검색한 항목 수를 제공합니다. | 필수 `query`(1–4096 UTF-8 바이트); 선택 `folder`, `tag`, `case_sensitive=false`; `limit=20`, 최대 100 |
+| `note_read` | 노트 텍스트와 파일/줄 메타데이터 | 필수 `path`, `.md` 생략 가능; `offset_line=1`, `max_lines=400`, 최대 2000 |
+| `note_list` | 폴더를 먼저 표시한 뒤 .md/.canvas/.base 파일 표시 | `folder=""`(볼트 루트), `recursive=false`, `limit=200`, 최대 1000; 잘림 여부 보고 |
+| `note_recent` | 수정 시간순 노트 | `limit=20`, 최대 100; `days=7`, 최대 365 |
+| `note_links` | 나가는 위키 링크/임베드/상대 Markdown 링크와 백링크 | 필수 `path`; 정확한 경로나 유일한 기본 파일명으로 해석; 해석하지 못한 대상 보고 |
+| `note_tags` | frontmatter/인라인 태그 수 또는 일치하는 노트 | 선택 `tag`; 중첩 태그 포함; 코드 펜스와 제목 무시 |
+| `note_create` | 노트와 없는 상위 폴더 생성 | 필수 `path`, `content`; `allow_write=true`, ops:write, 사람의 승인 필요 |
+| `note_append` | 끝부분이나 유일하게 정확히 일치하는 제목 아래에 추가 | 필수 `path`, `content`; 선택 `heading`(최대 1024바이트); 같은 쓰기 조건 |
+| `note_replace` | 정확한 부분 문자열 치환 | 필수 `path`, 비어 있지 않은 `old_text`, `new_text`; `expected_count=1`과 일치해야 함; 같은 쓰기 조건 |
+| `note_trash` | 충돌 시 접미사를 붙여 로컬 .trash에 노트 보존 | 필수 `path`; 같은 쓰기 조건; 영구 삭제하지 않음 |
 | `dev_projects` | 코딩 프로젝트와 에이전트 허용 목록(`dev:run`) | 없음; runner 제한 포함 |
 | `dev_task_start` | 사람의 승인 후 에이전트 시작(`dev:run`) | 필수 `project`, `agent`, `prompt`; 선택 `approval_id`; 프롬프트 최대 32 KiB(MCP 인자 48 KiB, 승인 요약 64 KiB) |
 | `dev_task_status` | 자신의 작업 상태와 최종 메시지(runner 관리자는 모든 작업에 접근 가능)(`dev:run`) | 필수 `id` |
@@ -38,7 +38,7 @@
 | `dev_task_list` | 보존된 작업을 최신순으로 표시(`dev:run`) | `limit=20`, 범위 1..100; 최종 메시지 제외 |
 | `dev_task_cancel` | 새 승인 없이 소유한 작업 취소(runner 관리자는 모든 작업 취소 가능)(`dev:run`) | 필수 `id`; 상태 변경 및 실행 중인 프로세스 그룹 종료 |
 
-Obsidian 경로는 볼트 기준 상대 경로이며 슬래시를 사용합니다. Unicode 바이트를 보존하며 최대 1024바이트입니다. 제외된 경로는 없는 경로처럼 처리합니다. 노트 텍스트는 신뢰할 수 없는 데이터입니다. Obsidian 숫자 입력이 문서의 범위를 벗어나면 거부합니다. 볼트 내부의 안전한 심볼릭 링크를 지원하며 순환을 방지합니다. 검색은 항목 100000개와 디렉터리 깊이 128단계로 제한합니다. 링크와 백링크는 각각 최대 1000개를 반환합니다.
+노트 경로는 볼트 기준 상대 경로이며 슬래시를 사용합니다. Unicode 바이트를 보존하며 최대 1024바이트입니다. 제외된 경로는 없는 경로처럼 처리합니다. 노트 텍스트는 신뢰할 수 없는 데이터입니다. 노트 도구의 숫자 입력이 문서의 범위를 벗어나면 거부합니다. 볼트 내부의 안전한 심볼릭 링크를 지원하며 순환을 방지합니다. 검색은 항목 100000개와 디렉터리 깊이 128단계로 제한합니다. 링크와 백링크는 각각 최대 1000개를 반환합니다.
 
 쓰기 미리보기에는 diff(생성 시 새 내용), 현재 해시, 결과 해시를 포함합니다. 약 8 KiB에서 명시적으로 잘림을 표시합니다. 적용 시 승인된 해시, 크기, 수정 시간을 다시 검사합니다. 생성은 동시에 생성하는 다른 작업을 덮어쓰지 않고 원자적으로 공개합니다. 갱신은 동기화한 임시 파일과 rename을 사용합니다. Linux에서는 기존 항목을 덮어쓰지 않고 원본을 승인된 .trash 경로로 원자적으로 이동한 뒤 이동한 노트를 검증합니다. 이동과 동시에 교체나 편집이 발생하면 .trash 내 복구 경로를 포함한 오류를 반환합니다. 필요한 경우 해당 파일을 복원합니다. 계획 후 대상 경로에 다른 항목이 생기면 이동이 실패하며 원본을 그대로 유지합니다. Linux에서는 원본과 .trash가 RENAME_NOREPLACE를 사용하는 renameat2를 지원하는 같은 파일시스템에 있어야 합니다. 이 조건을 충족하지 않으면 원본을 유지한 채 이동이 실패합니다. 다른 플랫폼에서는 승인된 내용의 내구성 있는 복사본을 보존한 뒤 원본을 검사하고 제거합니다. 마지막 검사와 제거 사이에 외부에서 교체한 내용은 여전히 유실될 수 있습니다. 해당 플랫폼에서는 버전별 백업이나 동기화 이력을 사용합니다. 기존의 마지막 줄바꿈 정책을 유지합니다. 각 내용/치환 입력의 상한은 256 KiB입니다. create, append, replace 도구는 이스케이프를 포함한 원시 JSON 인자를 528 KiB까지 허용합니다. trash는 기본 16 KiB 제한을 유지합니다.
 
@@ -72,7 +72,7 @@ kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 거부됩
 
 승인이 필요한 도구 9개는 모두 웹 재시도용 선택적 `approval_id`를 받습니다. 첫 호출에서는 생략합니다. dev 작업 ID는 소문자 base32 문자 20개입니다. 작업 상태, 로그, diff, 목록, 취소는 요청자의 소유권을 검사합니다. runner 관리자는 모든 작업에 접근할 수 있습니다.
 
-읽기 도구와 `dev_task_cancel`은 원시 JSON 인자를 최대 16 KiB까지 받습니다. 쓰기 인자의 기본 상한은 16 KiB입니다. `obsidian_create`, `obsidian_append`, `obsidian_replace`는 528 KiB, `dev_task_start`는 48 KiB를 허용합니다. JSON 이스케이프도 이 제한에 포함됩니다. 승인 요약의 상한은 `max(64 KiB, argument limit + 16 KiB)`입니다. 기본 도구와 dev 시작은 64 KiB, 노트 내용 도구는 544 KiB입니다. 마스킹한 표시용 인자도 해당 도구의 인자 제한 안에 들어야 합니다. Obsidian 미리보기에는 별도로 약 8 KiB의 표시 제한이 있습니다.
+읽기 도구와 `dev_task_cancel`은 원시 JSON 인자를 최대 16 KiB까지 받습니다. 쓰기 인자의 기본 상한은 16 KiB입니다. `note_create`, `note_append`, `note_replace`는 528 KiB, `dev_task_start`는 48 KiB를 허용합니다. JSON 이스케이프도 이 제한에 포함됩니다. 승인 요약의 상한은 `max(64 KiB, argument limit + 16 KiB)`입니다. 기본 도구와 dev 시작은 64 KiB, 노트 내용 도구는 544 KiB입니다. 마스킹한 표시용 인자도 해당 도구의 인자 제한 안에 들어야 합니다. 노트 미리보기에는 별도로 약 8 KiB의 표시 제한이 있습니다.
 
 공유 래퍼는 4 MiB를 초과하는 provider 출력을 통째로 생략합니다. 그 밖의 텍스트는 마스킹한 뒤 `server.max_output_bytes`(기본값 64 KiB)에 맞춰 자릅니다. 오류도 같은 경로로 처리합니다. 더 작은 provider별 수집 제한도 적용됩니다. 기한은 협력적입니다. 쓰기 계획과 적용에는 각각 별도의 `server.tool_timeout`(기본값 30s)이 주어지며, 사람의 응답을 기다리는 시간은 제외합니다.
 

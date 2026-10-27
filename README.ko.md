@@ -26,6 +26,9 @@ Cursor 같은 클라이언트에 Linux 호스트와 Kubernetes용 운영 도구�
   외부 JWT를 검증하도록 설정할 수 있습니다.
 - **출력은 신뢰하지 않습니다.** 결과는 마스킹하고 크기를 제한한 뒤 JSONL 감사 로그에
   남깁니다.
+- **있었던 일을 기억합니다.** 선택 기능인 note provider가 런북과 지난 장애 기록을
+  일반 Markdown으로 보관합니다. AI는 같은 증상을 전에 어떻게 처리했는지 먼저 찾아보고,
+  승인을 받아 이번 조치를 기록합니다. [노트](docs/ko/notes.md)를 참고합니다.
 
 ## 할 수 있는 일
 
@@ -33,7 +36,7 @@ Cursor 같은 클라이언트에 Linux 호스트와 Kubernetes용 운영 도구�
 | --- | --- | --- |
 | 호스트(systemd, journald, `/proc`) | 개요, 서비스 목록, 유닛 상태, 로그, 상위 프로세스 | 허용된 유닛 재시작 |
 | Kubernetes | 개요, 목록, 상세, 이벤트, 파드 로그 | rollout restart, scale, 파드 삭제 |
-| Obsidian 볼트 *(실험적)* | 검색, 읽기, 목록, 최근 노트, 링크, 태그 | 생성, 덧붙이기, 치환, `.trash`로 이동 |
+| 노트: 런북과 메모리, Markdown 폴더 또는 Obsidian 볼트 *(실험적)* | 검색, 읽기, 목록, 최근 노트, 링크, 태그 | 생성, 덧붙이기, 치환, `.trash`로 이동 |
 | Dev *(실험적)* | 프로젝트, 작업 상태, 로그, diff, 목록 | Git worktree에서 코딩 에이전트(Codex, Claude) 실행 |
 
 쓰기 도구는 `ops:write` 스코프와 도구별 허용 목록 항목도 필요합니다. 인자와 제한은
@@ -49,7 +52,7 @@ Cursor 같은 클라이언트에 Linux 호스트와 Kubernetes용 운영 도구�
                                       ├─ 출력 마스킹, 크기 제한
                                       └─ 감사 로그 (JSONL)
                                             │
-                  호스트 · Kubernetes · Obsidian · dev-runner(별도 계정)
+                  호스트 · Kubernetes · 노트 · dev-runner(별도 계정)
 ```
 
 자세한 내용: [구조](docs/ko/architecture.md) · [승인](docs/ko/approval.md) ·
@@ -149,6 +152,7 @@ opsgate -transport http -config /etc/opsgate/opsgate.yaml
 | [클라이언트 설정](docs/ko/clients.md) | Claude Code, Claude Desktop, claude.ai, ChatGPT, Cursor |
 | [설정](docs/ko/configuration.md) | 모든 설정 키와 기본값, 감사 로그 형식 |
 | [도구](docs/ko/tools.md) | 도구 인자, 제한, 마스킹 |
+| [노트](docs/ko/notes.md) | Markdown 폴더에 런북과 장애 기록 남기기 |
 | [배포](docs/ko/deploy.md) | 릴리스 검증, systemd, Kubernetes, 리버스 프록시 |
 | [Dev provider](docs/ko/dev.md) | 별도 runner로 코딩 에이전트 실행 |
 | [로드맵](docs/ko/roadmap.md) | 완료한 기능과 앞으로의 계획 |

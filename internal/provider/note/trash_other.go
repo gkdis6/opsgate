@@ -1,6 +1,6 @@
 //go:build !linux
 
-package obsidian
+package note
 
 import (
 	"context"

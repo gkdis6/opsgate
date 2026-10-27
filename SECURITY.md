@@ -2,7 +2,7 @@
 
 [한국어](docs/ko/security.md)
 
-opsgate implements remote HTTP, authentication and human-approved writes and is preparing for its first public release. The optional Obsidian and dev providers are experimental. It has not yet been security-reviewed by third parties. Review the implementation you deploy.
+opsgate implements remote HTTP, authentication and human-approved writes and is preparing for its first public release. The optional note and dev providers are experimental. It has not yet been security-reviewed by third parties. Review the implementation you deploy.
 
 ## Threat model
 

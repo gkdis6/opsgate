@@ -2,7 +2,7 @@
 
 [한국어](ko/approval.md)
 
-Tools registered through the write wrapper need a successful plan and human confirmation before Apply. This includes host/Kubernetes writes, Obsidian note writes and `dev_task_start`. Stopping a coding task with `dev_task_cancel` deliberately needs no approval.
+Tools registered through the write wrapper need a successful plan and human confirmation before Apply. This includes host/Kubernetes writes, note writes and `dev_task_start`. Stopping a coding task with `dev_task_cancel` deliberately needs no approval.
 
 ## Execution flow
 
@@ -91,7 +91,7 @@ approval:
 | Control | Behavior |
 | --- | --- |
 | Argument binding | SHA-256 of canonical unredacted JSON arguments, excluding `approval_id`; masked arguments are only for display/audit |
-| Plan binding | Recomputed summary must match; Obsidian also checks the planned file snapshot during Apply |
+| Plan binding | Recomputed summary must match; note writes also check the planned file snapshot during Apply |
 | One-call use | Web records have a used flag; elicitation uses consumed nonces |
 | Pending/input lifetime | `approval.ttl`, default `10m`; a nonpositive TTL causes confirmation requests to be denied |
 | Web record capacity | 100 live records, including decided records awaiting consumption; expiry releases capacity |

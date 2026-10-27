@@ -1,4 +1,4 @@
-package obsidian
+package note
 
 import (
 	"errors"

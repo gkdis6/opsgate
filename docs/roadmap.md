@@ -17,7 +17,7 @@ The features below are implemented for the first public release. They have not y
 - GoReleaser releases, cosign keyless signatures, SBOMs, provenance attestations, container image, hardened systemd unit and Kubernetes manifests.
 - Tool registration policy and per-user/token tool restrictions; redirect-host registration policy, pending-client admin review and optional notifications.
 - Optional approval windows, in memory and bound to user/tool; off by default.
-- Experimental Obsidian provider: bounded vault reads/search/links/tags and approved create/append/replace/trash operations.
+- Experimental note provider: bounded Markdown folder (Obsidian-compatible) reads/search/links/tags and approved create/append/replace/trash operations.
 - Experimental dev provider and separate runner: configured projects/agent commands, approved task starts, requester ownership/admin access, logs/diffs, cancellation and retention.
 
 ## Remaining ideas

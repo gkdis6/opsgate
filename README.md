@@ -11,9 +11,11 @@ Claude, ChatGPT, Claude Code and Cursor a fixed set of operations tools for Linu
 hosts and Kubernetes, with explicit policy, human approval for every change and
 an audit log.
 
-> **Status:** feature-complete for the first public release; no third-party
-> security review yet. Redaction is best effort and tool output can contain
-> prompt injection. Read the [security policy](SECURITY.md) before deploying.
+> **Status:** features for the first public release are implemented. Changes
+> require user authorization, allowed targets and human approval. Read restrictions
+> and output redaction reduce sensitive data exposure. Third-party security review
+> is pending; the [security policy](SECURITY.md) explains the protections and
+> remaining limitations.
 
 ## Why opsgate
 
@@ -27,8 +29,10 @@ an audit log.
 - **Remote access is authenticated.** A builtin OAuth 2.1 server works with
   claude.ai and ChatGPT connectors. Sign in with passkeys, GitHub or OIDC
   (Google included), or verify external JWTs.
-- **Output is treated as untrusted.** Results are redacted, size-limited and
-  recorded in a JSONL audit log.
+- **Results are data for analysis.** AI clients are instructed not to follow
+  instructions embedded in logs or other results. Returned results are redacted
+  and size-limited. The audit log records who called each tool and its outcome,
+  with one JSON object per line.
 - **It remembers what happened.** The optional note provider keeps runbooks and
   past incidents in plain Markdown. Assistants look up how a symptom was handled
   before and, with approval, record what they did. See [notes](docs/notes.md).

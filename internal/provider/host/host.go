@@ -7,6 +7,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -131,6 +132,15 @@ func runCommand(ctx context.Context, name string, args ...string) (string, error
 		}
 	}
 	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err == nil {
+			return nil
+		}
+		return cmd.Process.Kill()
+	}
+	// Privileged helpers (sudo) may not be signalable; WaitDelay bounds pipe draining.
+	cmd.WaitDelay = 250 * time.Millisecond
 	cmd.Env = []string{"LC_ALL=C", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
 	out := &cappedWriter{remaining: 4 << 20}
 	stderr := &cappedWriter{remaining: 16 << 10}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/gkdis6/opsgate/internal/config"
 )
+
+const jwksRefreshInterval = time.Minute
 
 // External verifies JWT access tokens against the issuer's discovered JWKS.
 func External(ctx context.Context, cfg config.ExternalAuth, resource string) (auth.TokenVerifier, error) {
@@ -41,7 +44,10 @@ func External(ctx context.Context, cfg config.ExternalAuth, resource string) (au
 	if err != nil {
 		return nil, err
 	}
-	verifier := oidc.NewVerifier(cfg.Issuer, oidc.NewRemoteKeySet(ctx, metadata.JWKS), &oidc.Config{
+	keyClient := *client
+	keyClient.Transport = &jwksTransport{base: client.Transport, now: time.Now}
+	keyContext := oidc.ClientContext(ctx, &keyClient)
+	verifier := oidc.NewVerifier(cfg.Issuer, oidc.NewRemoteKeySet(keyContext, metadata.JWKS), &oidc.Config{
 		ClientID:             audience,
 		SupportedSigningAlgs: []string{oidc.RS256, oidc.RS384, oidc.RS512, oidc.ES256, oidc.ES384, oidc.PS256, oidc.EdDSA},
 	})
@@ -128,4 +134,24 @@ func tokenScopes(claims map[string]json.RawMessage) ([]string, bool) {
 		}
 	}
 	return out, true
+}
+
+// Gate network refreshes, including failures, while go-oidc keeps using cached keys.
+type jwksTransport struct {
+	base        http.RoundTripper
+	now         func() time.Time
+	mu          sync.Mutex
+	nextRefresh time.Time
+}
+
+func (t *jwksTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	t.mu.Lock()
+	now := t.now()
+	if now.Before(t.nextRefresh) {
+		t.mu.Unlock()
+		return nil, fmt.Errorf("JWKS refresh cooldown")
+	}
+	t.nextRefresh = now.Add(jwksRefreshInterval)
+	t.mu.Unlock()
+	return t.base.RoundTrip(r)
 }

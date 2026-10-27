@@ -11,6 +11,10 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 )
 
+// Reads and writes share a hard bound so an oversized snapshot cannot replace
+// a loadable one. The larger bound accommodates code pools with escaped URIs.
+const maxStateBytes = 512 << 20
+
 type client struct {
 	Pending      bool      `json:"pending,omitempty"`
 	ID           string    `json:"client_id"`
@@ -80,14 +84,14 @@ func (s *Server) load() error {
 	}
 	defer f.Close()
 	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() > 64<<20 {
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxStateBytes {
 		return fmt.Errorf("invalid OAuth state file")
 	}
 	if err := os.Chmod(s.cfg.StateFile, 0600); err != nil {
 		return fmt.Errorf("cannot secure OAuth state file")
 	}
 	var d diskState
-	dec := json.NewDecoder(io.LimitReader(f, 64<<20))
+	dec := json.NewDecoder(io.LimitReader(f, maxStateBytes))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&d); err != nil {
 		return fmt.Errorf("invalid OAuth state")
@@ -167,7 +171,7 @@ func (s *Server) writeState() error {
 	if err = f.Chmod(0600); err != nil {
 		return err
 	}
-	if err = json.NewEncoder(f).Encode(d); err != nil {
+	if err = json.NewEncoder(&stateWriter{Writer: f, remaining: maxStateBytes}).Encode(d); err != nil {
 		return err
 	}
 	if err = f.Sync(); err != nil {
@@ -186,7 +190,23 @@ func (s *Server) writeState() error {
 	defer parent.Close()
 	return parent.Sync()
 }
-func (s *Server) sweep() {
+
+type stateWriter struct {
+	io.Writer
+	remaining int
+}
+
+func (w *stateWriter) Write(p []byte) (int, error) {
+	if len(p) > w.remaining {
+		return 0, fmt.Errorf("OAuth state exceeds size limit")
+	}
+	n, err := w.Writer.Write(p)
+	w.remaining -= n
+	return n, err
+}
+
+func (s *Server) sweep() bool {
+	before := len(s.access) + len(s.refresh) + len(s.codes) + len(s.families) + len(s.clients)
 	now := s.now()
 	for k, t := range s.access {
 		if !now.Before(t.Expires) {
@@ -224,6 +244,7 @@ func (s *Server) sweep() {
 			delete(s.clients, k)
 		}
 	}
+	return before != len(s.access)+len(s.refresh)+len(s.codes)+len(s.families)+len(s.clients)
 }
 func (s *Server) sweepLoop() {
 	defer close(s.done)
@@ -235,13 +256,18 @@ func (s *Server) sweepLoop() {
 			return
 		case <-ticker.C:
 			s.mu.Lock()
-			_ = s.save()
+			if s.sweep() {
+				_ = s.save()
+			}
 			s.mu.Unlock()
 		}
 	}
 }
 func (s *Server) revoked(family string) bool { _, ok := s.families[family]; return ok }
-func (s *Server) revokeFamily(family string) {
+func (s *Server) revokeFamily(family string) bool {
+	if s.revoked(family) {
+		return false
+	}
 	expiry := s.now()
 	for _, t := range s.access {
 		if t.Family == family && t.Expires.After(expiry) {
@@ -259,6 +285,7 @@ func (s *Server) revokeFamily(family string) {
 		}
 	}
 	s.families[family] = expiry
+	return true
 }
 
 // Caller holds mu. Pending browser approvals use a separate, smaller pool so

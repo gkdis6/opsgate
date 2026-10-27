@@ -99,8 +99,7 @@ func (s *Server) redeemCode(r *http.Request, c *client) response {
 	// Replays by the authenticated client invalidate all descendants, even if
 	// their original code expiry has passed. RetainUntil follows the family.
 	if code.Used {
-		s.revokeFamily(code.Family)
-		if s.save() != nil {
+		if s.revokeFamily(code.Family) && s.save() != nil {
 			return errorResponse(503, "server_error")
 		} else {
 			return errorResponse(400, "invalid_grant")
@@ -132,8 +131,7 @@ func (s *Server) rotate(r *http.Request, c *client) response {
 		return errorResponse(400, "invalid_grant")
 	}
 	if refresh.Used {
-		s.revokeFamily(refresh.Family)
-		if s.save() != nil {
+		if s.revokeFamily(refresh.Family) && s.save() != nil {
 			return errorResponse(503, "server_error")
 		} else {
 			return errorResponse(400, "invalid_grant")
@@ -216,13 +214,15 @@ func (s *Server) revokeResponse(r *http.Request) response {
 		return errorResponse(400, "invalid_request")
 	}
 	key := hash(r.PostForm.Get("token"))
+	changed := false
 	if t := s.refresh[key]; t != nil && t.ClientID == c.ID {
-		s.revokeFamily(t.Family)
+		changed = s.revokeFamily(t.Family)
 	}
 	if t := s.access[key]; t != nil && t.ClientID == c.ID {
 		delete(s.access, key)
+		changed = true
 	}
-	if s.save() != nil {
+	if changed && s.save() != nil {
 		return errorResponse(503, "server_error")
 	}
 	return func(w http.ResponseWriter, _ *http.Request) {

@@ -128,7 +128,7 @@ auth:
 
 Every administrator must also be an allowed user. Adjust the administrator subject for your upstream. With a nonempty redirect host list, unlisted redirect hosts are denied by default. `unknown_redirect_hosts: approve` instead keeps the client pending for administrator review at `/admin/clients`. An empty host list accepts any otherwise-valid redirect host. Exact hosts and supported private schemes are accepted; `localhost` also covers loopback IPs and any port. See [Configuration](configuration.md) for registration policy and optional `notify_url` notifications.
 
-This client review is separate from per-operation human approval. Built-in token defaults are one hour for access tokens and 30 days for refresh tokens. `state_file` persists client records, token hashes, revocation/code state and passkeys with mode `0600`. If it is empty, state is lost on restart. Browser sessions are in memory. An incompatible issuer/resource in an existing state file prevents startup.
+This client review is separate from per-operation human approval. Built-in token defaults are one hour for access tokens and 30 days for refresh tokens. `state_file` persists client records, token hashes, revocation/code state and passkeys with mode `0600`. If it is empty, state is lost on restart. Browser sessions are in memory. An incompatible issuer/resource in an existing state file prevents startup. State snapshots are limited to 512 MiB on both reads and writes. An oversized write preserves the previous snapshot and makes the running instance fail closed, like other persistence failures.
 
 ## External authorization server
 
@@ -149,7 +149,7 @@ approval:
   require_web: false
 ```
 
-opsgate discovers the issuer's metadata and JWKS and verifies JWT signature, issuer, audience and expiry. Issuer and JWKS endpoints require HTTPS, except loopback HTTP. The external server owns client registration, login, consent and token issuance; it must provide a flow compatible with the client. Opaque access tokens are not supported by this verifier.
+opsgate discovers the issuer's metadata and JWKS and verifies JWT signature, issuer, audience and expiry. Issuer and JWKS endpoints require HTTPS, except loopback HTTP. The external server owns client registration, login, consent and token issuance; it must provide a flow compatible with the client. Opaque access tokens are not supported by this verifier. JWKS fetch attempts are shared across requests and limited to one per minute, including failed fetches. Cached valid keys continue to work; a new signing key may be rejected until the cooldown expires.
 
 `audience` defaults to `http.public_url` plus `/mcp`; `user_claim` defaults to `sub` and must resolve to a nonempty string. The caller/audit identity is the claim value, such as `alice`; the `claim:` prefix is only for configuration matching.
 

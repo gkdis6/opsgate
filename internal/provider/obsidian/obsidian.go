@@ -19,6 +19,8 @@ type provider struct {
 	root *os.Root
 	cfg  config.Obsidian
 	mu   sync.Mutex
+
+	beforeTrashMove func()
 }
 
 // Register opens the vault and adds read tools and explicitly enabled write tools.

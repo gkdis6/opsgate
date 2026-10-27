@@ -23,6 +23,7 @@ func preview(d writePlan, before, after string) tool.Plan {
 	header += fmt.Sprintf("result sha256: %x\n", resultHash)
 	if d.action == "trash" {
 		header += "destination: " + d.destination + " (retain in local trash)\n"
+		header += "if changed during the move, check the error for the recovery location\n"
 	}
 	var body string
 	if d.action == "create" {

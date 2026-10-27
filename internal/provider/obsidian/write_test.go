@@ -30,7 +30,7 @@ func TestWritePlansAndApply(t *testing.T) {
 		}, []string{"replace note note.md", "-before", "+after", "@@"}},
 		{"trash", "before\n", "before\n", func(p *provider) (tool.Plan, error) {
 			return p.planTrash(context.Background(), tool.Caller{}, trashInput{Path: "note"})
-		}, []string{"trash note note.md", "destination: .trash/note.md", "-before", "retain in local trash"}},
+		}, []string{"trash note note.md", "destination: .trash/note.md", "-before", "retain in local trash", "check the error for the recovery location"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := fixture(t, map[string]string{"note.md": tc.before})
@@ -302,9 +302,35 @@ func TestTrashNamingAndRace(t *testing.T) {
 	if got := readFixture(t, p, "folder/note.md"); got != "new" {
 		t.Fatal(got)
 	}
+	if got := readFixture(t, p, ".trash/note.3.md"); got != "racing trash" {
+		t.Fatal(got)
+	}
 	out, err := p.list(context.Background(), tool.Caller{}, listInput{Recursive: true})
 	if err != nil || strings.Contains(out, ".trash") {
 		t.Fatalf("%s %v", out, err)
+	}
+}
+
+func TestTrashReplacementAfterApproval(t *testing.T) {
+	p := fixture(t, map[string]string{"note.md": "approved"})
+	plan, err := p.planTrash(context.Background(), tool.Caller{}, trashInput{Path: "note"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.root.WriteFile("temp", []byte("latest save"), 0664); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.root.Rename("temp", "note.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.apply(context.Background(), plan); err == nil || !strings.Contains(err.Error(), "note changed since it was approved") {
+		t.Fatal(err)
+	}
+	if got := readFixture(t, p, "note.md"); got != "latest save" {
+		t.Fatalf("lost replacement: %q", got)
+	}
+	if _, err := p.root.Lstat(".trash"); !os.IsNotExist(err) {
+		t.Fatalf("failed apply created trash: %v", err)
 	}
 }
 

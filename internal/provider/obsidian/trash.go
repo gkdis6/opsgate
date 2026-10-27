@@ -2,7 +2,6 @@ package obsidian
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -43,17 +42,5 @@ func (p *provider) moveToTrash(ctx context.Context, source *os.Root, base string
 		return fmt.Errorf("trash directory unavailable")
 	}
 	defer trash.Close()
-	// Publish a durable no-clobber copy through the pinned trash directory before
-	// removing the original. Cross-Root rename is unavailable in os.Root.
-	if err := atomicWrite(ctx, trash, path.Base(d.destination), d.text, d.info.Mode().Perm(), true); err != nil {
-		return err
-	}
-	current, err := p.loadFrom(source, base, d.resolved)
-	if err != nil || sha256.Sum256([]byte(current.text)) != d.hash || !os.SameFile(current.info, d.info) || !current.info.ModTime().Equal(d.mtime) {
-		return fmt.Errorf("note changed since it was approved; approved copy retained in trash")
-	}
-	if err := source.Remove(base); err != nil {
-		return fmt.Errorf("note retained; trash copy created")
-	}
-	return syncDir(source)
+	return p.trashNote(ctx, source, trash, base, d)
 }

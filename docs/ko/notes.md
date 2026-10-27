@@ -2,6 +2,8 @@
 
 [English](../notes.md)
 
+<img src="../images/ko/note-memory.svg" alt="런북과 장애 메모리: 검색, 승인, 실행과 기록" width="830">
+
 note provider는 AI에게 Markdown 파일 폴더를 제공합니다. 두 가지 용도로 사용합니다.
 
 - **런북:** 알려진 문제를 진단하고 해결하는 방법과 "업무 시간에는 postgres를 재시작하지 않는다" 같은 규칙입니다.

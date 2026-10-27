@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 626" role="img" aria-labelledby="title desc" lang="ko">
+<title id="title">노트: 런북과 메모리 순환</title>
+<desc id="desc">AI가 api 파드의 OOMKilled 재시작을 발견하고, 노트에서 같은 문구를 검색합니다. 2026-10-12에 메모리 제한을 512Mi에서 1Gi로 올려 해결한 기록을 참고해 같은 조치를 제안하고 사람의 승인을 받아 실행합니다. 별도 노트 쓰기도 diff 미리보기와 승인을 거쳐 증상·원인·조치·결과를 History에 덧붙입니다. 다음 검색에서 공유된 Markdown 기록을 다시 참고합니다.</desc>
+<style>
+svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
+text { fill: #202936; }
+.title { font-size: 21px; font-weight: 700; }
+.head { font-size: 16px; font-weight: 650; }
+.small { font-size: 13px; }
+.muted { fill: #526071; }
+.box { fill: #f6f8fa; stroke: #aab5c2; stroke-width: 1.3; }
+.accent { fill: #edf4ff; stroke: #5886c0; stroke-width: 1.4; }
+.good { fill: #eef8f0; stroke: #639974; stroke-width: 1.4; }
+.bad { fill: #fff1f0; stroke: #bc6664; stroke-width: 1.4; }
+.boundary { fill: none; stroke: #8895a5; stroke-width: 1.3; stroke-dasharray: 6 5; }
+.line { fill: none; stroke: #66768a; stroke-width: 1.5; marker-end: url(#arrow); }
+.return { stroke-dasharray: 4 4; }
+.allow { stroke: #398253; marker-end: url(#allow); }
+.deny { stroke: #b44848; marker-end: url(#deny); }
+.arrow { fill: #66768a; }
+.allow-tip { fill: #398253; }
+.deny-tip { fill: #b44848; }
+@media (prefers-color-scheme: dark) {
+ text { fill: #e5eaf1; }
+ .muted { fill: #b3bfd0; }
+ .box { fill: #202833; stroke: #64748b; }
+ .accent { fill: #1a304c; stroke: #79a4df; }
+ .good { fill: #183427; stroke: #77b68b; }
+ .bad { fill: #3c2428; stroke: #d48989; }
+ .boundary { stroke: #98a7bb; }
+ .line { stroke: #a2b1c5; }
+ .allow { stroke: #8bc99e; }
+ .deny { stroke: #eda0a0; }
+ .arrow { fill: #a2b1c5; }
+ .allow-tip { fill: #8bc99e; }
+ .deny-tip { fill: #eda0a0; }
+}
+</style>
+<defs>
+ <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M0 0 8 4 0 8Z"/></marker>
+ <marker id="allow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="allow-tip" d="M0 0 8 4 0 8Z"/></marker>
+ <marker id="deny" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="deny-tip" d="M0 0 8 4 0 8Z"/></marker>
+</defs>
+<text x="24" y="30" class="title">공유 Markdown: 런북 + 장애 메모리</text>
+<text x="24" y="54" class="small muted">리터럴 검색으로 지난 조치를 참고합니다. 노트는 권한을 부여하지 않습니다.</text>
+<rect x="24" y="104" width="228" height="110" rx="9" class="box"/>
+<text x="40" y="132" class="head">1  증상 발견</text>
+<text x="40" y="158">api 파드 재시작</text>
+<text x="40" y="179">OOMKilled</text>
+<path d="M252 158 H300" class="line "/>
+<rect x="300" y="104" width="228" height="110" rx="9" class="accent"/>
+<text x="316" y="132" class="head">2  노트 검색</text>
+<text x="316" y="158" class="small">note_search &quot;OOMKilled&quot;</text>
+<text x="316" y="184" class="small muted">실제 증상 / 오류 문구</text>
+<path d="M528 158 H576" class="line "/>
+<rect x="576" y="104" width="230" height="140" rx="9" class="box"/>
+<text x="592" y="132" class="head">3  지난 장애 기록 발견</text>
+<text x="592" y="157" class="small">incidents/api-oomkilled.md</text>
+<text x="592" y="183" class="small">2026-10-12:</text>
+<text x="592" y="207" class="small">제한 512Mi → 1Gi, 해결</text>
+<path d="M691 244 V284" class="line "/>
+<rect x="576" y="284" width="230" height="104" rx="9" class="accent"/>
+<text x="592" y="311" class="head">4  같은 조치 제안</text>
+<text x="592" y="338" class="small">메모리 제한 상향</text>
+<text x="592" y="359" class="small">512Mi → 1Gi · rollout</text>
+<path d="M576 336 H528" class="line "/>
+<rect x="300" y="284" width="228" height="104" rx="9" class="good"/>
+<text x="316" y="311" class="head">5  사람의 승인</text>
+<text x="316" y="338" class="small">대상과 변경 내용 확인</text>
+<text x="316" y="359" class="small">제안한 조치 승인</text>
+<path d="M300 336 H252" class="line allow"/>
+<rect x="24" y="284" width="228" height="104" rx="9" class="good"/>
+<text x="40" y="311" class="head">6  실행</text>
+<text x="40" y="338" class="small">승인된 조치 수행</text>
+<text x="40" y="359" class="small">결과 확인</text>
+<path d="M138 388 V432" class="line "/>
+<rect x="24" y="432" width="504" height="140" rx="9" class="accent"/>
+<text x="40" y="460" class="head">7  처리 이력 기록 · 별도 승인 쓰기</text>
+<text x="40" y="487" class="small">증상 / 원인 / 조치 / 결과</text>
+<text x="40" y="511" class="small">같은 장애 노트의 &quot;## History&quot;에 note_append</text>
+<text x="40" y="535" class="small">diff 미리보기 → 사람의 승인 → Markdown에 덧붙이기</text>
+<path d="M528 502 H576" class="line "/>
+<rect x="576" y="452" width="230" height="100" rx="9" class="box"/>
+<text x="592" y="480" class="head">다음에 같은 증상이 생기면</text>
+<text x="592" y="506" class="small">검색으로 갱신된</text>
+<text x="592" y="527" class="small">공유 이력을 찾습니다</text>
+<path d="M806 502 H818 V76 H414 V104" class="line "/>
+<text x="24" y="609" class="small muted">AI를 위한 안내이며 따를지는 클라이언트가 정합니다. 모든 노트 쓰기는 승인이 필요합니다.</text>
+</svg>

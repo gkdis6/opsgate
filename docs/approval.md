@@ -2,6 +2,8 @@
 
 [한국어](ko/approval.md)
 
+<img src="images/approval-flow.svg" alt="Write approval channels, retry checks and denial exits" width="830">
+
 Tools registered through the write wrapper need a successful plan and human confirmation before Apply. This includes host/Kubernetes writes, note writes and `dev_task_start`. Stopping a coding task with `dev_task_cancel` deliberately needs no approval.
 
 ## Execution flow

@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 626" role="img" aria-labelledby="title desc" lang="en">
+<title id="title">Notes: runbooks and memory loop</title>
+<desc id="desc">An assistant finds api pods restarting with OOMKilled, searches literal note text, and finds the 2026-10-12 incident where raising the memory limit from 512Mi to 1Gi resolved it. It proposes the same fix, seeks human approval, and applies the approved action. A separate approved note append previews a diff and records symptom, cause, action and outcome under History. The next search can reuse this shared Markdown history.</desc>
+<style>
+svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
+text { fill: #202936; }
+.title { font-size: 21px; font-weight: 700; }
+.head { font-size: 16px; font-weight: 650; }
+.small { font-size: 13px; }
+.muted { fill: #526071; }
+.box { fill: #f6f8fa; stroke: #aab5c2; stroke-width: 1.3; }
+.accent { fill: #edf4ff; stroke: #5886c0; stroke-width: 1.4; }
+.good { fill: #eef8f0; stroke: #639974; stroke-width: 1.4; }
+.bad { fill: #fff1f0; stroke: #bc6664; stroke-width: 1.4; }
+.boundary { fill: none; stroke: #8895a5; stroke-width: 1.3; stroke-dasharray: 6 5; }
+.line { fill: none; stroke: #66768a; stroke-width: 1.5; marker-end: url(#arrow); }
+.return { stroke-dasharray: 4 4; }
+.allow { stroke: #398253; marker-end: url(#allow); }
+.deny { stroke: #b44848; marker-end: url(#deny); }
+.arrow { fill: #66768a; }
+.allow-tip { fill: #398253; }
+.deny-tip { fill: #b44848; }
+@media (prefers-color-scheme: dark) {
+ text { fill: #e5eaf1; }
+ .muted { fill: #b3bfd0; }
+ .box { fill: #202833; stroke: #64748b; }
+ .accent { fill: #1a304c; stroke: #79a4df; }
+ .good { fill: #183427; stroke: #77b68b; }
+ .bad { fill: #3c2428; stroke: #d48989; }
+ .boundary { stroke: #98a7bb; }
+ .line { stroke: #a2b1c5; }
+ .allow { stroke: #8bc99e; }
+ .deny { stroke: #eda0a0; }
+ .arrow { fill: #a2b1c5; }
+ .allow-tip { fill: #8bc99e; }
+ .deny-tip { fill: #eda0a0; }
+}
+</style>
+<defs>
+ <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M0 0 8 4 0 8Z"/></marker>
+ <marker id="allow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="allow-tip" d="M0 0 8 4 0 8Z"/></marker>
+ <marker id="deny" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="deny-tip" d="M0 0 8 4 0 8Z"/></marker>
+</defs>
+<text x="24" y="30" class="title">Shared Markdown: runbooks + incident memory</text>
+<text x="24" y="54" class="small muted">Literal search reuses past fixes; notes do not grant permission.</text>
+<rect x="24" y="104" width="228" height="110" rx="9" class="box"/>
+<text x="40" y="132" class="head">1  Find a symptom</text>
+<text x="40" y="158">api pods restart</text>
+<text x="40" y="179">OOMKilled</text>
+<path d="M252 158 H300" class="line "/>
+<rect x="300" y="104" width="228" height="110" rx="9" class="accent"/>
+<text x="316" y="132" class="head">2  Search notes</text>
+<text x="316" y="158" class="small">note_search &quot;OOMKilled&quot;</text>
+<text x="316" y="184" class="small muted">Exact symptom / error text</text>
+<path d="M528 158 H576" class="line "/>
+<rect x="576" y="104" width="230" height="140" rx="9" class="box"/>
+<text x="592" y="132" class="head">3  Past incident found</text>
+<text x="592" y="157" class="small">incidents/api-oomkilled.md</text>
+<text x="592" y="183" class="small">2026-10-12:</text>
+<text x="592" y="207" class="small">limit 512Mi → 1Gi, resolved</text>
+<path d="M691 244 V284" class="line "/>
+<rect x="576" y="284" width="230" height="104" rx="9" class="accent"/>
+<text x="592" y="311" class="head">4  Propose the same fix</text>
+<text x="592" y="338" class="small">Raise memory limit</text>
+<text x="592" y="359" class="small">512Mi → 1Gi; roll out</text>
+<path d="M576 336 H528" class="line "/>
+<rect x="300" y="284" width="228" height="104" rx="9" class="good"/>
+<text x="316" y="311" class="head">5  Human approval</text>
+<text x="316" y="338" class="small">Review target + change</text>
+<text x="316" y="359" class="small">Approve the proposed action</text>
+<path d="M300 336 H252" class="line allow"/>
+<rect x="24" y="284" width="228" height="104" rx="9" class="good"/>
+<text x="40" y="311" class="head">6  Apply</text>
+<text x="40" y="338" class="small">Carry out approved action</text>
+<text x="40" y="359" class="small">Check the outcome</text>
+<path d="M138 388 V432" class="line "/>
+<rect x="24" y="432" width="504" height="140" rx="9" class="accent"/>
+<text x="40" y="460" class="head">7  Record what happened · another approved write</text>
+<text x="40" y="487" class="small">Symptom / cause / action / outcome</text>
+<text x="40" y="511" class="small">note_append under &quot;## History&quot; in the same incident note</text>
+<text x="40" y="535" class="small">Diff preview → human approval → append to Markdown</text>
+<path d="M528 502 H576" class="line "/>
+<rect x="576" y="452" width="230" height="100" rx="9" class="box"/>
+<text x="592" y="480" class="head">Next time</text>
+<text x="592" y="506" class="small">Search finds the updated</text>
+<text x="592" y="527" class="small">shared history</text>
+<path d="M806 502 H818 V76 H414 V104" class="line "/>
+<text x="24" y="609" class="small muted">Guidance for assistants; clients decide how to use notes. Every note write needs approval.</text>
+</svg>

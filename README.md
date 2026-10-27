@@ -45,19 +45,30 @@ the [tool reference](docs/tools.md) for every argument and limit.
 
 ## How it works
 
-```text
- MCP client ──stdio or HTTPS──▶ opsgate
-                                 ├─ authenticate (OAuth / JWT / static token)
-                                 ├─ check tool policy and scope
-                                 ├─ write tools: plan ─▶ human approval ─▶ apply
-                                 ├─ redact and size-limit output
-                                 └─ audit log (JSONL)
-                                       │
-                 host · kubernetes · note · dev-runner (separate account)
-```
+<img src="docs/images/architecture.svg" alt="opsgate architecture: client transports, authentication, tool processing, providers and OS account / RBAC trust boundaries" width="830">
+
+Clients connect over local stdio or HTTPS through a TLS reverse proxy. opsgate
+checks identity and policy, plans and approves writes, then handles output and
+auditing. OS accounts and Kubernetes RBAC constrain access to the providers.
 
 Details: [architecture](docs/architecture.md) · [approval](docs/approval.md) ·
 [authentication](docs/authentication.md).
+
+### How approval works
+
+Write tools calculate a side-effect-free plan first. Without an active approval
+window, they require in-client or web confirmation. One-call approval binds the
+arguments and plan.
+
+<img src="docs/images/approval-flow.svg" alt="Write approval flow: plan, approval window or client / web confirmation, retry verification, Apply and denial exits" width="830">
+
+### Notes: runbooks and memory
+
+With the note provider enabled, assistants search past incidents before acting
+and, with approval, record what they did, so the next investigation starts from
+history instead of from scratch. See [notes](docs/notes.md).
+
+<img src="docs/images/note-memory.svg" alt="Notes memory loop: search OOMKilled history, propose a past fix, approve and apply, then record an approved note for next time" width="830">
 
 ## Quick start: local (stdio)
 

@@ -2,6 +2,8 @@
 
 [한국어](ko/notes.md)
 
+<img src="images/note-memory.svg" alt="Runbooks and incident memory: search, approve, apply and record" width="830">
+
 The note provider gives assistants a folder of Markdown files. Use it for two
 things:
 

@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 1104" role="img" aria-labelledby="title desc" lang="en">
+<title id="title">Write approval flow</title>
+<desc id="desc">Check scopes, policy and arguments, then compute a side-effect-free Plan. An eligible active user/tool window skips a new prompt. Otherwise use supported in-client elicitation or a built-in HTTP web approval link, with same-user sign-in (passkey shown). Continuations recompute the plan and verify the one-call bindings before Apply. Invalid, rejected, expired or mismatched requests do not Apply.</desc>
+<style>
+svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
+text { fill: #202936; }
+.title { font-size: 21px; font-weight: 700; }
+.head { font-size: 16px; font-weight: 650; }
+.small { font-size: 13px; }
+.muted { fill: #526071; }
+.box { fill: #f6f8fa; stroke: #aab5c2; stroke-width: 1.3; }
+.accent { fill: #edf4ff; stroke: #5886c0; stroke-width: 1.4; }
+.good { fill: #eef8f0; stroke: #639974; stroke-width: 1.4; }
+.bad { fill: #fff1f0; stroke: #bc6664; stroke-width: 1.4; }
+.boundary { fill: none; stroke: #8895a5; stroke-width: 1.3; stroke-dasharray: 6 5; }
+.line { fill: none; stroke: #66768a; stroke-width: 1.5; marker-end: url(#arrow); }
+.return { stroke-dasharray: 4 4; }
+.allow { stroke: #398253; marker-end: url(#allow); }
+.deny { stroke: #b44848; marker-end: url(#deny); }
+.arrow { fill: #66768a; }
+.allow-tip { fill: #398253; }
+.deny-tip { fill: #b44848; }
+@media (prefers-color-scheme: dark) {
+ text { fill: #e5eaf1; }
+ .muted { fill: #b3bfd0; }
+ .box { fill: #202833; stroke: #64748b; }
+ .accent { fill: #1a304c; stroke: #79a4df; }
+ .good { fill: #183427; stroke: #77b68b; }
+ .bad { fill: #3c2428; stroke: #d48989; }
+ .boundary { stroke: #98a7bb; }
+ .line { stroke: #a2b1c5; }
+ .allow { stroke: #8bc99e; }
+ .deny { stroke: #eda0a0; }
+ .arrow { fill: #a2b1c5; }
+ .allow-tip { fill: #8bc99e; }
+ .deny-tip { fill: #eda0a0; }
+}
+</style>
+<defs>
+ <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M0 0 8 4 0 8Z"/></marker>
+ <marker id="allow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="allow-tip" d="M0 0 8 4 0 8Z"/></marker>
+ <marker id="deny" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="deny-tip" d="M0 0 8 4 0 8Z"/></marker>
+</defs>
+<text x="24" y="30" class="title">A write call: preview → decision → apply</text>
+<rect x="80" y="62" width="520" height="74" rx="9" class="box"/>
+<text x="96" y="88" class="head">Check scope, tool policy and arguments</text>
+<text x="96" y="113" class="small">ops:write (dev_task_start: dev:run); provider checks in Plan</text>
+<path d="M340 136 V166" class="line "/>
+<rect x="80" y="166" width="520" height="90" rx="9" class="accent"/>
+<text x="96" y="193" class="head">Plan · side-effect free</text>
+<text x="96" y="217" class="small">Validate target; calculate preview / diff</text>
+<text x="96" y="238" class="small">Deny an oversized preview or one changed by masking</text>
+<path d="M340 256 V292" class="line "/>
+<rect x="80" y="292" width="520" height="74" rx="9" class="good"/>
+<text x="96" y="319" class="head">A  Active approval window for this user + exact tool?</text>
+<text x="96" y="344" class="small">Eligible grant only; checks and Plan still required</text>
+<path d="M80 329 H32 V930 H80" class="line allow"/>
+<text x="42" y="393" class="small">Yes: skip</text>
+<text x="42" y="413" class="small">new prompt</text>
+<path d="M340 366 V424" class="line "/>
+<text x="352" y="400" class="small muted">No window</text>
+<rect x="80" y="424" width="520" height="100" rx="9" class="box"/>
+<text x="96" y="451" class="head">B  In-client confirmation · MCP elicitation</text>
+<text x="96" y="475" class="small">If supported and require_web is false: person accepts</text>
+<text x="96" y="496" class="small">Continuation carries signed state + approval response</text>
+<path d="M80 480 H56 V814 H80" class="line allow"/>
+<text x="96" y="550" class="small muted">Otherwise: web (or deny if unavailable)</text>
+<path d="M340 524 V572" class="line "/>
+<rect x="80" y="572" width="520" height="154" rx="9" class="accent"/>
+<text x="96" y="600" class="head">C  Web approval · pending link /approve/&lt;id&gt;</text>
+<text x="96" y="625" class="small">HTTP + built-in auth + approval.web: true</text>
+<text x="96" y="646" class="small">Person opens link; signs in as the same user</text>
+<text x="96" y="667" class="small">Passkey shown; configured GitHub / OIDC also supported</text>
+<text x="96" y="688" class="small">Approve / Approve for N minutes* / Reject</text>
+<path d="M340 726 V770" class="line "/>
+<text x="352" y="751" class="small muted">Approved → retry with approval_id</text>
+<rect x="80" y="770" width="520" height="88" rx="9" class="accent"/>
+<text x="96" y="797" class="head">Recompute Plan on every continuation / retry</text>
+<text x="96" y="821" class="small">One-call approval: user, transport, tool, arguments and</text>
+<text x="96" y="842" class="small">plan summary must match; expired / reused → deny</text>
+<path d="M340 858 V904" class="line allow"/>
+<rect x="80" y="904" width="520" height="56" rx="9" class="good"/>
+<text x="96" y="938" class="head">Apply · current approved Plan</text>
+<path d="M340 960 V996" class="line "/>
+<rect x="80" y="996" width="520" height="64" rx="9" class="box"/>
+<text x="96" y="1023" class="head">Masked + size-limited result; JSONL audit event</text>
+<text x="96" y="1046" class="small">Pending, denied and browser decisions are audited too</text>
+<path d="M600 99 H624 V894 H650" class="line deny"/>
+<path d="M600 211 H624 V894 H650" class="line deny"/>
+<path d="M600 474 H624 V894 H650" class="line deny"/>
+<path d="M600 670 H624 V894 H650" class="line deny"/>
+<path d="M600 814 H624 V894 H650" class="line deny"/>
+<rect x="650" y="842" width="156" height="104" rx="9" class="bad"/>
+<text x="666" y="870" class="head">Denied / rejected</text>
+<text x="666" y="897" class="small">No Apply</text>
+<text x="666" y="918" class="small">Audit outcome</text>
+<text x="650" y="106" class="small muted">Invalid scope,</text>
+<text x="650" y="127" class="small muted">policy or input</text>
+<text x="650" y="148" class="small muted"></text>
+<text x="650" y="169" class="small muted">No channel,</text>
+<text x="650" y="190" class="small muted">declined, expired</text>
+<text x="650" y="211" class="small muted">or mismatched</text>
+<text x="80" y="1088" class="small muted">* Only if configured and tool-eligible; a window covers future valid calls for this user/tool.</text>
+</svg>

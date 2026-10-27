@@ -44,19 +44,29 @@ Cursor 같은 클라이언트에 Linux 호스트와 Kubernetes용 운영 도구�
 
 ## 동작 방식
 
-```text
- MCP 클라이언트 ──stdio 또는 HTTPS──▶ opsgate
-                                      ├─ 인증 (OAuth / JWT / 고정 토큰)
-                                      ├─ 도구 정책과 스코프 확인
-                                      ├─ 쓰기 도구: 계획 ─▶ 사람의 승인 ─▶ 실행
-                                      ├─ 출력 마스킹, 크기 제한
-                                      └─ 감사 로그 (JSONL)
-                                            │
-                  호스트 · Kubernetes · 노트 · dev-runner(별도 계정)
-```
+<img src="docs/images/ko/architecture.svg" alt="클라이언트 연결, 인증과 도구 처리, provider 및 OS 계정·RBAC 신뢰 경계를 보여 주는 opsgate 구조" width="830">
+
+클라이언트는 로컬 stdio 또는 TLS 리버스 프록시를 거치는 HTTPS로 연결합니다.
+opsgate는 인증과 정책을 확인하고, 쓰기를 계획·승인·실행한 뒤 출력 처리와 감사를 적용합니다.
+실제 접근 범위는 OS 계정과 Kubernetes RBAC가 제한합니다.
 
 자세한 내용: [구조](docs/ko/architecture.md) · [승인](docs/ko/approval.md) ·
 [인증](docs/ko/authentication.md)
+
+### 승인 흐름
+
+쓰기 도구는 부작용 없는 계획을 먼저 계산합니다. 유효한 승인 시간 창이 없으면
+클라이언트 내 확인이나 웹 승인을 거치며, 일회성 승인은 인자와 계획에 묶입니다.
+
+<img src="docs/images/ko/approval-flow.svg" alt="쓰기 호출의 계획, 승인 시간 창·클라이언트·웹 승인, 재호출 검증과 실행 및 거부 경로" width="830">
+
+### 노트: 런북과 메모리
+
+note provider를 활성화하면 AI는 조치하기 전에 지난 장애 기록을 찾아보고, 승인을 받아
+이번 조치를 기록합니다. 그래서 다음 조사는 처음부터가 아니라 기록에서 시작합니다.
+[노트](docs/ko/notes.md)를 참고합니다.
+
+<img src="docs/images/ko/note-memory.svg" alt="OOMKilled 검색으로 지난 조치를 참고하고, 사람의 승인 후 실행과 노트 기록을 거쳐 다음 조사에 활용하는 흐름" width="830">
 
 ## 빠른 시작: 로컬(stdio)
 

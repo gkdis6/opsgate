@@ -2,6 +2,8 @@
 
 [English](../approval.md)
 
+<img src="../images/ko/approval-flow.svg" alt="쓰기 승인 경로, 재호출 검사와 거부 경로" width="830">
+
 쓰기 래퍼로 등록한 도구는 Plan 성공과 사람의 승인이 있어야 Apply를 실행합니다. host/Kubernetes 쓰기, 노트 쓰기, `dev_task_start`가 여기에 해당합니다. 코딩 작업을 중지하는 `dev_task_cancel`에는 의도적으로 승인을 요구하지 않습니다.
 
 ## 실행 흐름

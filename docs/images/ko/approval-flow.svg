@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 1104" role="img" aria-labelledby="title desc" lang="ko">
+<title id="title">쓰기 승인 흐름</title>
+<desc id="desc">스코프·정책·인자 검사 후 부작용 없는 Plan을 계산합니다. 유효한 사용자/도구 시간 창이 있으면 새 확인을 생략합니다. 그 외에는 지원되는 클라이언트 내 확인이나 내장 HTTP 웹 승인을 사용합니다. 웹에서는 같은 사용자로 로그인합니다(패스키 예시). 재호출은 계획과 일회성 승인 바인딩을 검증한 뒤 실행합니다. 거부·만료·불일치 시 실행하지 않습니다.</desc>
+<style>
+svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
+text { fill: #202936; }
+.title { font-size: 21px; font-weight: 700; }
+.head { font-size: 16px; font-weight: 650; }
+.small { font-size: 13px; }
+.muted { fill: #526071; }
+.box { fill: #f6f8fa; stroke: #aab5c2; stroke-width: 1.3; }
+.accent { fill: #edf4ff; stroke: #5886c0; stroke-width: 1.4; }
+.good { fill: #eef8f0; stroke: #639974; stroke-width: 1.4; }
+.bad { fill: #fff1f0; stroke: #bc6664; stroke-width: 1.4; }
+.boundary { fill: none; stroke: #8895a5; stroke-width: 1.3; stroke-dasharray: 6 5; }
+.line { fill: none; stroke: #66768a; stroke-width: 1.5; marker-end: url(#arrow); }
+.return { stroke-dasharray: 4 4; }
+.allow { stroke: #398253; marker-end: url(#allow); }
+.deny { stroke: #b44848; marker-end: url(#deny); }
+.arrow { fill: #66768a; }
+.allow-tip { fill: #398253; }
+.deny-tip { fill: #b44848; }
+@media (prefers-color-scheme: dark) {
+ text { fill: #e5eaf1; }
+ .muted { fill: #b3bfd0; }
+ .box { fill: #202833; stroke: #64748b; }
+ .accent { fill: #1a304c; stroke: #79a4df; }
+ .good { fill: #183427; stroke: #77b68b; }
+ .bad { fill: #3c2428; stroke: #d48989; }
+ .boundary { stroke: #98a7bb; }
+ .line { stroke: #a2b1c5; }
+ .allow { stroke: #8bc99e; }
+ .deny { stroke: #eda0a0; }
+ .arrow { fill: #a2b1c5; }
+ .allow-tip { fill: #8bc99e; }
+ .deny-tip { fill: #eda0a0; }
+}
+</style>
+<defs>
+ <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M0 0 8 4 0 8Z"/></marker>
+ <marker id="allow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="allow-tip" d="M0 0 8 4 0 8Z"/></marker>
+ <marker id="deny" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="deny-tip" d="M0 0 8 4 0 8Z"/></marker>
+</defs>
+<text x="24" y="30" class="title">쓰기 호출: 미리보기 → 결정 → 실행</text>
+<rect x="80" y="62" width="520" height="74" rx="9" class="box"/>
+<text x="96" y="88" class="head">스코프 · 도구 정책 · 인자 검사</text>
+<text x="96" y="113" class="small">ops:write (dev_task_start: dev:run) · Plan에서 provider 검사</text>
+<path d="M340 136 V166" class="line "/>
+<rect x="80" y="166" width="520" height="90" rx="9" class="accent"/>
+<text x="96" y="193" class="head">Plan · 부작용 없음</text>
+<text x="96" y="217" class="small">대상 검증 · 미리보기 / diff 계산</text>
+<text x="96" y="238" class="small">미리보기가 너무 크거나 마스킹으로 바뀌면 거부</text>
+<path d="M340 256 V292" class="line "/>
+<rect x="80" y="292" width="520" height="74" rx="9" class="good"/>
+<text x="96" y="319" class="head">A  이 사용자 + 정확한 도구의 활성 승인 시간 창?</text>
+<text x="96" y="344" class="small">허용된 시간 창만 적용 · 검사와 Plan은 항상 필요</text>
+<path d="M80 329 H32 V930 H80" class="line allow"/>
+<text x="42" y="393" class="small">있음: 생략</text>
+<text x="42" y="413" class="small">새 확인</text>
+<path d="M340 366 V424" class="line "/>
+<text x="352" y="400" class="small muted">시간 창 없음</text>
+<rect x="80" y="424" width="520" height="100" rx="9" class="box"/>
+<text x="96" y="451" class="head">B  클라이언트 내 확인 · MCP elicitation</text>
+<text x="96" y="475" class="small">지원됨 + require_web: false이면 사람이 수락</text>
+<text x="96" y="496" class="small">후속 호출: 서명된 상태 + 승인 응답</text>
+<path d="M80 480 H56 V814 H80" class="line allow"/>
+<text x="96" y="550" class="small muted">그 외: 웹 승인 (사용 불가 시 거부)</text>
+<path d="M340 524 V572" class="line "/>
+<rect x="80" y="572" width="520" height="154" rx="9" class="accent"/>
+<text x="96" y="600" class="head">C  웹 승인 · pending 링크 /approve/&lt;id&gt;</text>
+<text x="96" y="625" class="small">HTTP + 내장 인증 + approval.web: true</text>
+<text x="96" y="646" class="small">사람이 링크를 열고 요청한 사용자로 로그인</text>
+<text x="96" y="667" class="small">패스키 예시 · 설정된 GitHub / OIDC도 지원</text>
+<text x="96" y="688" class="small">승인 / N분 동안 승인* / 거절</text>
+<path d="M340 726 V770" class="line "/>
+<text x="352" y="751" class="small muted">승인 → approval_id로 재호출</text>
+<rect x="80" y="770" width="520" height="88" rx="9" class="accent"/>
+<text x="96" y="797" class="head">후속 호출 / 재호출마다 Plan 재계산</text>
+<text x="96" y="821" class="small">일회성 승인: 사용자 · 전송 방식 · 도구 · 인자와</text>
+<text x="96" y="842" class="small">계획 요약이 일치해야 함 · 만료 / 재사용 시 거부</text>
+<path d="M340 858 V904" class="line allow"/>
+<rect x="80" y="904" width="520" height="56" rx="9" class="good"/>
+<text x="96" y="938" class="head">Apply · 현재 승인된 Plan 실행</text>
+<path d="M340 960 V996" class="line "/>
+<rect x="80" y="996" width="520" height="64" rx="9" class="box"/>
+<text x="96" y="1023" class="head">결과 마스킹 + 크기 제한 · JSONL 감사 이벤트</text>
+<text x="96" y="1046" class="small">대기 · 거부 · 브라우저 결정도 감사 로그에 기록</text>
+<path d="M600 99 H624 V894 H650" class="line deny"/>
+<path d="M600 211 H624 V894 H650" class="line deny"/>
+<path d="M600 474 H624 V894 H650" class="line deny"/>
+<path d="M600 670 H624 V894 H650" class="line deny"/>
+<path d="M600 814 H624 V894 H650" class="line deny"/>
+<rect x="650" y="842" width="156" height="104" rx="9" class="bad"/>
+<text x="666" y="870" class="head">거부 / 거절</text>
+<text x="666" y="897" class="small">실행하지 않음</text>
+<text x="666" y="918" class="small">감사 결과 기록</text>
+<text x="650" y="106" class="small muted">스코프·정책·</text>
+<text x="650" y="127" class="small muted">인자 오류</text>
+<text x="650" y="148" class="small muted"></text>
+<text x="650" y="169" class="small muted">승인 경로 없음,</text>
+<text x="650" y="190" class="small muted">거절·만료·</text>
+<text x="650" y="211" class="small muted">불일치</text>
+<text x="80" y="1088" class="small muted">* 설정과 도구 정책이 허용할 때만 제공 · 시간 창은 이 사용자/도구의 후속 유효 호출에도 적용</text>
+</svg>

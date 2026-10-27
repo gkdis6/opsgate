@@ -2,6 +2,8 @@
 
 [한국어](ko/architecture.md)
 
+<img src="images/architecture.svg" alt="opsgate architecture, providers and trust boundaries" width="830">
+
 opsgate is a Go MCP server. It exposes configured operations through providers and applies shared authorization, output handling and auditing around their tools.
 
 ## Request flow

@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 942" role="img" aria-labelledby="title desc" lang="ko">
+<title id="title">opsgate 동작 구조</title>
+<desc id="desc">MCP 클라이언트는 로컬 stdio 또는 TLS 리버스 프록시를 거치는 HTTPS로 연결합니다. opsgate는 인증, 스코프와 정책 검사, 도구 래퍼의 계획·승인·실행, 출력 마스킹과 크기 제한, JSONL 감사를 적용합니다. 호스트·Kubernetes·노트와 별도 dev runner는 OS 계정과 RBAC로 제한합니다. 셸 도구는 없습니다.</desc>
+<style>
+svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
+text { fill: #202936; }
+.title { font-size: 21px; font-weight: 700; }
+.head { font-size: 16px; font-weight: 650; }
+.small { font-size: 13px; }
+.muted { fill: #526071; }
+.box { fill: #f6f8fa; stroke: #aab5c2; stroke-width: 1.3; }
+.accent { fill: #edf4ff; stroke: #5886c0; stroke-width: 1.4; }
+.good { fill: #eef8f0; stroke: #639974; stroke-width: 1.4; }
+.bad { fill: #fff1f0; stroke: #bc6664; stroke-width: 1.4; }
+.boundary { fill: none; stroke: #8895a5; stroke-width: 1.3; stroke-dasharray: 6 5; }
+.line { fill: none; stroke: #66768a; stroke-width: 1.5; marker-end: url(#arrow); }
+.return { stroke-dasharray: 4 4; }
+.allow { stroke: #398253; marker-end: url(#allow); }
+.deny { stroke: #b44848; marker-end: url(#deny); }
+.arrow { fill: #66768a; }
+.allow-tip { fill: #398253; }
+.deny-tip { fill: #b44848; }
+@media (prefers-color-scheme: dark) {
+ text { fill: #e5eaf1; }
+ .muted { fill: #b3bfd0; }
+ .box { fill: #202833; stroke: #64748b; }
+ .accent { fill: #1a304c; stroke: #79a4df; }
+ .good { fill: #183427; stroke: #77b68b; }
+ .bad { fill: #3c2428; stroke: #d48989; }
+ .boundary { stroke: #98a7bb; }
+ .line { stroke: #a2b1c5; }
+ .allow { stroke: #8bc99e; }
+ .deny { stroke: #eda0a0; }
+ .arrow { fill: #a2b1c5; }
+ .allow-tip { fill: #8bc99e; }
+ .deny-tip { fill: #eda0a0; }
+}
+</style>
+<defs>
+ <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M0 0 8 4 0 8Z"/></marker>
+ <marker id="allow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="allow-tip" d="M0 0 8 4 0 8Z"/></marker>
+ <marker id="deny" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="deny-tip" d="M0 0 8 4 0 8Z"/></marker>
+</defs>
+<text x="24" y="30" class="title">정해진 도구로 서버 운영</text>
+<rect x="24" y="54" width="374" height="74" rx="9" class="box"/>
+<text x="40" y="81" class="head">로컬 MCP 클라이언트</text>
+<text x="40" y="107">Claude Code / Cursor</text>
+<rect x="432" y="54" width="374" height="74" rx="9" class="box"/>
+<text x="448" y="81" class="head">원격 MCP 클라이언트</text>
+<text x="448" y="107">claude.ai / ChatGPT 커넥터</text>
+<path d="M211 128 V154" class="line "/>
+<path d="M619 128 V154" class="line "/>
+<rect x="24" y="154" width="374" height="62" rx="9" class="box"/>
+<text x="40" y="178" class="head">stdio · 로컬 프로세스</text>
+<text x="40" y="200" class="small">설정된 ID + 스코프 · 로그인 없음</text>
+<rect x="432" y="154" width="374" height="62" rx="9" class="box"/>
+<text x="448" y="178" class="head">HTTPS → TLS 리버스 프록시</text>
+<text x="448" y="200" class="small">→ 일반 HTTP 리스너 (/mcp)</text>
+<path d="M211 216 V232 H414 V280" class="line "/>
+<path d="M619 216 V232 H438 V280" class="line "/>
+<rect x="12" y="246" width="806" height="550" rx="9" class="boundary"/>
+<text x="28" y="270" class="small muted">신뢰 경계: 서버 OS 계정 / Kubernetes RBAC</text>
+<rect x="32" y="280" width="448" height="474" rx="9" class="accent"/>
+<text x="48" y="307" class="head">opsgate</text>
+<text x="464" y="307" class="small" text-anchor="end">셸 도구 없음</text>
+<rect x="48" y="322" width="416" height="84" rx="9" class="box"/>
+<text x="64" y="346" class="head">1  인증 (HTTP)</text>
+<text x="64" y="369" class="small">내장 OAuth: 패스키 / GitHub / OIDC</text>
+<text x="64" y="390" class="small">또는 외부 JWT / 고정 토큰</text>
+<path d="M256 406 V418" class="line "/>
+<rect x="48" y="418" width="416" height="48" rx="9" class="box"/>
+<text x="64" y="447" class="head">2  스코프 + 서버 / 사용자 도구 정책</text>
+<path d="M256 466 V478" class="line "/>
+<rect x="48" y="478" width="416" height="140" rx="9" class="box"/>
+<text x="64" y="502" class="head">3  공통 도구 래퍼</text>
+<text x="64" y="526" class="small">조회: 핸들러 · 쓰기: Plan → 승인 → Apply</text>
+<rect x="64" y="544" width="94" height="38" rx="9" class="good"/>
+<text x="111.0" y="568" class="small" text-anchor="middle">계획</text>
+<rect x="184" y="544" width="148" height="38" rx="9" class="good"/>
+<text x="258.0" y="568" class="small" text-anchor="middle">사람의 승인</text>
+<rect x="358" y="544" width="90" height="38" rx="9" class="good"/>
+<text x="403.0" y="568" class="small" text-anchor="middle">실행</text>
+<path d="M158 563 H184" class="line allow"/>
+<path d="M332 563 H358" class="line allow"/>
+<text x="64" y="602" class="small muted">provider 허용 목록 + 대상 검증</text>
+<rect x="48" y="632" width="416" height="48" rx="9" class="box"/>
+<text x="64" y="662" class="head">4  출력 마스킹 + 크기 제한</text>
+<path d="M256 680 V692" class="line "/>
+<rect x="48" y="692" width="416" height="48" rx="9" class="box"/>
+<text x="64" y="722" class="head">5  JSONL 감사 로그</text>
+<text x="536" y="305" class="head">활성화된 provider</text>
+<rect x="536" y="322" width="250" height="84" rx="9" class="box"/>
+<text x="552" y="347" class="head">호스트</text>
+<text x="552" y="371" class="small">systemd · journald · /proc</text>
+<text x="552" y="392" class="small">서버 OS 권한</text>
+<rect x="536" y="428" width="250" height="84" rx="9" class="box"/>
+<text x="552" y="453" class="head">Kubernetes</text>
+<text x="552" y="477" class="small">RBAC로 제한된 서비스 계정</text>
+<rect x="536" y="534" width="250" height="84" rx="9" class="box"/>
+<text x="552" y="559" class="head">노트</text>
+<text x="552" y="583" class="small">Markdown 폴더</text>
+<text x="552" y="604" class="small">런북 + 장애 메모리</text>
+<rect x="536" y="640" width="250" height="68" rx="9" class="box"/>
+<text x="552" y="665" class="head">Dev</text>
+<text x="552" y="689" class="small">설정된 프로젝트 / 에이전트</text>
+<path d="M464 510 H504 V364 H536" class="line "/>
+<path d="M504 510 V470 H536" class="line "/>
+<path d="M504 510 V576 H536" class="line "/>
+<path d="M504 576 V674 H536" class="line "/>
+<path d="M786 364 H804 V674" class="line return"/>
+<path d="M786 470 H804 V674" class="line return"/>
+<path d="M786 576 H804 V674" class="line return"/>
+<path d="M786 674 H804 V774 H492 V656 H464" class="line return"/>
+<text x="298" y="777" class="small muted">점선 화살표: 결과</text>
+<path d="M661 708 V830" class="line "/>
+<text x="678" y="812" class="small">Unix 소켓</text>
+<rect x="526" y="830" width="292" height="98" rx="9" class="boundary"/>
+<text x="542" y="852" class="small muted">신뢰 경계: 별도 runner 계정</text>
+<text x="542" y="879" class="head">dev-runner</text>
+<text x="542" y="905">→ Git worktree + 코딩 에이전트</text>
+<text x="32" y="846" class="small muted">프로세스당 전송 방식 하나.</text>
+<text x="32" y="869" class="small muted">provider와 쓰기는 별도로 활성화합니다.</text>
+<text x="32" y="892" class="small muted">승인된 작업에도 권한 제한이 적용됩니다.</text>
+</svg>

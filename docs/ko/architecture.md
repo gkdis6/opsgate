@@ -2,6 +2,8 @@
 
 [English](../architecture.md)
 
+<img src="../images/ko/architecture.svg" alt="opsgate 구조, provider와 신뢰 경계" width="830">
+
 opsgate는 Go MCP 서버입니다. provider를 통해 설정된 운영 작업을 노출합니다. 각 도구에 공통 인가, 출력 처리, 감사 기능을 적용합니다.
 
 ## 요청 흐름

@@ -43,6 +43,14 @@ type WriteSpec struct {
 // human approver verbatim, so it must name the exact target and effect.
 type Plan struct {
 	Summary string
+	// Target names the system the write acts on (for example a Kubernetes
+	// cluster) when one server reaches several. Approval screens show it
+	// prominently and approval windows are granted per target. Empty means
+	// the server's only system.
+	Target string
+	// NoWindow requires a fresh human approval for every call, even when the
+	// tool is listed in approval.window_tools.
+	NoWindow bool
 	// Data belongs to this invocation and is never shown or serialized.
 	Data any `json:"-"`
 }
@@ -63,9 +71,12 @@ type ConfirmRequest struct {
 	Title string
 	// Args are redacted arguments for display only, without approval_id.
 	// ArgsHash binds the canonical unredacted arguments, without approval_id.
-	Args       map[string]any
-	ArgsHash   [sha256.Size]byte
-	Summary    string
+	Args     map[string]any
+	ArgsHash [sha256.Size]byte
+	Summary  string
+	// Target and NoWindow are copied from the tool's Plan.
+	Target     string
+	NoWindow   bool
 	ApprovalID string
 	// MaxArgBytes is the tool's argument limit, defaulting to 16 KiB.
 	MaxArgBytes int
@@ -161,7 +172,7 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 			if err != nil {
 				return "", err
 			}
-			if ev.Plan != plan.Summary {
+			if ev.Plan != plan.Summary || len(plan.Target) > 256 || redact.String(plan.Target) != plan.Target {
 				return "", Denied("target cannot be shown unambiguously")
 			}
 			if env.Confirm == nil {
@@ -171,7 +182,8 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 				return "", err
 			}
 			ev.Approval, err = env.Confirm.Confirm(ctx, req, ConfirmRequest{
-				Caller: c, Tool: spec.Name, Title: spec.Title, Args: args, ArgsHash: argsHash, Summary: ev.Plan, ApprovalID: in.approvalID(), MaxArgBytes: maxArgs,
+				Caller: c, Tool: spec.Name, Title: spec.Title, Args: args, ArgsHash: argsHash, Summary: ev.Plan,
+				Target: plan.Target, NoWindow: plan.NoWindow, ApprovalID: in.approvalID(), MaxArgBytes: maxArgs,
 			})
 			if err != nil {
 				if errors.As(err, &input) && input != nil {

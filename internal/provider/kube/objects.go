@@ -20,12 +20,14 @@ import (
 )
 
 type listInput struct {
+	Cluster       string `json:"cluster,omitempty" jsonschema:"Cluster name; required when several clusters are configured"`
 	Kind          string `json:"kind" jsonschema:"Resource kind or alias; see the tool description for supported kinds"`
 	Namespace     string `json:"namespace,omitempty" jsonschema:"Namespace; omit for cluster-scoped kinds; defaults to all allowed namespaces"`
 	LabelSelector string `json:"label_selector,omitempty" jsonschema:"Kubernetes label selector; defaults to all labels"`
 	Limit         int    `json:"limit,omitempty" jsonschema:"Maximum objects; default 100; clamped to 1 through 500"`
 }
 type getInput struct {
+	Cluster   string `json:"cluster,omitempty" jsonschema:"Cluster name; required when several clusters are configured"`
 	Kind      string `json:"kind" jsonschema:"Resource kind or alias; see the tool description for supported kinds"`
 	Namespace string `json:"namespace,omitempty" jsonschema:"Namespace; required for namespaced kinds; omit for cluster-scoped kinds"`
 	Name      string `json:"name" jsonschema:"Required object name"`

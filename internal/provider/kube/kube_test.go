@@ -14,6 +14,7 @@ import (
 	"github.com/gkdis6/opsgate/internal/config"
 	"github.com/gkdis6/opsgate/internal/tool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -30,7 +31,7 @@ func TestRegistration(t *testing.T) {
 			defer logger.Close()
 			env := &tool.Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 65536, Fallback: &tool.Caller{User: "test", Scopes: []string{config.ScopeRead}}}
 			clientset := fake.NewClientset()
-			if err := register(server, env, config.Kubernetes{AllowLogs: logs, Namespaces: []string{"*"}}, clientset); err != nil {
+			if err := register(server, env, config.Kubernetes{KubernetesCluster: config.KubernetesCluster{AllowLogs: logs, Namespaces: []string{"*"}}}, map[string]kubernetes.Interface{"default": clientset}); err != nil {
 				t.Fatal(err)
 			}
 			if len(clientset.Actions()) != 0 {
@@ -72,7 +73,7 @@ func TestRegistration(t *testing.T) {
 					}
 				}
 				for _, detail := range map[string][]string{
-					"k8s_overview": {"10 warnings", "1h", "Takes no inputs"},
+					"k8s_overview": {"10 warnings", "1h", "Use cluster"},
 					"k8s_list":     {"all allowed namespaces", "100", "1–500"},
 					"k8s_get":      {"50 events", "1h", "namespace is required"},
 					"k8s_events":   {"warnings_only true", "since 1h", "limit 50", "168h", "1–500"},
@@ -101,7 +102,7 @@ func TestRegistration(t *testing.T) {
 					t.Fatal(spec)
 				}
 			}
-			if slices.Contains(names, "k8s_logs") != logs || len(names) != 4+map[bool]int{false: 0, true: 1}[logs] {
+			if slices.Contains(names, "k8s_logs") != logs || len(names) != 5+map[bool]int{false: 0, true: 1}[logs] {
 				t.Fatal(names)
 			}
 			result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "k8s_list", Arguments: map[string]any{"kind": "secrets"}})
@@ -118,6 +119,7 @@ func TestRegisterConfig(t *testing.T) {
 		fail                 bool
 	}{
 		{"lazy", "", "chosen", false}, {"missing context", "", "missing", true},
+		{"auth-provider plugin", "    auth-provider:\n      name: gcp\n", "chosen", true},
 		{"exec plugin", "    exec:\n      apiVersion: client.authentication.k8s.io/v1\n      command: never-execute\n      interactiveMode: Never\n", "chosen", true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -142,11 +144,11 @@ users:
 				t.Fatal(err)
 			}
 			s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
-			err := Register(s, &tool.Env{}, config.Kubernetes{Kubeconfig: path, Context: tt.context})
+			err := Register(s, &tool.Env{}, config.Kubernetes{KubernetesCluster: config.KubernetesCluster{Kubeconfig: path, Context: tt.context}})
 			if (err != nil) != tt.fail {
 				t.Fatal(err)
 			}
-			if strings.Contains(tt.extra, "exec:") && err != nil && !strings.Contains(err.Error(), "plugins") {
+			if tt.extra != "" && err != nil && (!strings.Contains(err.Error(), "plugins") || !strings.Contains(err.Error(), `cluster "default"`)) {
 				t.Fatal(err)
 			}
 		})

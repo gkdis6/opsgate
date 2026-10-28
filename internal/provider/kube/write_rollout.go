@@ -13,6 +13,9 @@ import (
 )
 
 func (p *provider) planRollout(ctx context.Context, _ tool.Caller, in rolloutInput) (tool.Plan, error) {
+	if len(p.cfg.RolloutRestart) == 0 {
+		return tool.Plan{}, tool.Denied("k8s_rollout_restart is disabled on cluster %s", p.cfg.Name)
+	}
 	r, err := writeKind(in.Kind, true)
 	if err != nil {
 		return tool.Plan{}, err
@@ -59,6 +62,9 @@ func (p *provider) planRollout(ctx context.Context, _ tool.Caller, in rolloutInp
 }
 
 func (p *provider) applyRollout(ctx context.Context, _ tool.Caller, in rolloutInput, plan tool.Plan) (string, error) {
+	if len(p.cfg.RolloutRestart) == 0 {
+		return "", tool.Denied("k8s_rollout_restart is disabled on cluster %s", p.cfg.Name)
+	}
 	if _, err := writeKind(in.Kind, true); err != nil {
 		return "", err
 	}

@@ -13,6 +13,7 @@ import (
 )
 
 type logsInput struct {
+	Cluster   string `json:"cluster,omitempty" jsonschema:"Cluster name; required when several clusters are configured"`
 	Namespace string `json:"namespace" jsonschema:"Required allowed namespace"`
 	Pod       string `json:"pod" jsonschema:"Required pod name"`
 	Container string `json:"container,omitempty" jsonschema:"Container name; required unless the pod has exactly one container"`
@@ -23,6 +24,9 @@ type logsInput struct {
 }
 
 func (p *provider) logs(ctx context.Context, _ tool.Caller, in logsInput) (string, error) {
+	if !p.cfg.AllowLogs {
+		return "", tool.Denied("k8s_logs is disabled on cluster %s", p.cfg.Name)
+	}
 	if err := p.checkNamespace(in.Namespace); err != nil {
 		return "", err
 	}

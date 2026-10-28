@@ -76,6 +76,8 @@ providers:
     command_prefix: [] # Trusted write argv prefix; first element absolute executable.
   kubernetes:
     enabled: false
+    name: default # Single-cluster name; clients may omit cluster with one cluster.
+    protected: false # True requires fresh approval for every write.
     kubeconfig: "" # In-cluster, then $KUBECONFIG, then ~/.kube/config; no exec/auth-provider.
     context: "" # Override for file-based config; empty uses selected context.
     namespaces: [] # Namespace globs; empty denies all namespaced resources.
@@ -131,4 +133,28 @@ providers:
 # and grant selected users [ops:read, dev:run]. Each start requires human approval.
 # Worktrees are not a sandbox; no automatic push/merge/deploy is implemented.
 # An optional approval.window/window_tools grant skips later individual prompts
-# for that user/tool across targets. Keep it off for coding task starts.
+# for that user/tool/target. Protected Kubernetes clusters require fresh approval.
+# Keep it off for coding task starts.
+
+# ---- MULTIPLE KUBERNETES CLUSTERS (replace the kubernetes section above) ----
+# Do not combine clusters with single-cluster connection/policy fields.
+# providers:
+#   kubernetes:
+#     enabled: true
+#     clusters:
+#       - name: kind
+#         kubeconfig: /etc/opsgate/kind.yaml
+#         context: kind-kind
+#         namespaces: [apps]
+#         allow_logs: true
+#         rollout_restart: [apps/web]
+#         scale: [apps/web]
+#         max_replicas: 3
+#       - name: prod
+#         kubeconfig: /etc/opsgate/prod.yaml
+#         protected: true
+#         namespaces: [apps]
+#         deny_namespaces: [kube-system]
+#         allow_logs: true
+#         # No write allowlists: production is read-only.
+# Calls need cluster when several are configured. k8s_clusters lists targets.

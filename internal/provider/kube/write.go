@@ -11,6 +11,7 @@ import (
 
 type rolloutInput struct {
 	tool.Approval
+	Cluster   string `json:"cluster,omitempty" jsonschema:"Cluster name; required when several clusters are configured"`
 	Kind      string `json:"kind" jsonschema:"Required: deployment, statefulset, or daemonset."`
 	Namespace string `json:"namespace" jsonschema:"Required allowed namespace."`
 	Name      string `json:"name" jsonschema:"Required allowlisted resource name."`
@@ -18,6 +19,7 @@ type rolloutInput struct {
 
 type scaleInput struct {
 	tool.Approval
+	Cluster   string `json:"cluster,omitempty" jsonschema:"Cluster name; required when several clusters are configured"`
 	Kind      string `json:"kind" jsonschema:"Required: deployment or statefulset."`
 	Namespace string `json:"namespace" jsonschema:"Required allowed namespace."`
 	Name      string `json:"name" jsonschema:"Required allowlisted resource name."`
@@ -26,6 +28,7 @@ type scaleInput struct {
 
 type deletePodInput struct {
 	tool.Approval
+	Cluster   string `json:"cluster,omitempty" jsonschema:"Cluster name; required when several clusters are configured"`
 	Namespace string `json:"namespace" jsonschema:"Required allowed namespace."`
 	Name      string `json:"name" jsonschema:"Required allowlisted pod name."`
 }
@@ -79,14 +82,14 @@ func writeKind(kind string, daemon bool) (resource, error) {
 	return resolveKind(kind)
 }
 
-func (p *provider) registerWrites(s *mcp.Server, env *tool.Env) {
-	if len(p.cfg.RolloutRestart) > 0 {
-		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_rollout_restart", Title: "Restart Kubernetes workload", Description: "Restart an allowlisted deployment, statefulset or daemonset by updating its pod template after human approval."}, tool.WriteHandler[rolloutInput]{Plan: p.planRollout, Apply: p.applyRollout})
+func (r *registry) registerWrites(s *mcp.Server, env *tool.Env, note string) {
+	if r.any(func(p *provider) bool { return len(p.cfg.RolloutRestart) > 0 }) {
+		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_rollout_restart", Title: "Restart Kubernetes workload", Description: "Select cluster and restart an allowlisted deployment, statefulset or daemonset by updating its pod template after human approval." + note}, clusterWrite(r, (*provider).planRollout, (*provider).applyRollout))
 	}
-	if len(p.cfg.Scale) > 0 {
-		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_scale", Title: "Scale Kubernetes workload", Description: "Scale an allowlisted deployment or statefulset within max_replicas after human approval.", Idempotent: true}, tool.WriteHandler[scaleInput]{Plan: p.planScale, Apply: p.applyScale})
+	if r.any(func(p *provider) bool { return len(p.cfg.Scale) > 0 }) {
+		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_scale", Title: "Scale Kubernetes workload", Description: "Select cluster and scale an allowlisted deployment or statefulset within max_replicas after human approval." + note, Idempotent: true}, clusterWrite(r, (*provider).planScale, (*provider).applyScale))
 	}
-	if len(p.cfg.DeletePod) > 0 {
-		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_delete_pod", Title: "Delete Kubernetes pod", Description: "Delete the exact allowlisted pod shown in the human approval preview, protected by its UID."}, tool.WriteHandler[deletePodInput]{Plan: p.planDeletePod, Apply: p.applyDeletePod})
+	if r.any(func(p *provider) bool { return len(p.cfg.DeletePod) > 0 }) {
+		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_delete_pod", Title: "Delete Kubernetes pod", Description: "Select cluster and delete the exact allowlisted pod shown in the human approval preview, protected by its UID." + note}, clusterWrite(r, (*provider).planDeletePod, (*provider).applyDeletePod))
 	}
 }

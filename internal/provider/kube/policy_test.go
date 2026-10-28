@@ -74,7 +74,7 @@ func TestNamespaceQueries(t *testing.T) {
 }
 
 func testProvider(objects ...runtime.Object) *provider {
-	return &provider{client: fake.NewClientset(objects...), cfg: config.Kubernetes{MaxLogLines: 500}, policy: namespacePolicy{[]string{"*"}, []string{"private"}}}
+	return &provider{client: fake.NewClientset(objects...), cfg: config.KubernetesCluster{MaxLogLines: 500, AllowLogs: true}, policy: namespacePolicy{[]string{"*"}, []string{"private"}}}
 }
 
 func TestListQueryPlan(t *testing.T) {

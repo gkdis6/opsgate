@@ -24,7 +24,7 @@ import (
 
 func writeProvider(objects ...runtime.Object) (*provider, *fake.Clientset) {
 	client := fake.NewClientset(objects...)
-	cfg := config.Kubernetes{Namespaces: []string{"*"}, DenyNamespaces: []string{"private*"}, RolloutRestart: []string{"prod/web*"}, Scale: []string{"prod/web*"}, DeletePod: []string{"prod/web*"}, MaxReplicas: 10}
+	cfg := config.KubernetesCluster{Namespaces: []string{"*"}, DenyNamespaces: []string{"private*"}, RolloutRestart: []string{"prod/web*"}, Scale: []string{"prod/web*"}, DeletePod: []string{"prod/web*"}, MaxReplicas: 10}
 	return &provider{client: client, cfg: cfg, policy: namespacePolicy{cfg.Namespaces, cfg.DenyNamespaces}}, client
 }
 

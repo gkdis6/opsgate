@@ -10,6 +10,9 @@ import (
 )
 
 func (p *provider) checkScale(in scaleInput) error {
+	if len(p.cfg.Scale) == 0 {
+		return tool.Denied("k8s_scale is disabled on cluster %s", p.cfg.Name)
+	}
 	if _, err := writeKind(in.Kind, false); err != nil {
 		return err
 	}

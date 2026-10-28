@@ -9,6 +9,9 @@ import (
 )
 
 func (p *provider) planDeletePod(ctx context.Context, _ tool.Caller, in deletePodInput) (tool.Plan, error) {
+	if len(p.cfg.DeletePod) == 0 {
+		return tool.Plan{}, tool.Denied("k8s_delete_pod is disabled on cluster %s", p.cfg.Name)
+	}
 	if err := p.writeAllowed(in.Namespace, in.Name, p.cfg.DeletePod); err != nil {
 		return tool.Plan{}, err
 	}
@@ -26,6 +29,9 @@ func (p *provider) planDeletePod(ctx context.Context, _ tool.Caller, in deletePo
 }
 
 func (p *provider) applyDeletePod(ctx context.Context, _ tool.Caller, in deletePodInput, plan tool.Plan) (string, error) {
+	if len(p.cfg.DeletePod) == 0 {
+		return "", tool.Denied("k8s_delete_pod is disabled on cluster %s", p.cfg.Name)
+	}
 	if err := p.writeAllowed(in.Namespace, in.Name, p.cfg.DeletePod); err != nil {
 		return "", err
 	}

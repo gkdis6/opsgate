@@ -280,30 +280,6 @@ type Host struct {
 	CommandPrefix []string `yaml:"command_prefix"`
 }
 
-type Kubernetes struct {
-	Enabled bool `yaml:"enabled"`
-	// Kubeconfig path. Empty uses in-cluster config, then $KUBECONFIG,
-	// then ~/.kube/config.
-	Kubeconfig string `yaml:"kubeconfig"`
-	Context    string `yaml:"context"`
-	// Namespaces is a glob allowlist. Empty allows none; "*" allows all.
-	Namespaces []string `yaml:"namespaces"`
-	// DenyNamespaces wins over Namespaces.
-	DenyNamespaces []string `yaml:"deny_namespaces"`
-	// AllowLogs enables k8s_logs.
-	AllowLogs bool `yaml:"allow_logs"`
-	// ShowConfigMapData returns ConfigMap values; otherwise only keys.
-	ShowConfigMapData bool `yaml:"show_configmap_data"`
-	MaxLogLines       int  `yaml:"max_log_lines"`
-	// Write actions. Each list holds "namespace/name" globs; empty
-	// disables the tool. Namespace allow/deny rules still apply.
-	RolloutRestart []string `yaml:"rollout_restart"`
-	Scale          []string `yaml:"scale"`
-	DeletePod      []string `yaml:"delete_pod"`
-	// MaxReplicas caps k8s_scale.
-	MaxReplicas int32 `yaml:"max_replicas"`
-}
-
 // Default returns the configuration used when no file is given.
 func Default() Config {
 	return Config{
@@ -338,8 +314,10 @@ func Default() Config {
 				MaxLogLines: 500,
 			},
 			Kubernetes: Kubernetes{
-				MaxLogLines: 500,
-				MaxReplicas: 10,
+				KubernetesCluster: KubernetesCluster{
+					MaxLogLines: 500,
+					MaxReplicas: 10,
+				},
 			},
 			Note: Note{
 				MaxNoteBytes: 1 << 20,
@@ -424,10 +402,7 @@ func (c Config) Validate() error {
 			return fmt.Errorf("providers.host.command_prefix: %q must be an absolute path or a flag", p)
 		}
 	}
-	if c.Providers.Kubernetes.MaxReplicas < 0 {
-		return fmt.Errorf("providers.kubernetes.max_replicas must not be negative")
-	}
-	return nil
+	return c.Providers.Kubernetes.validate()
 }
 
 // validateRegistrationPolicy checks administrator-controlled DCR settings.

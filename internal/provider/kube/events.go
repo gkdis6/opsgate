@@ -17,6 +17,7 @@ import (
 )
 
 type eventsInput struct {
+	Cluster      string `json:"cluster,omitempty" jsonschema:"Cluster name; required when several clusters are configured"`
 	Namespace    string `json:"namespace,omitempty" jsonschema:"Namespace; omitted means all allowed namespaces"`
 	WarningsOnly *bool  `json:"warnings_only,omitempty" jsonschema:"Only warnings; default true"`
 	Since        string `json:"since,omitempty" jsonschema:"Recent event window as a positive Go duration; default 1h; maximum 168h"`

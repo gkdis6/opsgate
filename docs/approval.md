@@ -28,13 +28,15 @@ Plan is side-effect-free. Its summary must identify the target and effect. If ma
 
 The manager first validates the request and `require_web` restrictions, then checks for an active approval window. Without a window, it processes supplied client input or `approval_id`; a fresh request prefers elicitation when supported and otherwise uses web approval. No available channel means denial.
 
+When a server reaches several systems, such as multiple Kubernetes clusters, approval screens show the target above the summary. Targets marked protected require human approval for every call, even when the tool is eligible for a window.
+
 ### Approval window
 
-A window is an optional grant keyed by **user and exact tool name**. It covers any valid target and arguments for that tool, across transports with the same user identity. It still requires all normal authorization checks and a valid Plan with a visible summary.
+A window is an optional grant keyed by **user, exact tool name and target**. It covers any valid arguments for that tool on that target, across transports with the same user identity. A grant for one target never covers another target or an unnamed target. It still requires all normal authorization checks and a valid Plan with a visible summary.
 
 `approval.window` is zero by default, disabling grants. If enabled, it must be between `1m` and `12h`, and the tool must match a `path.Match` glob in `approval.window_tools`. An empty list permits no grants. The human must explicitly choose the window option; enabling configuration alone does not grant a window.
 
-There are at most 100 live user/tool grants. A new grant does not evict another live grant; renewing an existing pair is allowed. Keep `dev_task_start` out of this list: the code permits it, but a window would approve different coding prompts and projects without another confirmation.
+There are at most 100 live user/tool/target grants. A new grant does not evict another live grant; renewing an existing grant is allowed. Keep `dev_task_start` out of this list: the code permits it, but a window would approve different coding prompts and projects without another confirmation.
 
 This is a configuration fragment to merge into a working configuration:
 
@@ -47,9 +49,9 @@ approval:
 
 ### In-client elicitation
 
-When the client advertises elicitation and web-only approval is not required, opsgate returns MCP multi round-trip `InputRequests` with an `opsgate_approval` form. It shows the summary, requester and transport. The human must accept with `approve: true`. Eligible tools also offer `allow_window`.
+When the client advertises elicitation and web-only approval is not required, opsgate returns MCP multi round-trip `InputRequests` with an `opsgate_approval` form. It shows the target when present, summary, requester and transport. The human must accept with `approve: true`. Eligible tools also offer `allow_window`.
 
-The server gives the client HMAC-SHA256 signed request state containing user, transport, tool, argument hash, summary hash, expiry, nonce and any offered window duration. The signing key is random for each process start.
+The server gives the client HMAC-SHA256 signed request state containing user, transport, tool, target, per-call approval requirement, argument hash, summary hash, expiry, nonce and any offered window duration. The signing key is random for each process start.
 
 On continuation, the server checks the signature and expiry, rejects a reused nonce, then consumes the authenticated nonce **before** checking bindings and the response. A bad binding or response therefore cannot reuse that state. Only `approve` and `allow_window` content keys are accepted. `allow_window` must be a boolean and must correspond to the offered, still-eligible window.
 
@@ -75,7 +77,7 @@ The initial call returns a text tool result with a link, an expiry and instructi
 
 The page displays the plan line by line, highlights diff lines, and includes masked arguments. Only the exact requesting user can view or decide it. Decisions are protected by CSRF checks and cross-origin protection, are accepted once, and use a strict script-free Content Security Policy.
 
-The retry must match user, transport, tool, canonical unredacted argument hash (excluding `approval_id`) and the newly calculated summary. A one-call approval is marked used before Apply, so an Apply failure requires a new approval. An active window is checked earlier and deliberately does not impose this one-call binding.
+The retry must match user, transport, tool, target, per-call approval requirement, canonical unredacted argument hash (excluding `approval_id`) and the newly calculated summary. A one-call approval is marked used before Apply, so an Apply failure requires a new approval. An active window is checked earlier and deliberately does not impose this one-call binding.
 
 For browser-only decisions, merge this fragment into a working built-in HTTP configuration:
 
@@ -93,12 +95,12 @@ approval:
 | Control | Behavior |
 | --- | --- |
 | Argument binding | SHA-256 of canonical unredacted JSON arguments, excluding `approval_id`; masked arguments are only for display/audit |
-| Plan binding | Recomputed summary must match; note writes also check the planned file snapshot during Apply |
+| Plan binding | Recomputed summary, target and per-call approval requirement must match; note writes also check the planned file snapshot during Apply |
 | One-call use | Web records have a used flag; elicitation uses consumed nonces |
 | Pending/input lifetime | `approval.ttl`, default `10m`; a nonpositive TTL causes confirmation requests to be denied |
 | Web record capacity | 100 live records, including decided records awaiting consumption; expiry releases capacity |
 | Nonce capacity | 1,000 live consumed nonces; live entries are not evicted to accept another continuation |
-| Window capacity | 100 live user/tool pairs |
+| Window capacity | 100 live user/tool/target combinations |
 | Persistence | Pending records, windows, consumed nonces and signing key are memory-only; restart discards all of them |
 
 The default raw write argument limit is 16 KiB; some content-bearing tools raise it. Summary limits scale with each tool's argument limit. See [Tools](tools.md) for limits.
@@ -107,6 +109,6 @@ The default raw write argument limit is 16 KiB; some content-bearing tools raise
 
 Tool events use `pending`, `denied`, `ok` or `error`. Browser decisions add `approved` or `rejected` events. Grant creation adds `window_granted`. The `approval` field identifies `elicitation`, `web` or `window` where applicable. Plans and display arguments are masked; full successful results are not stored as audit text.
 
-Approval confirms a requested action, not arbitrary future actions by the same client. Windows intentionally broaden that promise to a tool for their lifetime. OS permissions, Kubernetes RBAC, provider allowlists, scopes and tool restrictions remain necessary. Coding agents can run further commands under the runner account after task-start approval; see [Development tools](dev.md).
+Approval confirms a requested action, not arbitrary future actions by the same client. Windows intentionally broaden that promise to a tool on the approved target for their lifetime. OS permissions, Kubernetes RBAC, provider allowlists, scopes and tool restrictions remain necessary. Coding agents can run further commands under the runner account after task-start approval; see [Development tools](dev.md).
 
 See [Authentication](authentication.md) to configure built-in sign-in and the [security policy](../SECURITY.md) for trust boundaries.

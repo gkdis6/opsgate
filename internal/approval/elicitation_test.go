@@ -65,7 +65,7 @@ func newApprovalTool(t *testing.T, m *Manager, r tool.ConfirmRequest) (*mcp.Serv
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
 	tool.AddWrite(s, env, tool.WriteSpec{Name: r.Tool}, tool.WriteHandler[restartInput]{
 		Plan: func(context.Context, tool.Caller, restartInput) (tool.Plan, error) {
-			return tool.Plan{Summary: r.Summary}, nil
+			return tool.Plan{Summary: r.Summary, Target: r.Target, NoWindow: r.NoWindow}, nil
 		},
 		Apply: func(context.Context, tool.Caller, restartInput, tool.Plan) (string, error) {
 			applies.Add(1)

@@ -161,6 +161,7 @@ func TestWebBindingAndDecisions(t *testing.T) {
 		name                     string
 		mutate                   func(*tool.ConfirmRequest)
 		decision                 string
+		target                   string
 		expire, pending, allowed bool
 	}{
 		{name: "approved", decision: "approve", allowed: true},
@@ -171,11 +172,16 @@ func TestWebBindingAndDecisions(t *testing.T) {
 		{name: "changed tool", decision: "approve", mutate: func(r *tool.ConfirmRequest) { r.Tool = "delete" }},
 		{name: "wrong user", decision: "approve", mutate: func(r *tool.ConfirmRequest) { r.Caller.User = "github:other" }},
 		{name: "changed summary", decision: "approve", mutate: func(r *tool.ConfirmRequest) { r.Summary = "Delete nginx.service" }},
+		{name: "changed target", decision: "approve", mutate: func(r *tool.ConfirmRequest) { r.Target = "other cluster" }},
+		{name: "changed named target", target: "cluster A", decision: "approve", mutate: func(r *tool.ConfirmRequest) { r.Target = "cluster B" }},
+		{name: "removed target", target: "cluster A", decision: "approve", mutate: func(r *tool.ConfirmRequest) { r.Target = "" }},
+		{name: "changed noWindow", decision: "approve", mutate: func(r *tool.ConfirmRequest) { r.NoWindow = true }},
 		{name: "unknown id", mutate: func(r *tool.ConfirmRequest) { r.ApprovalID = strings.Repeat("a", 26) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m, mux := newWebManager(t)
 			r := approvalRequest()
+			r.Target = tc.target
 			id := pendingID(t, m, r)
 			if tc.decision != "" {
 				decide(t, mux, id, tc.decision)

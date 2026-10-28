@@ -69,6 +69,8 @@ func TestInputStateSecurity(t *testing.T) {
 		{name: "different transport", binding: func(r *tool.ConfirmRequest) { r.Caller.Transport = "stdio" }},
 		{name: "different tool", binding: func(r *tool.ConfirmRequest) { r.Tool = "delete" }},
 		{name: "different summary", binding: func(r *tool.ConfirmRequest) { r.Summary = "Delete nginx.service" }},
+		{name: "different target", binding: func(r *tool.ConfirmRequest) { r.Target = "other cluster" }},
+		{name: "different noWindow", binding: func(r *tool.ConfirmRequest) { r.NoWindow = true }},
 		{name: "expired", expired: true},
 		{name: "another manager", newManager: true},
 		{name: "state without response", mutate: func(_ *testing.T, p *mcp.CallToolParams) { p.InputResponses = nil }},

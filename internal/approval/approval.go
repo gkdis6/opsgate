@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -49,6 +51,8 @@ type Manager struct {
 
 type pending struct {
 	id, csrf, user, transport, tool, title, summary string
+	target                                          string
+	noWindow                                        bool
 	args                                            []byte
 	hash                                            [sha256.Size]byte
 	expires                                         time.Time
@@ -90,7 +94,8 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 		maxArgs = 16 << 10
 	}
 	if m.ttl <= 0 || r.Caller.User == "" || len(r.Caller.User) > 1024 ||
-		len(r.Caller.Transport) > 64 || r.Tool == "" || len(r.Tool) > 256 || r.Summary == "" || len(r.Summary) > r.SummaryLimit() {
+		len(r.Caller.Transport) > 64 || r.Tool == "" || len(r.Tool) > 256 || r.Summary == "" || len(r.Summary) > r.SummaryLimit() ||
+		len(r.Target) > 256 || !utf8.ValidString(r.Target) || strings.IndexFunc(r.Target, unicode.IsControl) >= 0 {
 		return "", tool.Denied("invalid approval request or TTL")
 	}
 	if r.ApprovalID != "" && !validID(r.ApprovalID) {
@@ -100,7 +105,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	if err != nil || len(args) > maxArgs {
 		return "", tool.Denied("approval arguments must be JSON of at most %d KiB", maxArgs>>10)
 	}
-	if redact.String(r.Summary) != r.Summary {
+	if redact.String(r.Summary) != r.Summary || redact.String(r.Target) != r.Target {
 		return "", tool.Denied("target cannot be shown unambiguously")
 	}
 	if m.requireWeb && r.Caller.Transport != "http" {
@@ -108,7 +113,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	}
 	m.mu.Lock()
 	m.sweepLocked()
-	granted := m.windowEligible(r.Tool) && m.now().Before(m.grants[grantKey{r.Caller.User, r.Tool}])
+	granted := m.windowEligible(r.Tool, r.NoWindow) && m.now().Before(m.grants[grantKey{r.Caller.User, r.Tool, r.Target}])
 	m.mu.Unlock()
 	if granted {
 		return "window", nil
@@ -131,7 +136,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 		defer m.mu.Unlock()
 		p := m.approvals[r.ApprovalID]
 		if p == nil || p.user != r.Caller.User || p.transport != r.Caller.Transport || p.tool != r.Tool || p.hash != hash ||
-			p.summary != r.Summary || p.used {
+			p.summary != r.Summary || p.target != r.Target || p.noWindow != r.NoWindow || p.used {
 			return "web", tool.Denied("invalid or expired approval")
 		}
 		switch p.decision {
@@ -173,6 +178,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	p := &pending{
 		id: id, csrf: csrf, user: r.Caller.User, transport: r.Caller.Transport,
 		tool: r.Tool, title: displayTitle(r), summary: r.Summary, args: args, hash: hash,
+		target: r.Target, noWindow: r.NoWindow,
 		expires: m.now().Add(m.ttl),
 	}
 	m.approvals[id] = p
@@ -188,8 +194,12 @@ func supportsElicitation(req *mcp.CallToolRequest) bool {
 }
 
 func (m *Manager) pendingError(p *pending) error {
-	return fmt.Errorf("%w: ask the user to open %s/approve/%s, then call %s again with the same arguments plus approval_id %q. This approval expires at %s",
-		tool.ErrApprovalPending, m.publicURL, p.id, p.tool, p.id, p.expires.UTC().Format(time.RFC3339Nano))
+	target := ""
+	if p.target != "" {
+		target = " for " + p.target
+	}
+	return fmt.Errorf("%w%s: ask the user to open %s/approve/%s, then call %s again with the same arguments plus approval_id %q. This approval expires at %s",
+		tool.ErrApprovalPending, target, m.publicURL, p.id, p.tool, p.id, p.expires.UTC().Format(time.RFC3339Nano))
 }
 
 // Sweep during access so managers need no background goroutine or shutdown API.

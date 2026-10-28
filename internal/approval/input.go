@@ -26,6 +26,8 @@ type inputState struct {
 	User        string            `json:"user"`
 	Transport   string            `json:"transport"`
 	Tool        string            `json:"tool"`
+	Target      string            `json:"target,omitempty"`
+	NoWindow    bool              `json:"no_window,omitempty"`
 	ArgsHash    [sha256.Size]byte `json:"args_hash"`
 	SummaryHash [sha256.Size]byte `json:"summary_hash"`
 	Expiry      time.Time         `json:"expiry"`
@@ -45,14 +47,24 @@ func (m *Manager) requestInput(r tool.ConfirmRequest, hash [sha256.Size]byte) er
 	}
 	var window time.Duration
 	properties := map[string]any{"approve": map[string]any{"type": "boolean", "title": "Approve this action"}}
-	if m.windowEligible(r.Tool) {
+	title := displayTitle(r)
+	summary := r.Summary
+	if r.Target != "" {
+		title += " on " + r.Target
+		summary = "Target: " + r.Target + "\n\n" + summary
+	}
+	if r.NoWindow {
+		summary += "\n\nThis target requires approval for every call."
+	}
+	if m.windowEligible(r.Tool, r.NoWindow) {
 		window = m.window
 		properties["allow_window"] = map[string]any{
-			"type": "boolean", "title": fmt.Sprintf("Also auto-approve %s for %s", displayTitle(r), windowLabel(window)),
+			"type": "boolean", "title": fmt.Sprintf("Also auto-approve %s for %s", title, windowLabel(window)),
 		}
 	}
 	payload, err := json.Marshal(inputState{
 		Nonce: nonce, User: r.Caller.User, Transport: r.Caller.Transport, Tool: r.Tool,
+		Target: r.Target, NoWindow: r.NoWindow,
 		ArgsHash: hash, SummaryHash: sha256.Sum256([]byte(r.Summary)), Expiry: m.now().Add(m.ttl),
 		Window: window,
 	})
@@ -69,7 +81,7 @@ func (m *Manager) requestInput(r tool.ConfirmRequest, hash [sha256.Size]byte) er
 		Requests: mcp.InputRequestMap{approvalInputID: &mcp.ElicitParams{
 			Mode: "form",
 			Message: fmt.Sprintf("opsgate approval request\n\n%s\n\nRequested by %s via %s. Approve?",
-				r.Summary, r.Caller.User, r.Caller.Transport),
+				summary, r.Caller.User, r.Caller.Transport),
 			RequestedSchema: map[string]any{
 				"type": "object", "required": []string{"approve"},
 				"properties": properties,
@@ -121,7 +133,7 @@ func (m *Manager) confirmInput(state string, response mcp.InputResponse, r tool.
 	// Never evict a live nonce to make room for another approval.
 	m.used[p.Nonce] = p.Expiry
 	if p.User != r.Caller.User || p.Transport != r.Caller.Transport || p.Tool != r.Tool ||
-		p.ArgsHash != hash || p.SummaryHash != sha256.Sum256([]byte(r.Summary)) {
+		p.Target != r.Target || p.NoWindow != r.NoWindow || p.ArgsHash != hash || p.SummaryHash != sha256.Sum256([]byte(r.Summary)) {
 		return "elicitation", invalid
 	}
 	result, ok := response.(*mcp.ElicitResult)
@@ -135,11 +147,11 @@ func (m *Manager) confirmInput(state string, response mcp.InputResponse, r tool.
 	}
 	if value, exists := result.Content["allow_window"]; exists {
 		allow, ok := value.(bool)
-		if !ok || p.Window == 0 || p.Window != m.window || !m.windowEligible(r.Tool) || m.requireWeb {
+		if !ok || p.Window == 0 || p.Window != m.window || !m.windowEligible(r.Tool, r.NoWindow) || m.requireWeb {
 			return "elicitation", invalid
 		}
 		if allow {
-			grantEvent, err = m.grantLocked(r.Caller.User, r.Caller.Transport, r.Tool, "elicitation")
+			grantEvent, err = m.grantLocked(grantKey{r.Caller.User, r.Tool, r.Target}, r.Caller.Transport, "elicitation", r.NoWindow)
 			if err != nil {
 				return "elicitation", err
 			}

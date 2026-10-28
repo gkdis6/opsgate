@@ -13,10 +13,10 @@ import (
 
 const maxGrants = 100
 
-type grantKey struct{ user, tool string }
+type grantKey struct{ user, tool, target string }
 
-func (m *Manager) windowEligible(name string) bool {
-	if m.window < time.Minute || m.window > 12*time.Hour {
+func (m *Manager) windowEligible(name string, noWindow bool) bool {
+	if noWindow || m.window < time.Minute || m.window > 12*time.Hour {
 		return false
 	}
 	matched := false
@@ -32,21 +32,24 @@ func (m *Manager) windowEligible(name string) bool {
 
 // Caller holds m.mu and sweeps expired grants before creating one. Never evict
 // another user's live grant to admit a new grant.
-func (m *Manager) grantLocked(user, transport, name, method string) (*audit.Event, error) {
-	if !m.windowEligible(name) {
+func (m *Manager) grantLocked(key grantKey, transport, method string, noWindow bool) (*audit.Event, error) {
+	if !m.windowEligible(key.tool, noWindow) {
 		return nil, tool.Denied("tool is not eligible for an approval window")
 	}
-	key := grantKey{user, name}
 	if _, exists := m.grants[key]; !exists && len(m.grants) >= maxGrants {
 		return nil, tool.Denied("too many approval windows; try again after expiry")
 	}
 	now := m.now()
 	expires := now.Add(m.window)
 	m.grants[key] = expires
+	args := map[string]any{"window": windowLabel(m.window), "expires_at": expires.UTC().Format(time.RFC3339Nano)}
+	if key.target != "" {
+		args["target"] = key.target
+	}
 	return &audit.Event{
-		Time: now, User: redact.String(user), Transport: transport, Tool: name,
+		Time: now, User: redact.String(key.user), Transport: transport, Tool: key.tool,
 		Outcome: "window_granted", Approval: method,
-		Args: map[string]any{"window": windowLabel(m.window), "expires_at": expires.UTC().Format(time.RFC3339Nano)},
+		Args: args,
 	}, nil
 }
 

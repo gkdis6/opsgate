@@ -79,7 +79,7 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 			return
 		}
 		if decision[0] != "approve" && decision[0] != "reject" &&
-			(decision[0] != "approve_window" || !m.windowEligible(p.tool)) {
+			(decision[0] != "approve_window" || !m.windowEligible(p.tool, p.noWindow)) {
 			m.mu.Unlock()
 			ui.Message(w, http.StatusBadRequest, "Invalid decision", "Choose one of the available approval options.")
 			return
@@ -91,7 +91,7 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 		}
 		if decision[0] == "approve_window" {
 			var err error
-			grantEvent, err = m.grantLocked(p.user, p.transport, p.tool, "web")
+			grantEvent, err = m.grantLocked(grantKey{p.user, p.tool, p.target}, p.transport, "web", p.noWindow)
 			if err != nil {
 				m.mu.Unlock()
 				ui.Message(w, http.StatusServiceUnavailable, "Approval window unavailable", "Too many approval windows are active. Approve this call only, or try again after expiry.")
@@ -108,10 +108,11 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 	}
 	view := approvalView{
 		PageTitle: "Approve: " + p.title, Tool: p.tool, Lines: planLines(p.summary), User: p.user, Transport: p.transport,
+		Target: p.target, NoWindow: p.noWindow,
 		Expires: fmt.Sprintf("Expires in %d min (%s UTC)", int(math.Ceil(p.expires.Sub(m.now()).Minutes())), p.expires.UTC().Format("15:04")),
 		CSRF:    p.csrf, Used: p.used,
 	}
-	if m.windowEligible(p.tool) {
+	if m.windowEligible(p.tool, p.noWindow) {
 		view.Window = windowLabel(m.window)
 	}
 	if p.decision != "" {
@@ -161,8 +162,9 @@ func unavailablePage(w http.ResponseWriter) {
 
 type approvalView struct {
 	PageTitle, Tool, Args, User, Transport, Expires, CSRF, Status, Window string
+	Target                                                                string
 	Lines                                                                 []planLine
-	Used                                                                  bool
+	Used, NoWindow                                                        bool
 }
 
 type planLine struct{ Text, Class string }
@@ -189,6 +191,8 @@ var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
 {{define "content"}}
 {{if .Status}}<h1 class="status">{{.Status}}</h1><p>Tool: <strong>{{.Tool}}</strong></p>
 {{else}}<h1>{{.PageTitle}}</h1><p>Review the target and planned changes before approving.</p>{{end}}
+{{if .Target}}<div class="target"><strong>Target: {{.Target}}</strong></div>{{end}}
+{{if .NoWindow}}<p class="note">This target requires approval for every call.</p>{{end}}
 <div class="target plan" aria-label="Target and plan">{{range .Lines}}<span class="plan-line {{.Class}}">{{if .Text}}{{.Text}}{{else}} {{end}}</span>{{end}}</div>
 {{if .Status}}
 {{if .Used}}<p class="muted">Approval already used.</p>{{end}}
@@ -200,5 +204,5 @@ var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
 <button class="secondary" type="submit" name="decision" value="reject">Reject</button>
 <button class="primary" type="submit" name="decision" value="approve">Approve</button>
 {{if .Window}}<button class="primary outline" type="submit" name="decision" value="approve_window">Approve + allow for {{.Window}}</button>{{end}}
-</div>{{if .Window}}<p class="note">The window allows {{.Tool}} with any valid arguments for your user for the next {{.Window}}.</p>{{end}}</form>
+</div>{{if .Window}}<p class="note">The window allows {{.Tool}}{{if .Target}} on {{.Target}}{{end}} with any valid arguments for your user for the next {{.Window}}.</p>{{end}}</form>
 {{end}}{{end}}`)

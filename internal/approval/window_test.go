@@ -122,7 +122,7 @@ func TestWindowEligibility(t *testing.T) {
 			if !errors.Is(err, tool.ErrDenied) || len(m.grants) != 0 {
 				t.Fatal("forged elicitation window accepted")
 			}
-			m.grants[grantKey{r.Caller.User, r.Tool}] = time.Now().Add(time.Hour)
+			m.grants[grantKey{r.Caller.User, r.Tool, r.Target}] = time.Now().Add(time.Hour)
 			if method, err := m.Confirm(context.Background(), nil, r); method != "web" || !errors.Is(err, tool.ErrApprovalPending) {
 				t.Fatalf("ineligible grant honoured: %s %v", method, err)
 			}
@@ -229,7 +229,7 @@ func TestWindowCapacityAndConcurrentUse(t *testing.T) {
 	now := time.Now()
 	m.now = func() time.Time { return now }
 	for i := range maxGrants {
-		m.grants[grantKey{fmt.Sprint(i), "restart"}] = now.Add(time.Minute)
+		m.grants[grantKey{fmt.Sprint(i), "restart", ""}] = now.Add(time.Minute)
 	}
 	r := approvalRequest()
 	id := pendingID(t, m, r)
@@ -259,8 +259,13 @@ func TestWindowCapacityAndConcurrentUse(t *testing.T) {
 }
 
 func TestWindowAudit(t *testing.T) {
-	for _, channel := range []string{"web", "elicitation"} {
-		t.Run(channel, func(t *testing.T) {
+	for _, tc := range []struct{ channel, target string }{
+		{"web", ""},
+		{"web", `Kubernetes cluster "prod-b"`},
+		{"elicitation", ""},
+		{"elicitation", `Kubernetes cluster "prod-b"`},
+	} {
+		t.Run(tc.channel+"/"+tc.target, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "audit")
 			logger, err := audit.Open(path)
 			if err != nil {
@@ -269,7 +274,8 @@ func TestWindowAudit(t *testing.T) {
 			t.Cleanup(func() { logger.Close() })
 			m, mux := windowManager(windowConfig(), logger)
 			r := approvalRequest()
-			if channel == "web" {
+			r.Target = tc.target
+			if tc.channel == "web" {
 				decide(t, mux, pendingID(t, m, r), "approve_window")
 			} else {
 				state := inputRequest(t, m, r)
@@ -295,8 +301,11 @@ func TestWindowAudit(t *testing.T) {
 			if err := json.Unmarshal(bytes.Split(bytes.TrimSpace(data), []byte("\n"))[0], &grant); err != nil {
 				t.Fatal(err)
 			}
-			if grant.Outcome != "window_granted" || grant.Approval != channel || grant.User != r.Caller.User || grant.Tool != r.Tool || grant.Args["window"] != "30m" || grant.Args["expires_at"] == nil {
+			if grant.Outcome != "window_granted" || grant.Approval != tc.channel || grant.User != r.Caller.User || grant.Tool != r.Tool || grant.Args["window"] != "30m" || grant.Args["expires_at"] == nil {
 				t.Fatalf("grant audit: %s", data)
+			}
+			if target, exists := grant.Args["target"]; tc.target == "" && exists || tc.target != "" && target != tc.target {
+				t.Fatalf("grant target: %+v", grant.Args)
 			}
 			data, err = os.ReadFile(callAudit)
 			if err != nil {

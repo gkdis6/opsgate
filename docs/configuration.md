@@ -17,6 +17,9 @@ Defaults below come from `config.Default()`. YAML is loaded over defaults with s
 | `providers.host.disk_paths` | `[/]` | Mount points for overview |
 | `providers.host.max_log_lines` | `500` | Journal lines per call cap |
 | `providers.kubernetes.enabled` | `false` | Enable Kubernetes provider |
+| `providers.kubernetes.clusters` | omitted | Ordered connection/policy entries; mutually exclusive with single-cluster fields |
+| `providers.kubernetes.name` / `clusters[].name` | `default` / required | Name clients select with the cluster argument |
+| `providers.kubernetes.protected` / `clusters[].protected` | `false` | Require fresh approval on every write; no approval windows |
 | `providers.kubernetes.kubeconfig` | `""` | Empty: in-cluster, then $KUBECONFIG, then ~/.kube/config |
 | `providers.kubernetes.context` | `""` | Context override; empty uses selected context |
 | `providers.kubernetes.namespaces` | `[]` | Namespace glob allowlist; empty allows none; * allows all |
@@ -83,6 +86,53 @@ All providers are disabled by default. Enabling the host provider exposes overvi
 Note writes run as the server account, so notes it creates or rewrites are owned by that account. Grant it access with ACLs rather than ownership, and keep the vault owner able to replace those files (write access to their directories). A sync tool running as the vault owner cannot chmod files it does not own: in Syncthing, set the vault folder's Ignore Permissions option, or permission-only changes from other devices fail with "operation not permitted".
 
 See [the complete example](../opsgate.example.yaml) for a read-only starting point and separate commented write opt-ins. The [tool reference](tools.md#shared-limits) describes argument, approval and output limits.
+
+## Kubernetes clusters
+
+The existing single-cluster form remains valid: put `kubeconfig`, `context` and policy fields directly under `providers.kubernetes`. Its `name` defaults to `default`; `protected` defaults to `false`. For several clusters, use `clusters` instead. Each entry takes the same connection and policy fields and requires a unique `name` matching `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$` (1–63 characters). Do not combine `clusters` with single-cluster fields, apart from numeric defaults. An enabled provider rejects `clusters: []`. In `clusters` entries, an omitted or zero `max_log_lines` or `max_replicas` means 500 or 10; leave `scale` empty to disable scaling on a cluster.
+
+```yaml
+providers:
+  kubernetes:
+    enabled: true
+    clusters:
+      - name: kind
+        kubeconfig: /etc/opsgate/kind.yaml
+        context: kind-kind
+        namespaces: [apps]
+        allow_logs: true
+        rollout_restart: [apps/web]
+        scale: [apps/web]
+        max_replicas: 3
+      - name: prod
+        kubeconfig: /etc/opsgate/prod.yaml
+        protected: true
+        namespaces: [apps]
+        deny_namespaces: [kube-system]
+        allow_logs: true
+        # Empty write allowlists keep production read-only.
+```
+
+`protected: true` requires fresh human approval for every write, even if the user has an approval window. Policy settings apply only to their own cluster. Logs and write tools appear if any cluster enables them; calls targeting a cluster that disables them are denied. With several clusters, pass `cluster` on every call except `k8s_clusters`. With one cluster, it may be omitted, but an explicit name must match. Use `k8s_clusters` to review policy and reachability before choosing a target; state the target cluster to the user before a write.
+
+### Managed clusters (EKS, GKE, AKS)
+
+opsgate refuses kubeconfig credential plugins (`exec` and `auth-provider`, including `aws eks get-token`) because they can run programs from a kubeconfig. Use a dedicated ServiceAccount and a separate kubeconfig with a token. From an administrator context pointing at the intended cluster, apply the existing [read-only RBAC](../deploy/kubernetes/rbac-readonly.yaml). It grants cluster-wide reads without Secrets; use namespace RoleBindings for narrower access.
+
+```sh
+kubectl create namespace opsgate
+kubectl apply -f deploy/kubernetes/rbac-readonly.yaml
+umask 077
+kubectl --kubeconfig=opsgate.kubeconfig config set-cluster managed \
+  --server=https://API_ENDPOINT --certificate-authority=cluster-ca.crt --embed-certs=true
+kubectl --kubeconfig=opsgate.kubeconfig config set-credentials opsgate \
+  --token="$(kubectl -n opsgate create token opsgate --duration=24h)"
+kubectl --kubeconfig=opsgate.kubeconfig config set-context managed \
+  --cluster=managed --user=opsgate --namespace=opsgate
+kubectl --kubeconfig=opsgate.kubeconfig config use-context managed
+```
+
+Replace `API_ENDPOINT` and `cluster-ca.crt` with the cluster's API endpoint and CA certificate from your administrator kubeconfig. Skip namespace creation if it already exists. Keep the new kubeconfig private (mode 0600) and point opsgate at it. The API server may shorten the requested token lifetime; rotate the token and restart opsgate before it expires. This kubeconfig contains no credential plugin and needs no cloud CLI at runtime.
 
 ## Authentication and human approval
 

@@ -11,10 +11,11 @@ Host, Kubernetes and note read tools require `ops:read`; dev tools require `dev:
 | `host_service_status` | Allowlisted unit status | Required `unit`; missing suffix becomes `.service`; normalized name at most 256 bytes |
 | `host_logs` | Allowlisted journald logs | Required `unit` (same rules as status); `lines=100`, clamped to 1–`max_log_lines` (default cap 500); `since=""` (no time filter), positive duration including `d` (at most 128 bytes) or RFC3339; `priority=""` (no filter), emerg/alert/crit/err/warning/notice/info/debug or 0–7; `grep=""`, literal case-insensitive substring, at most 4096 bytes |
 | `host_top_processes` | Process usage from /proc, sampled over 500ms; names only, no argv or environment | `sort="cpu"` (cpu or mem); `limit=15`, clamped to 1–50 |
-| `k8s_overview` | Node health and allowed namespace workloads/events | None |
+| `k8s_clusters` | Configured clusters in order: name, context, protection, namespace/log/write policy and reachability | None; discovery timeout 2s per cluster |
+| `k8s_overview` | Node health and allowed namespace workloads/events | `cluster` (see selection rules below) |
 | `k8s_list` | List supported resources | Required `kind`; `namespace=""` (all allowed namespaces); `label_selector=""` (no filter), Kubernetes label selector syntax; `limit=100`, clamped to 1–500 |
 | `k8s_get` | Sanitized object YAML and up to 50 related events from the last hour | Required `kind`, `name`; `namespace` required for namespaced kinds, omitted for cluster-scoped kinds |
-| `k8s_logs` | Pod logs; registered only with `allow_logs=true` | Required `namespace`, `pod`; `container` may be omitted only if exactly one regular/init/ephemeral container exists; `tail=200`, clamped to 1–`max_log_lines` (default cap 500); `since=""` (no time filter), positive Go duration up to 168h; `previous=false`; `grep=""`, literal case-insensitive substring; stream capped at 1 MiB |
+| `k8s_logs` | Pod logs; registered if any cluster has `allow_logs=true` | Required `namespace`, `pod`; `container` may be omitted only if exactly one regular/init/ephemeral container exists; `tail=200`, clamped to 1–`max_log_lines` (default cap 500); `since=""` (no time filter), positive Go duration up to 168h; `previous=false`; `grep=""`, literal case-insensitive substring; stream capped at 1 MiB |
 | `k8s_events` | Namespace events | `namespace=""` (all allowed namespaces); `warnings_only=true`; `since="1h"`, positive Go duration up to 168h; `limit=50`, clamped to 1–500 |
 | `host_service_restart` | Restart an allowed systemd unit | Required `unit` (same normalization and 256-byte limit as status); `restart_units` gate |
 | `k8s_rollout_restart` | Restart a workload by updating its pod template | Required `kind` (deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` gate |
@@ -51,6 +52,10 @@ Nodes, PersistentVolumes and Namespaces are cluster-scoped: omit `namespace`. Na
 Use [read-only RBAC](../deploy/kubernetes/rbac-readonly.yaml) as a starting point and review its effective permissions before deployment. It creates a ServiceAccount in the pre-existing `opsgate` namespace, a ClusterRole and a ClusterRoleBinding granting cluster-wide get/list/watch for supported resources, events and pod logs, excluding Secrets. Use namespace RoleBindings for narrower access.
 
 Kubeconfig `exec` and `auth-provider` credential plugins are rejected; use credentials that do not require plugins, such as a short-lived ServiceAccount token. Protect kubeconfig ownership and permissions.
+
+Every Kubernetes tool except `k8s_clusters` accepts `cluster`. It is required with several configured clusters and optional with one. Unknown names and missing required names are denied with the configured names listed. `k8s_overview` also selects one cluster; it does not fan out. Call `k8s_clusters` to choose a target and state its name to the user before writing; never infer it from earlier output.
+
+Every Kubernetes tool's output starts with `cluster: <name>`. `k8s_clusters` uses this line for each cluster and never exposes kubeconfig paths, server URLs or credentials. Discovery failures use sanitized diagnostics to avoid leaking connection details. An unreachable cluster does not fail the other results. Log and write tools are registered if any cluster enables them; calls to a cluster that disables them are denied. Namespace rules, ConfigMap visibility, log limits, write allowlists and replica limits all come from the selected cluster. Protected clusters require fresh human approval for every write.
 
 ## Redaction and object sanitization
 

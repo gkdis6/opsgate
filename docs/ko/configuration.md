@@ -17,6 +17,9 @@
 | `providers.host.disk_paths` | `[/]` | 개요에 사용할 마운트 지점입니다 |
 | `providers.host.max_log_lines` | `500` | 호출당 journal 로그의 최대 줄 수입니다 |
 | `providers.kubernetes.enabled` | `false` | Kubernetes provider를 활성화합니다 |
+| `providers.kubernetes.clusters` | 생략 | 여러 클러스터의 연결·정책 목록입니다. 단일 클러스터 필드와 함께 사용할 수 없습니다 |
+| `providers.kubernetes.name` / `clusters[].name` | `default` / 필수 | 호출의 `cluster` 인자로 선택하는 이름입니다 |
+| `providers.kubernetes.protected` / `clusters[].protected` | `false` | 쓰기마다 승인을 새로 받으며 승인 창을 허용하지 않습니다 |
 | `providers.kubernetes.kubeconfig` | `""` | 비어 있으면 클러스터 내부 설정, $KUBECONFIG, ~/.kube/config 순으로 사용합니다 |
 | `providers.kubernetes.context` | `""` | 사용할 컨텍스트를 지정합니다. 비어 있으면 현재 선택된 컨텍스트를 사용합니다 |
 | `providers.kubernetes.namespaces` | `[]` | 네임스페이스 glob 허용 목록입니다. 비어 있으면 어떤 네임스페이스도 허용하지 않으며, *는 모두 허용합니다 |
@@ -83,6 +86,53 @@
 노트 쓰기는 서버 계정으로 실행하므로, 생성하거나 다시 쓴 노트는 서버 계정이 소유합니다. 소유권을 넘기는 대신 ACL로 서버 계정에 접근 권한을 주고, 볼트 소유자가 이 파일을 교체할 수 있도록 파일이 있는 디렉터리의 쓰기 권한을 유지하세요. 볼트 소유자로 실행하는 동기화 도구는 자신이 소유하지 않은 파일에 chmod를 적용할 수 없습니다. Syncthing에서는 볼트 폴더의 Ignore Permissions 옵션을 설정하세요. 그렇지 않으면 다른 기기에서 권한만 바꾼 변경 사항을 반영할 때 "operation not permitted" 오류가 발생합니다.
 
 읽기 전용으로 시작하는 설정과 주석으로 구분한 쓰기 활성화 설정은 [전체 예제](../../opsgate.example.yaml)를 참고하세요. 인자, 승인, 출력 제한은 [도구 레퍼런스](tools.md)에서 설명합니다.
+
+## Kubernetes 클러스터
+
+기존 단일 클러스터 설정도 그대로 사용할 수 있습니다. `providers.kubernetes` 바로 아래에 `kubeconfig`, `context`, 정책 필드를 지정합니다. `name`의 기본값은 `default`이고, `protected`의 기본값은 `false`입니다. 여러 클러스터를 연결하려면 대신 `clusters`를 사용합니다. 각 항목에는 같은 연결·정책 필드를 지정하며, `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`에 맞는 고유한 `name`이 필요합니다(1–63자). 숫자 기본값을 제외한 단일 클러스터 필드와 `clusters`를 함께 지정하면 오류가 발생합니다. provider가 활성화된 상태에서 `clusters: []`도 허용하지 않습니다. `clusters` 항목에서 `max_log_lines`나 `max_replicas`를 생략하거나 0으로 두면 각각 500과 10을 사용합니다. 클러스터에서 스케일 조정을 막으려면 `scale`을 비워 두세요.
+
+```yaml
+providers:
+  kubernetes:
+    enabled: true
+    clusters:
+      - name: kind
+        kubeconfig: /etc/opsgate/kind.yaml
+        context: kind-kind
+        namespaces: [apps]
+        allow_logs: true
+        rollout_restart: [apps/web]
+        scale: [apps/web]
+        max_replicas: 3
+      - name: prod
+        kubeconfig: /etc/opsgate/prod.yaml
+        protected: true
+        namespaces: [apps]
+        deny_namespaces: [kube-system]
+        allow_logs: true
+        # 쓰기 허용 목록을 비워 두어 운영 클러스터는 읽기만 허용합니다.
+```
+
+`protected: true`이면 승인 창이 있어도 쓰기마다 사람의 승인을 새로 받아야 합니다. 정책은 해당 클러스터에만 적용합니다. 로그나 쓰기 도구를 하나 이상의 클러스터에서 활성화하면 도구를 등록하지만, 해당 기능을 꺼 둔 클러스터로 호출하면 거부합니다. 클러스터가 여러 개이면 `k8s_clusters`를 제외한 모든 호출에 `cluster`를 지정해야 합니다. 하나일 때는 생략할 수 있으며, 이름을 지정하면 설정과 일치해야 합니다. `k8s_clusters`로 정책과 연결 상태를 확인한 뒤 대상을 선택하고, 쓰기 전에 사용자에게 대상 클러스터를 명시합니다.
+
+### 관리형 클러스터(EKS, GKE, AKS)
+
+opsgate는 kubeconfig의 자격 증명 플러그인을 허용하지 않습니다. `aws eks get-token` 같은 `exec`와 `auth-provider` 설정은 kubeconfig를 통해 프로그램을 실행할 수 있기 때문입니다. 전용 ServiceAccount를 만들고, 토큰을 사용하는 별도의 kubeconfig를 준비합니다. 대상 클러스터를 가리키는 관리자 컨텍스트에서 기존 [읽기 전용 RBAC](../../deploy/kubernetes/rbac-readonly.yaml)을 적용합니다. 이 설정은 시크릿을 제외한 클러스터 전체 읽기 권한을 부여합니다. 범위를 줄이려면 네임스페이스별 RoleBinding을 사용합니다.
+
+```sh
+kubectl create namespace opsgate
+kubectl apply -f deploy/kubernetes/rbac-readonly.yaml
+umask 077
+kubectl --kubeconfig=opsgate.kubeconfig config set-cluster managed \
+  --server=https://API_ENDPOINT --certificate-authority=cluster-ca.crt --embed-certs=true
+kubectl --kubeconfig=opsgate.kubeconfig config set-credentials opsgate \
+  --token="$(kubectl -n opsgate create token opsgate --duration=24h)"
+kubectl --kubeconfig=opsgate.kubeconfig config set-context managed \
+  --cluster=managed --user=opsgate --namespace=opsgate
+kubectl --kubeconfig=opsgate.kubeconfig config use-context managed
+```
+
+`API_ENDPOINT`와 `cluster-ca.crt`에는 관리자 kubeconfig에서 확인한 API 주소와 CA 인증서 파일을 지정합니다. 네임스페이스가 이미 있으면 생성 명령은 생략합니다. 새 kubeconfig의 권한은 0600으로 제한하고 opsgate에서 이 파일을 사용하도록 설정합니다. API 서버가 요청한 토큰 유효 기간을 줄일 수 있으므로 실제 만료 전에 토큰을 교체하고 opsgate를 재시작해야 합니다. 이 kubeconfig에는 자격 증명 플러그인이 없으므로 실행 중에는 클라우드 CLI가 필요하지 않습니다.
 
 ## 인증과 사람의 승인
 

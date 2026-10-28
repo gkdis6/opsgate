@@ -11,10 +11,11 @@
 | `host_service_status` | 허용 목록의 유닛 상태 | 필수 `unit`; 접미사가 없으면 `.service` 추가; 정규화한 이름 최대 256바이트 |
 | `host_logs` | 허용 목록의 journald 로그 | 필수 `unit`(상태 조회와 같은 규칙); `lines=100`, 1–`max_log_lines`로 보정(기본 상한 500); `since=""`(시간 필터 없음), 양수 기간 표기(`d` 지원, 최대 128바이트) 또는 RFC3339; `priority=""`(필터 없음), emerg/alert/crit/err/warning/notice/info/debug 또는 0–7; `grep=""`, 문자열 그대로 대소문자 구분 없이 부분 검색, 최대 4096바이트 |
 | `host_top_processes` | /proc에서 500ms 동안 수집한 프로세스 사용량(이름만 표시, argv와 환경 변수 제외) | `sort="cpu"`(cpu 또는 mem); `limit=15`, 1–50으로 보정 |
-| `k8s_overview` | 노드 상태와 허용된 네임스페이스의 워크로드/이벤트 | 없음 |
+| `k8s_clusters` | 설정 순서대로 클러스터 이름, 컨텍스트, 보호 여부, 네임스페이스·로그·쓰기 정책과 연결 상태 | 없음; 클러스터마다 discovery 조회 제한 2초 |
+| `k8s_overview` | 노드 상태와 허용된 네임스페이스의 워크로드/이벤트 | `cluster`(아래 규칙 적용) |
 | `k8s_list` | 지원하는 리소스 목록 | 필수 `kind`; `namespace=""`(허용된 모든 네임스페이스); `label_selector=""`(필터 없음), Kubernetes 레이블 선택자 문법; `limit=100`, 1–500으로 보정 |
 | `k8s_get` | 민감한 정보를 정리한 객체 YAML과 최근 1시간의 관련 이벤트 최대 50개 | 필수 `kind`, `name`; 네임스페이스 스코프 리소스는 `namespace` 필수, 클러스터 스코프 리소스는 생략 |
-| `k8s_logs` | 파드 로그(`allow_logs=true`일 때만 도구 등록) | 필수 `namespace`, `pod`; 일반/init/ephemeral 컨테이너를 통틀어 정확히 하나일 때만 `container` 생략 가능; `tail=200`, 1–`max_log_lines`로 보정(기본 상한 500); `since=""`(시간 필터 없음), 양수 Go 기간 표기(최대 168h); `previous=false`; `grep=""`, 문자열 그대로 대소문자 구분 없이 부분 검색; 스트림 상한 1 MiB |
+| `k8s_logs` | 파드 로그(하나 이상의 클러스터에서 `allow_logs=true`일 때 도구 등록) | 필수 `namespace`, `pod`; 일반/init/ephemeral 컨테이너를 통틀어 정확히 하나일 때만 `container` 생략 가능; `tail=200`, 1–`max_log_lines`로 보정(기본 상한 500); `since=""`(시간 필터 없음), 양수 Go 기간 표기(최대 168h); `previous=false`; `grep=""`, 문자열 그대로 대소문자 구분 없이 부분 검색; 스트림 상한 1 MiB |
 | `k8s_events` | 네임스페이스 이벤트 | `namespace=""`(허용된 모든 네임스페이스); `warnings_only=true`; `since="1h"`, 양수 Go 기간 표기(최대 168h); `limit=50`, 1–500으로 보정 |
 | `host_service_restart` | 허용된 systemd 유닛 재시작 | 필수 `unit`(상태 조회와 같은 정규화 및 256바이트 제한); `restart_units` 허용 설정 필요 |
 | `k8s_rollout_restart` | 파드 템플릿을 갱신해 워크로드 재시작 | 필수 `kind`(deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` 허용 설정 필요 |
@@ -63,6 +64,10 @@ Nodes, PersistentVolumes, Namespaces는 클러스터 스코프 리소스이므�
 kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하지 않습니다. 수명이 짧은 ServiceAccount 토큰처럼 플러그인이 필요 없는 자격 증명을 사용하세요. kubeconfig의 소유권과 접근 권한도 안전하게 관리하세요.
 
 <a id="redaction-and-object-sanitization"></a>
+
+`k8s_clusters`를 제외한 모든 Kubernetes 도구는 `cluster` 인자를 받습니다. 클러스터가 여러 개이면 필수이며, 하나이면 생략할 수 있습니다. 지정한 이름이 없거나 필수 인자를 생략하면 설정된 이름 목록과 함께 호출을 거부합니다. `k8s_overview`도 한 클러스터만 조회합니다. 먼저 `k8s_clusters`로 대상을 확인하고, 쓰기 전에 사용자에게 클러스터 이름을 명시합니다. 이전 출력의 클러스터를 다음 호출의 대상으로 추정하지 않습니다.
+
+각 Kubernetes 도구의 출력은 `cluster: <name>` 줄로 시작합니다. `k8s_clusters`는 클러스터마다 이 줄을 표시하며 kubeconfig 경로, 서버 URL, 자격 증명은 출력하지 않습니다. 연결 실패 시 민감한 연결 정보가 드러나지 않도록 진단 메시지를 제한합니다. 한 클러스터의 실패는 나머지 결과에 영향을 주지 않습니다. 로그·쓰기 도구는 하나 이상의 클러스터에서 허용하면 등록하고, 선택한 클러스터에서 꺼져 있으면 호출을 거부합니다. 네임스페이스 규칙, ConfigMap 값 공개 여부, 로그 제한, 쓰기 허용 목록, 최대 복제본 수는 모두 선택한 클러스터의 설정을 따릅니다. 보호된 클러스터는 쓰기마다 사람의 승인을 새로 받아야 합니다.
 
 ## 마스킹과 객체 정리
 

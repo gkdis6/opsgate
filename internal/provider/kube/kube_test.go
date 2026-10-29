@@ -102,7 +102,7 @@ func TestRegistration(t *testing.T) {
 					t.Fatal(spec)
 				}
 			}
-			if slices.Contains(names, "k8s_logs") != logs || len(names) != 6+map[bool]int{false: 0, true: 1}[logs] {
+			if slices.Contains(names, "k8s_logs") != logs || len(names) != 7+map[bool]int{false: 0, true: 1}[logs] {
 				t.Fatal(names)
 			}
 			result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "k8s_list", Arguments: map[string]any{"kind": "secrets"}})

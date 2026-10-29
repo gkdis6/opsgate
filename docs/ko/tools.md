@@ -16,6 +16,7 @@
 | `k8s_list` | 지원하는 리소스 목록 | 필수 `kind`; `namespace=""`(허용된 모든 네임스페이스); `label_selector=""`(필터 없음), Kubernetes 레이블 선택자 문법; `limit=100`, 1–500으로 보정 |
 | `k8s_get` | 민감한 정보를 정리한 객체 YAML과 최근 1시간의 관련 이벤트 최대 50개 | 필수 `kind`, `name`; 네임스페이스 스코프 리소스는 `namespace` 필수, 클러스터 스코프 리소스는 생략 |
 | `k8s_env` | 컨테이너가 실제로 받는 환경 변수와 마운트된 설정, 각 값의 출처 | 필수 `namespace`, `name`; `kind="pod"`(pod, deployment, statefulset, daemonset, replicaset, job, cronjob 및 별칭); `container=""`(일반·init 컨테이너 전체); ConfigMap 값은 `show_configmap_data=true`일 때만 표시; 마운트된 텍스트는 키당 8 KiB, 호출당 64 KiB로 제한 |
+| `k8s_service_check` | 서비스 호스트 이름의 DNS 설정과 준비된 백엔드 점검(설정만 확인하며 DNS 질의·연결을 보내지 않고 NetworkPolicy는 평가하지 않음) | 필수 `namespace`(조회하는 쪽 네임스페이스), `host`(소문자 DNS 이름, 최대 253바이트, IP 주소 불가); 선택 `port`(서비스 포트 번호 또는 이름), `pod`(DNS 설정을 가져올 같은 네임스페이스의 파드); 클러스터 도메인은 `cluster.local`로 가정하고, 도메인까지 적은 이름은 다른 도메인도 허용; 조회 후보, Service, 선택자에 맞는 파드(최대 500개), EndpointSlice를 확인; 다른 허용 네임스페이스의 같은 이름 Service를 최대 10개 제안 |
 | `k8s_logs` | 파드 로그(하나 이상의 클러스터에서 `allow_logs=true`일 때 도구 등록) | 필수 `namespace`, `pod`; 일반/init/ephemeral 컨테이너를 통틀어 정확히 하나일 때만 `container` 생략 가능; `tail=200`, 1–`max_log_lines`로 보정(기본 상한 500); `since=""`(시간 필터 없음), 양수 Go 기간 표기(최대 168h); `previous=false`; `grep=""`, 문자열 그대로 대소문자 구분 없이 부분 검색; 스트림 상한 1 MiB |
 | `k8s_events` | 네임스페이스 이벤트 | `namespace=""`(허용된 모든 네임스페이스); `warnings_only=true`; `since="1h"`, 양수 Go 기간 표기(최대 168h); `limit=50`, 1–500으로 보정 |
 | `host_service_restart` | 허용된 systemd 유닛 재시작 | 필수 `unit`(상태 조회와 같은 정규화 및 256바이트 제한); `restart_units` 허용 설정 필요 |
@@ -60,7 +61,7 @@ Kubernetes 네임스페이스 입력은 DNS-1123 레이블이어야 합니다. �
 
 Nodes, PersistentVolumes, Namespaces는 클러스터 스코프 리소스이므로 `namespace`를 생략하세요. 네임스페이스 허용 목록과 거부 목록은 Namespace 객체를 이름으로 필터링하지만, Nodes와 PersistentVolumes는 제한하지 않습니다. `k8s_overview`에 표시하는 노드도 이 제한을 받지 않습니다. 네임스페이스 스코프 리소스와 이벤트는 네임스페이스에 따라 필터링하며, 허용 목록이 비어 있으면 아무것도 허용하지 않습니다. 클러스터 스코프 접근은 RBAC으로 제한하세요.
 
-[읽기 전용 RBAC](../../deploy/kubernetes/rbac-readonly.yaml)을 바탕으로 설정하고, 배포 전에 실제로 허용하는 권한을 검토하세요. 이 매니페스트는 기존 `opsgate` 네임스페이스에 ServiceAccount를 만들고, ClusterRole과 ClusterRoleBinding을 생성합니다. 시크릿을 제외한 지원 리소스, 이벤트, 파드 로그에 클러스터 전체 get/list/watch 권한을 줍니다. 접근 범위를 좁히려면 네임스페이스 RoleBinding을 사용하세요.
+[읽기 전용 RBAC](../../deploy/kubernetes/rbac-readonly.yaml)을 바탕으로 설정하고, 배포 전에 실제로 허용하는 권한을 검토하세요. 이 매니페스트는 기존 `opsgate` 네임스페이스에 ServiceAccount를 만들고, ClusterRole과 ClusterRoleBinding을 생성합니다. 시크릿을 제외한 지원 리소스, 이벤트, 파드 로그와 `discovery.k8s.io`의 EndpointSlice에 클러스터 전체 get/list/watch 권한을 부여합니다. 접근 범위를 좁히려면 네임스페이스 RoleBinding을 사용하세요.
 
 kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하지 않습니다. 수명이 짧은 ServiceAccount 토큰처럼 플러그인이 필요 없는 자격 증명을 사용하세요. kubeconfig의 소유권과 접근 권한도 안전하게 관리하세요.
 

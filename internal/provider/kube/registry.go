@@ -19,6 +19,8 @@ type overviewInput struct {
 
 type clusterInput interface{ clusterName() string }
 
+func (in serviceCheckInput) clusterName() string { return in.Cluster }
+
 func (in overviewInput) clusterName() string  { return in.Cluster }
 func (in listInput) clusterName() string      { return in.Cluster }
 func (in envInput) clusterName() string       { return in.Cluster }

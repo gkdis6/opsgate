@@ -15,6 +15,7 @@
 | `k8s_overview` | 노드 상태와 허용된 네임스페이스의 워크로드/이벤트 | `cluster`(아래 규칙 적용) |
 | `k8s_list` | 지원하는 리소스 목록 | 필수 `kind`; `namespace=""`(허용된 모든 네임스페이스); `label_selector=""`(필터 없음), Kubernetes 레이블 선택자 문법; `limit=100`, 1–500으로 보정 |
 | `k8s_get` | 민감한 정보를 정리한 객체 YAML과 최근 1시간의 관련 이벤트 최대 50개 | 필수 `kind`, `name`; 네임스페이스 스코프 리소스는 `namespace` 필수, 클러스터 스코프 리소스는 생략 |
+| `k8s_env` | 컨테이너가 실제로 받는 환경 변수와 마운트된 설정, 각 값의 출처 | 필수 `namespace`, `name`; `kind="pod"`(pod, deployment, statefulset, daemonset, replicaset, job, cronjob 및 별칭); `container=""`(일반·init 컨테이너 전체); ConfigMap 값은 `show_configmap_data=true`일 때만 표시; 마운트된 텍스트는 키당 8 KiB, 호출당 64 KiB로 제한 |
 | `k8s_logs` | 파드 로그(하나 이상의 클러스터에서 `allow_logs=true`일 때 도구 등록) | 필수 `namespace`, `pod`; 일반/init/ephemeral 컨테이너를 통틀어 정확히 하나일 때만 `container` 생략 가능; `tail=200`, 1–`max_log_lines`로 보정(기본 상한 500); `since=""`(시간 필터 없음), 양수 Go 기간 표기(최대 168h); `previous=false`; `grep=""`, 문자열 그대로 대소문자 구분 없이 부분 검색; 스트림 상한 1 MiB |
 | `k8s_events` | 네임스페이스 이벤트 | `namespace=""`(허용된 모든 네임스페이스); `warnings_only=true`; `since="1h"`, 양수 Go 기간 표기(최대 168h); `limit=50`, 1–500으로 보정 |
 | `host_service_restart` | 허용된 systemd 유닛 재시작 | 필수 `unit`(상태 조회와 같은 정규화 및 256바이트 제한); `restart_units` 허용 설정 필요 |
@@ -76,6 +77,8 @@ kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하
 `:`/`=`로 값을 지정하거나 구조화된 인자로 값을 전달할 때는 password/passwd/pwd, secret/client_secret, token/access_token/refresh_token, api_key/apikey/access_key/secret_key/private_key, credential/credentials, auth_token, session_id, cookie, set-cookie를 민감한 키로 취급합니다. `db_password`처럼 밑줄로 연결한 접두사가 붙은 키도 포함하며, 대소문자는 구분하지 않습니다. 구조화된 인자 맵과 슬라이스는 재귀적으로 순회해 검사합니다. 성공 응답의 텍스트, 오류, 감사 로그 인자를 마스킹하지만, **모든 비밀값을 가린다고 보장하지는 않습니다**. 알려지지 않은 형식이나 임의의 데이터 속에 들어 있는 비밀값은 마스킹을 놓칠 수 있습니다.
 
 `k8s_get`은 템플릿을 포함한 메타데이터에서 `managedFields`와 `kubectl.kubernetes.io/last-applied-configuration`도 제거합니다. ConfigMap의 `data`와 `binaryData`는 키를 유지하되, `show_configmap_data=true`가 아니면 값 대신 바이트 수를 표시합니다. 환경 변수 이름에 pass, secret, token, key, credential, auth, dsn, private, cert, database_url이 포함되면 리터럴 `value` 필드를 `[REDACTED]`로 바꾸며, 대소문자는 구분하지 않습니다. 파드와 지원하는 워크로드 템플릿(CronJobs 포함)의 일반/init/ephemeral 컨테이너에 이 규칙을 적용합니다. 다른 리터럴 값은 공통 마스킹 규칙에 일치하지 않으면 그대로 보입니다. `valueFrom` 참조도 그대로 보여 주며, 참조하는 값을 조회하지는 않습니다.
+
+`k8s_env`는 같은 네임스페이스의 ConfigMap을 호출당 한 번씩 조회하고, 환경 변수 덮어쓰기 순서와 `$(VAR)` 치환 결과를 표시합니다. 치환한 값을 다시 치환하지 않으며, 마운트에 지정한 항목과 `subPath` 파일만 보여 줍니다. 민감한 환경 변수·키 이름에 해당하는 값과 Secret 값은 숨깁니다. Secret API를 호출하지 않으므로 Secret `envFrom`의 키 목록은 알 수 없으며, 기존 변수와 이름이 겹칠 가능성을 표시합니다. 파드의 downward 필드는 실제 값으로 표시하지만, 워크로드의 필드와 리소스 참조는 자리표시자로 남깁니다. 바이너리 파일은 크기만 표시하고 `subPathExpr`는 해석하지 않습니다. 이미지에 포함된 파일은 확인할 수 없습니다.
 
 <a id="shared-limits"></a>
 

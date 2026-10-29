@@ -21,6 +21,7 @@ type clusterInput interface{ clusterName() string }
 
 func (in overviewInput) clusterName() string  { return in.Cluster }
 func (in listInput) clusterName() string      { return in.Cluster }
+func (in envInput) clusterName() string       { return in.Cluster }
 func (in getInput) clusterName() string       { return in.Cluster }
 func (in eventsInput) clusterName() string    { return in.Cluster }
 func (in logsInput) clusterName() string      { return in.Cluster }

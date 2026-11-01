@@ -12,7 +12,7 @@ type Kubernetes struct {
 	// Single-cluster form, kept for existing configurations.
 	KubernetesCluster `yaml:",inline"`
 	// Clusters is mutually exclusive with the single-cluster fields.
-	Clusters []KubernetesCluster `yaml:"clusters"`
+	Clusters []KubernetesCluster `yaml:"clusters,omitempty"`
 }
 
 // KubernetesCluster holds connection and policy settings for one cluster.

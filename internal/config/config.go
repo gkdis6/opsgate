@@ -5,6 +5,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -43,7 +44,19 @@ const (
 	AuthStatic   = "static"
 )
 
+// Deployment modes. A mode fills in the defaults for where the server runs
+// as a service; values written in the file still win.
+const (
+	// ModeHost is a systemd service on the machine it inspects.
+	ModeHost = "host"
+	// ModeKubernetes is a pod that inspects its own cluster. Host tools
+	// are unavailable because a pod sees its container, not the node.
+	ModeKubernetes = "kubernetes"
+)
+
 type Config struct {
+	// Mode is empty (plain defaults, stdio by default), host or kubernetes.
+	Mode      string    `yaml:"mode"`
 	Server    Server    `yaml:"server"`
 	Stdio     Stdio     `yaml:"stdio"`
 	HTTP      HTTP      `yaml:"http"`
@@ -332,32 +345,108 @@ func Default() Config {
 	}
 }
 
-// Load reads path on top of Default. Unknown keys are an error so that
-// typos in security-relevant settings do not silently fall back.
-func Load(path string) (Config, error) {
-	cfg := Default()
-	if path == "" {
-		return cfg, nil
+// DefaultFor returns the defaults of a deployment mode. Both modes serve
+// HTTP with builtin passkey sign-in and keep its state in /var/lib/opsgate.
+func DefaultFor(mode string) (Config, error) {
+	c := Default()
+	c.Mode = mode
+	switch mode {
+	case "":
+		return c, nil
+	case ModeHost:
+		c.Server.AuditLog = "/var/log/opsgate/audit.jsonl"
+		c.Providers.Host.Enabled = true
+	case ModeKubernetes:
+		// Audit events go to stderr for the cluster's log collection.
+		c.HTTP.Listen = "0.0.0.0:8787"
+		c.Providers.Kubernetes.Enabled = true
+	default:
+		return c, fmt.Errorf("mode must be %s or %s, got %q", ModeHost, ModeKubernetes, mode)
 	}
-	f, err := os.Open(path)
+	c.Auth.Mode = AuthBuiltin
+	c.Auth.Builtin.StateFile = "/var/lib/opsgate/oauth.json"
+	c.Auth.Builtin.Upstream.Provider = "passkey"
+	return c, nil
+}
+
+// Load reads path on top of the defaults of its mode. Unknown keys are an
+// error so that typos in security-relevant settings do not silently fall back.
+func Load(path string) (Config, error) {
+	if path == "" {
+		return Default(), nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Default(), err
+	}
+	return Parse(data, path)
+}
+
+// Parse is Load for configuration already in memory; name labels errors.
+func Parse(data []byte, name string) (Config, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return Default(), fmt.Errorf("parse %s: %w", name, err)
+	}
+	mode, _ := lookup(&root, "mode").(string)
+	cfg, err := DefaultFor(mode)
 	if err != nil {
 		return cfg, err
 	}
-	defer f.Close()
-	dec := yaml.NewDecoder(f)
+	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
-	if err := dec.Decode(&cfg); err != nil {
-		return cfg, fmt.Errorf("parse %s: %w", path, err)
+	if err := dec.Decode(&cfg); err != nil && err != io.EOF {
+		return cfg, fmt.Errorf("parse %s: %w", name, err)
 	}
 	var extra any
 	if err := dec.Decode(&extra); err != io.EOF {
-		return cfg, fmt.Errorf("parse %s: multiple YAML documents are not supported", path)
+		return cfg, fmt.Errorf("parse %s: multiple YAML documents are not supported", name)
+	}
+	// Browser approval needs builtin sign-in, so a mode turns it on only
+	// when the file keeps builtin and does not decide itself.
+	if cfg.Mode != "" && cfg.Auth.Mode == AuthBuiltin && lookup(&root, "approval", "web") == nil {
+		cfg.Approval.Web = true
 	}
 	return cfg, cfg.Validate()
 }
 
+// lookup returns the decoded value at a mapping path, or nil when absent.
+func lookup(n *yaml.Node, keys ...string) any {
+	if n.Kind == yaml.DocumentNode && len(n.Content) == 1 {
+		n = n.Content[0]
+	}
+	for _, key := range keys {
+		if n.Kind != yaml.MappingNode {
+			return nil
+		}
+		var next *yaml.Node
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			if n.Content[i].Value == key {
+				next = n.Content[i+1]
+			}
+		}
+		if next == nil {
+			return nil
+		}
+		n = next
+	}
+	var v any
+	if n.Decode(&v) != nil {
+		return nil
+	}
+	return v
+}
+
 // Validate checks settings that do not depend on the transport.
 func (c Config) Validate() error {
+	switch c.Mode {
+	case "", ModeHost, ModeKubernetes:
+	default:
+		return fmt.Errorf("mode must be %s or %s, got %q", ModeHost, ModeKubernetes, c.Mode)
+	}
+	if c.Mode == ModeKubernetes && c.Providers.Host.Enabled {
+		return fmt.Errorf("providers.host cannot be enabled in mode kubernetes: a pod sees its container, not the node")
+	}
 	if err := checkToolGlobs("server.tools.allow", c.Server.Tools.Allow); err != nil {
 		return err
 	}

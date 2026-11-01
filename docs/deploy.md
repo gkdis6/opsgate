@@ -4,7 +4,8 @@
 
 Use the native Linux binary for host inspection and the container for Kubernetes
 inspection. The distroless image contains no shell, sudo, systemctl or journalctl;
-the host provider does not represent a node when run inside a pod. Darwin builds
+the host provider does not represent a node when run inside a pod, and opsgate
+logs a warning at startup if it is enabled there. Darwin builds
 are provided for local clients; the systemd deployment requires Linux.
 
 Streamable HTTP, OAuth, authentication, human approval and write tools are

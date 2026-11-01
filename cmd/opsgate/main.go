@@ -49,6 +49,18 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "init" {
+		if err := runInit(os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if len(os.Args) > 2 && os.Args[1] == "config" && os.Args[2] == "show" {
+		if err := runConfigShow(os.Args[3:]); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if len(os.Args) > 2 && os.Args[1] == "passkey" && os.Args[2] == "invite" {
 		if err := runPasskeyInvite(os.Args[3:]); err != nil {
 			log.Fatal(err)
@@ -57,7 +69,7 @@ func main() {
 	}
 
 	cfgPath := flag.String("config", "", "path to opsgate.yaml")
-	transport := flag.String("transport", "stdio", "transport: stdio or http")
+	transport := flag.String("transport", "", "transport: stdio or http (default: http with a mode, otherwise stdio)")
 	version := flag.Bool("version", false, "print version and exit")
 	genToken := flag.Bool("gen-token", false, "print a random static token and its sha256, then exit")
 	flag.Parse()
@@ -81,6 +93,16 @@ func run(cfgPath, transport string) error {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return err
+	}
+	if transport == "" {
+		transport = "stdio"
+		if cfg.Mode != "" {
+			transport = "http"
+		}
+	}
+	// Inside a pod the host provider sees the container, not the node.
+	if cfg.Providers.Host.Enabled && os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		log.Printf("warning: providers.host is enabled inside a Kubernetes pod; host tools describe this container, not the node")
 	}
 	al, err := audit.Open(cfg.Server.AuditLog)
 	if err != nil {

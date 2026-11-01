@@ -48,7 +48,7 @@ The command selects one transport per process. stdio is the default. HTTP requir
 
 | Package | Responsibility |
 | --- | --- |
-| `cmd/opsgate` | Loads configuration and assembles the process; supports `-gen-token`, `passkey invite` and `dev-runner` |
+| `cmd/opsgate` | Loads configuration and assembles the process; supports `init`, `config show`, `-gen-token`, `passkey invite`, `watch` and `dev-runner` |
 | `internal/config` | Loads one YAML document over defaults, rejects unknown keys, validates configuration and defines scopes |
 | `internal/httpserver` | HTTP routing, Host/CORS checks, security headers, access logs and protocol selection |
 | `internal/authn` | Static bearer verification and external JWT verification through discovered JWKS |

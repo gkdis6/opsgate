@@ -2,10 +2,40 @@
 
 [한국어](ko/configuration.md)
 
-Defaults below come from `config.Default()`. YAML is loaded over defaults with strict known-field checking; unknown keys fail. HTTP, authentication and approval settings are included below. Empty slices are shown as `[]` (some are nil in Go).
+Defaults below come from `config.Default()`; a `mode` changes some of them (see [Modes](#modes-and-opsgate-init)). YAML is loaded over defaults with strict known-field checking; unknown keys fail. HTTP, authentication and approval settings are included below. Empty slices are shown as `[]` (some are nil in Go).
+
+## Modes and `opsgate init`
+
+`mode` names where opsgate runs as a service and fills in defaults for it.
+Values written in the file always win. Without a mode the defaults below apply
+and the transport defaults to stdio.
+
+| Key | `mode: host` (systemd service) | `mode: kubernetes` (pod) |
+| --- | --- | --- |
+| `-transport` default | `http` | `http` |
+| `http.listen` | `127.0.0.1:8787` | `0.0.0.0:8787` |
+| `auth.mode` | `builtin` | `builtin` |
+| `auth.builtin.upstream.provider` | `passkey` | `passkey` |
+| `auth.builtin.state_file` | `/var/lib/opsgate/oauth.json` | `/var/lib/opsgate/oauth.json` |
+| `approval.web` | `true` while `auth.mode` is builtin | `true` while `auth.mode` is builtin |
+| `server.audit_log` | `/var/log/opsgate/audit.jsonl` | `""` (stderr, for the cluster's log collection) |
+| `providers.host.enabled` | `true` | `false`; enabling it is an error because a pod sees its container, not the node |
+| `providers.kubernetes.enabled` | `false` | `true`, with the pod's ServiceAccount (`kubeconfig: ""`) |
+
+Namespaces, units, users and write targets are never defaulted.
+`opsgate init` asks for them, plus the mode, public URL and sign-in (passkey,
+Google or GitHub), and writes a short mode-based file with mode 0600. It refuses
+to overwrite a file without `-force`. Every question has a flag (`opsgate init
+-h`); without a terminal, or with `-yes`, unanswered questions take their
+defaults, and the public URL and user must be given as flags. The result is
+checked as the HTTP server would check it before it is written.
+
+`opsgate config show -config <file>` prints the effective configuration,
+mode defaults included, as YAML that opsgate loads unchanged.
 
 | YAML key | Default | Meaning |
 | --- | --- | --- |
+| `mode` | `""` | Empty, `host` or `kubernetes`; see above |
 | `server.name` | `opsgate` | MCP server name |
 | `server.audit_log` | `""` | Empty writes to stderr; otherwise JSONL path |
 | `server.max_output_bytes` | `65536` | Tool output byte limit; must be positive |

@@ -163,29 +163,37 @@ unprivileged. Other clients: [client setup](docs/clients.md).
 Passkeys need no identity provider: people sign in with Face ID, Touch ID,
 Windows Hello, a phone or a security key.
 
-```yaml
-http:
-  listen: 127.0.0.1:8787
-  public_url: https://mcp.example.com
-auth:
-  mode: builtin
-  builtin:
-    state_file: /var/lib/opsgate/oauth.json
-    upstream:
-      provider: passkey
-    users:
-      - subject: passkey:alice
-        scopes: [ops:read]
-approval:
-  web: true
-providers:
-  host:
-    enabled: true
-    units: [myapp.service]
-```
+`opsgate init` asks where it runs, the public URL and who signs in, then writes
+a short configuration:
 
 ```sh
-opsgate -transport http -config /etc/opsgate/opsgate.yaml
+opsgate init            # writes opsgate.yaml; flags answer ahead, see -h
+```
+
+```yaml
+mode: host              # or kubernetes for a pod
+http:
+  public_url: "https://mcp.example.com"
+auth:
+  builtin:
+    users:
+      - subject: "passkey:alice"
+        scopes: [ops:read]
+    admins: ["passkey:alice"]
+    allowed_redirect_hosts: [claude.ai, chatgpt.com, localhost]
+    unknown_redirect_hosts: approve
+providers:
+  host:
+    units: ["myapp.service"]
+```
+
+The mode fills in the rest: HTTP on `127.0.0.1:8787` (`0.0.0.0:8787` in a pod),
+builtin passkey sign-in, state in `/var/lib/opsgate`, browser approval links and
+the matching providers. `opsgate config show -config opsgate.yaml` prints every
+effective value.
+
+```sh
+opsgate -config /etc/opsgate/opsgate.yaml
 ```
 
 1. On first start, opsgate logs a one-time setup link (valid 24 hours) for each
@@ -197,8 +205,8 @@ opsgate -transport http -config /etc/opsgate/opsgate.yaml
    `claude mcp add --transport http opsgate https://mcp.example.com/mcp`, or add
    it as a connector in claude.ai or ChatGPT.
 
-Before exposing the server publicly, restrict client redirect hosts
-(`allowed_redirect_hosts`). GitHub, Google and other sign-in options are covered
+The generated file already limits client redirect hosts
+(`allowed_redirect_hosts`); review them before exposing the server. GitHub, Google and other sign-in options are covered
 in [authentication](docs/authentication.md). Proxy routes, systemd units and
 release verification are in [deployment](docs/deploy.md).
 

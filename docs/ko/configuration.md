@@ -2,10 +2,39 @@
 
 [English](../configuration.md)
 
-아래 기본값은 `config.Default()`에서 가져옵니다. YAML을 읽을 때 기본값에 설정을 덮어쓰며, 정의된 필드만 허용하므로 알 수 없는 키가 있으면 실패합니다. HTTP, 인증, 승인 설정도 함께 설명합니다. 빈 슬라이스는 `[]`로 표시하며, Go에서는 일부가 nil입니다.
+아래 기본값은 `config.Default()`에서 가져오며, `mode`를 정하면 일부가 바뀝니다([모드](#모드와-opsgate-init) 참고). YAML을 읽을 때 기본값에 설정을 덮어쓰며, 정의된 필드만 허용하므로 알 수 없는 키가 있으면 실패합니다. HTTP, 인증, 승인 설정도 함께 설명합니다. 빈 슬라이스는 `[]`로 표시하며, Go에서는 일부가 nil입니다.
+
+## 모드와 `opsgate init`
+
+`mode`는 opsgate를 어디서 서비스로 실행하는지 정하고, 그에 맞는 기본값을 채웁니다.
+파일에 직접 적은 값이 항상 우선합니다. 모드가 없으면 아래 표의 기본값을 쓰고,
+전송 방식의 기본값은 stdio입니다.
+
+| 키 | `mode: host` (systemd 서비스) | `mode: kubernetes` (파드) |
+| --- | --- | --- |
+| `-transport` 기본값 | `http` | `http` |
+| `http.listen` | `127.0.0.1:8787` | `0.0.0.0:8787` |
+| `auth.mode` | `builtin` | `builtin` |
+| `auth.builtin.upstream.provider` | `passkey` | `passkey` |
+| `auth.builtin.state_file` | `/var/lib/opsgate/oauth.json` | `/var/lib/opsgate/oauth.json` |
+| `approval.web` | `auth.mode`가 builtin이면 `true` | `auth.mode`가 builtin이면 `true` |
+| `server.audit_log` | `/var/log/opsgate/audit.jsonl` | `""` (stderr. 클러스터 로그 수집용) |
+| `providers.host.enabled` | `true` | `false`. 파드는 노드가 아니라 자기 컨테이너를 보므로 켜면 오류입니다 |
+| `providers.kubernetes.enabled` | `false` | `true`. 파드의 ServiceAccount를 씁니다(`kubeconfig: ""`) |
+
+네임스페이스, 유닛, 사용자, 쓰기 대상은 모드가 채우지 않습니다.
+`opsgate init`은 이것들과 함께 모드, 공개 URL, 로그인 방식(패스키, Google, GitHub)을
+묻고, 모드 기반의 짧은 파일을 권한 0600으로 만듭니다. 이미 있는 파일은 `-force` 없이
+덮어쓰지 않습니다. 모든 질문에 대응하는 플래그가 있습니다(`opsgate init -h`).
+터미널이 없거나 `-yes`를 주면 답하지 않은 질문은 기본값을 쓰고, 공개 URL과 사용자는
+플래그로 줘야 합니다. 파일을 쓰기 전에 HTTP 서버와 같은 방식으로 검증합니다.
+
+`opsgate config show -config <파일>`은 모드 기본값까지 포함한 최종 설정을 opsgate가
+그대로 읽을 수 있는 YAML로 출력합니다.
 
 | YAML 키 | 기본값 | 설명 |
 | --- | --- | --- |
+| `mode` | `""` | 비어 있거나 `host`, `kubernetes`입니다. 위 설명을 참고하세요 |
 | `server.name` | `opsgate` | MCP 서버 이름입니다 |
 | `server.audit_log` | `""` | JSONL 로그 파일 경로입니다. 비어 있으면 stderr에 기록합니다 |
 | `server.max_output_bytes` | `65536` | 도구 출력의 바이트 수 제한이며, 양수여야 합니다 |

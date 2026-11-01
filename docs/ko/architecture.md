@@ -48,7 +48,7 @@ HTTP 리스너는 일반 HTTP로 통신하므로, 외부에 HTTPS로 제공하�
 
 | 패키지 | 역할 |
 | --- | --- |
-| `cmd/opsgate` | 설정을 읽고 프로세스를 구성하며, `-gen-token`, `passkey invite`, `dev-runner`를 지원합니다. |
+| `cmd/opsgate` | 설정을 읽고 프로세스를 구성하며, `init`, `config show`, `-gen-token`, `passkey invite`, `watch`, `dev-runner`를 지원합니다. |
 | `internal/config` | YAML 문서 하나를 읽어 기본값에 덮어쓰고, 알 수 없는 키를 거부하며 설정 검증과 스코프 정의를 담당합니다. |
 | `internal/httpserver` | HTTP 라우팅, Host/CORS 검사, 보안 헤더, 접근 로그, 프로토콜 선택을 담당합니다. |
 | `internal/authn` | 고정 Bearer 토큰과 외부 JWT를 검증하며, 외부 JWT 검증에는 검색으로 찾은 JWKS를 사용합니다. |

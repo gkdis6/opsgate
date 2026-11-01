@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/gkdis6/opsgate/internal/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
@@ -43,6 +44,13 @@ func TestDeploymentProbeHosts(t *testing.T) {
 				t.Fatal(err)
 			}
 			publicURL = cfg.HTTP.PublicURL
+			loaded, err := config.Parse([]byte(doc.Data["opsgate.yaml"]), "ConfigMap opsgate")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := loaded.ValidateHTTP(); err != nil {
+				t.Fatal(err)
+			}
 		case "Deployment":
 			containers = doc.Spec.Template.Spec.Containers
 		}

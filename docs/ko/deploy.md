@@ -5,6 +5,7 @@
 호스트 점검에는 Linux 네이티브 바이너리를, Kubernetes 점검에는 컨테이너를 사용하세요.
 distroless 이미지에는 셸, sudo, systemctl, journalctl이 없으며,
 파드 안에서 실행하는 host provider는 노드의 상태를 보여 주지 않습니다.
+파드 안에서 host provider를 켜면 opsgate가 시작할 때 경고를 남깁니다.
 Darwin 빌드는 로컬 클라이언트용이며, systemd로 배포하려면 Linux가 필요합니다.
 
 Streamable HTTP, OAuth, 인증, 사람의 승인, 쓰기 도구는 모두 구현했습니다.

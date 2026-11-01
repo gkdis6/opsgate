@@ -160,29 +160,36 @@ stdio는 실행한 계정의 권한으로 동작하므로 관리자 권한이 �
 패스키는 별도의 ID 제공자가 필요 없습니다. Face ID, Touch ID, Windows Hello,
 휴대폰, 보안 키로 로그인할 수 있습니다.
 
-```yaml
-http:
-  listen: 127.0.0.1:8787
-  public_url: https://mcp.example.com
-auth:
-  mode: builtin
-  builtin:
-    state_file: /var/lib/opsgate/oauth.json
-    upstream:
-      provider: passkey
-    users:
-      - subject: passkey:alice
-        scopes: [ops:read]
-approval:
-  web: true
-providers:
-  host:
-    enabled: true
-    units: [myapp.service]
-```
+`opsgate init`이 실행 위치, 공개 URL, 로그인할 사람을 묻고 짧은 설정 파일을 만듭니다.
 
 ```sh
-opsgate -transport http -config /etc/opsgate/opsgate.yaml
+opsgate init            # opsgate.yaml을 만듭니다. 플래그로 미리 답할 수 있습니다(-h 참고)
+```
+
+```yaml
+mode: host              # 파드라면 kubernetes
+http:
+  public_url: "https://mcp.example.com"
+auth:
+  builtin:
+    users:
+      - subject: "passkey:alice"
+        scopes: [ops:read]
+    admins: ["passkey:alice"]
+    allowed_redirect_hosts: [claude.ai, chatgpt.com, localhost]
+    unknown_redirect_hosts: approve
+providers:
+  host:
+    units: ["myapp.service"]
+```
+
+나머지는 모드가 채웁니다. HTTP는 `127.0.0.1:8787`(파드에서는 `0.0.0.0:8787`)에서
+받고, 내장 패스키 로그인을 쓰며, 상태를 `/var/lib/opsgate`에 두고, 브라우저 승인
+링크와 모드에 맞는 provider를 켭니다. 적용되는 값 전체는
+`opsgate config show -config opsgate.yaml`로 볼 수 있습니다.
+
+```sh
+opsgate -config /etc/opsgate/opsgate.yaml
 ```
 
 1. 처음 시작하면 패스키가 없는 사용자마다 일회용 등록 링크(24시간 유효)가 로그에
@@ -194,8 +201,8 @@ opsgate -transport http -config /etc/opsgate/opsgate.yaml
    `claude mcp add --transport http opsgate https://mcp.example.com/mcp`.
    claude.ai나 ChatGPT에서는 커넥터로 추가하세요.
 
-외부에 공개하기 전에 클라이언트 리다이렉트 호스트를 제한하세요
-(`allowed_redirect_hosts`). GitHub, Google 등 다른 로그인 방식은
+생성된 파일은 클라이언트 리다이렉트 호스트(`allowed_redirect_hosts`)를 이미
+제한합니다. 외부에 공개하기 전에 확인하세요. GitHub, Google 등 다른 로그인 방식은
 [인증 문서](docs/ko/authentication.md)에, 프록시 경로·systemd 유닛·릴리스 검증은
 [배포 문서](docs/ko/deploy.md)에 있습니다.
 

@@ -19,6 +19,7 @@ The features below are implemented for the first public release. They have not y
 - Optional approval windows, in memory and bound to user/tool; off by default.
 - Experimental note provider: bounded Markdown folder (Obsidian-compatible) reads/search/links/tags and approved create/append/replace/trash operations.
 - Experimental dev provider and separate runner: configured projects/agent commands, approved task starts, requester ownership/admin access, logs/diffs, cancellation and retention.
+- Experimental `opsgate watch`: a separate process that watches pods, workloads, nodes and ConfigMap keys and posts batched, deduplicated, optionally HMAC-signed alerts to a webhook.
 
 ## Remaining ideas
 

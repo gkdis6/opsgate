@@ -166,6 +166,23 @@ OAuth GET 경로는 요청 본문을 거부하며, POST 본문 읽기에는 10�
 
 `allowed_redirect_hosts`로 클라이언트 등록을 제한할 수 있습니다. 목록이 비어 있지 않으면 `unknown_redirect_hosts: deny`는 목록에 없는 호스트를 거부하고, `approve`는 허용 목록의 관리자가 `/admin/clients`에서 승인할 때까지 그 클라이언트를 대기 상태로 둡니다. 대기 중인 클라이언트는 인가를 받을 수 없습니다. `notify_url`은 선택 사항이며, 설정하면 이벤트, 클라이언트 ID/이름, 리다이렉트 호스트, 관리자 URL이 포함된 JSON POST 알림을 보냅니다. 알림에는 제한이 있으며 전달을 보장하지는 않습니다. 클라이언트 이름은 클라이언트가 직접 제공한 값입니다. 등록을 승인해도 사용자 스코프를 주거나 동의를 생략하지는 않습니다. 호스트 목록이 비어 있으면 다른 유효성 조건을 충족하는 모든 리다이렉트 목적지를 허용하며, 목록에 없는 호스트에 대한 정책은 무시합니다.
 
+## Watch 알림
+
+`watch` 섹션은 별도 프로세스인 `opsgate watch`만 읽고, MCP 서버는 무시합니다. `opsgate watch`를 실행하려면 `providers.kubernetes.enabled`와 `watch.webhook_url`이 필요합니다.
+
+| 키 | 기본값 | 의미 |
+| --- | --- | --- |
+| `webhook_url` | 없음 | https이거나 루프백 주소로 가는 http. 자격 증명과 프래그먼트는 쓸 수 없습니다 |
+| `allow_private_http` | `false` | 사설 네트워크(Service 이름, 사설 IP)로 가는 http도 허용합니다. 연결은 사설 주소에 닿아야 합니다 |
+| `secret_file` | 없음 | 선택. `X-Opsgate-Signature` HMAC 키(16바이트 이상) |
+| `clusters` | 전체 | watch할 클러스터 이름 |
+| `problems_only` | `false` | 경고만 보냅니다 |
+| `batch` | `30s` | 알림을 모아 한 번에 보내는 간격 (1s–10m) |
+| `cooldown` | `15m` | 같은 객체의 같은 경고는 이 시간 동안 다시 보내지 않고 횟수만 셉니다 (0–24h) |
+| `max_alerts` | `50` | 한 번에 보내는 최대 알림 수 (1–500) |
+
+알리는 내용과 본문 형식은 [watch 알림](watch.md)을 보세요.
+
 ## Dev runner 설정
 
 runner는 별도 YAML 파일을 사용하며, `providers` 아래에 중첩하지 않습니다. runner 설정은 신뢰할 수 있어야 하며, HTTP 계정이 쓸 수 없어야 합니다. [설정과 위험](dev.md), [예제](../../deploy/dev-runner.example.yaml)를 참고하세요.

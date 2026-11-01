@@ -1,0 +1,93 @@
+# `opsgate watch` posts Kubernetes alerts to a webhook. Apply rbac-readonly.yaml
+# first: the watcher uses the opsgate ServiceAccount, needing only list/watch.
+# Optional HMAC key: kubectl -n opsgate create secret generic opsgate-watch-hmac \
+#   --from-literal=key="$(openssl rand -hex 32)"
+# Keep one replica: every replica watches the whole scope, so more would send
+# every alert more than once.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opsgate-watch
+  namespace: opsgate
+data:
+  opsgate.yaml: |
+    providers:
+      kubernetes:
+        enabled: true
+        kubeconfig: ""   # in-cluster ServiceAccount
+        namespaces: [apps]
+        deny_namespaces: [kube-system, kube-public, kube-node-lease, opsgate]
+    watch:
+      webhook_url: https://hooks.example.com/opsgate-watch
+      # For an in-cluster receiver without TLS, e.g.
+      # http://n8n.n8n.svc.cluster.local:5678/webhook/opsgate-watch,
+      # set allow_private_http: true (connections must reach private addresses).
+      allow_private_http: false
+      secret_file: /etc/opsgate/watch/key
+      problems_only: false
+      batch: 30s
+      cooldown: 15m
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opsgate-watch
+  namespace: opsgate
+spec:
+  replicas: 1
+  # Avoid two watchers overlapping (duplicate alerts) during updates.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: opsgate-watch
+  template:
+    metadata:
+      labels:
+        app: opsgate-watch
+    spec:
+      serviceAccountName: opsgate # Defined in rbac-readonly.yaml.
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532 # Lets the nonroot user read the 0440 secret.
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: opsgate-watch
+          # Replace with a verified release tag AND its immutable manifest digest.
+          image: ghcr.io/gkdis6/opsgate:v0.2.0
+          imagePullPolicy: Always
+          args: [watch, -config, /etc/opsgate/opsgate.yaml]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/opsgate/opsgate.yaml
+              subPath: opsgate.yaml
+              readOnly: true
+            - name: hmac
+              mountPath: /etc/opsgate/watch
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: opsgate-watch
+            defaultMode: 0444
+        - name: hmac
+          secret:
+            secretName: opsgate-watch-hmac
+            defaultMode: 0440

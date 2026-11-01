@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -12,11 +13,13 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/gkdis6/opsgate/internal/alert"
 	"github.com/gkdis6/opsgate/internal/approval"
 	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/authn"
@@ -24,6 +27,7 @@ import (
 	"github.com/gkdis6/opsgate/internal/devrunner"
 	"github.com/gkdis6/opsgate/internal/httpserver"
 	"github.com/gkdis6/opsgate/internal/oauth"
+	"github.com/gkdis6/opsgate/internal/provider/kube"
 	"github.com/gkdis6/opsgate/internal/server"
 	"github.com/gkdis6/opsgate/internal/tool"
 )
@@ -35,6 +39,12 @@ func main() {
 
 	if len(os.Args) > 1 && os.Args[1] == "dev-runner" {
 		if err := runDevRunner(os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "watch" {
+		if err := runWatch(os.Args[2:]); err != nil {
 			log.Fatal(err)
 		}
 		return
@@ -178,6 +188,51 @@ func runDevRunner(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return devrunner.Serve(ctx, cfg)
+}
+
+// runWatch watches Kubernetes and posts alerts to watch.webhook_url. It
+// serves no MCP clients, so it can run under its own account and kubeconfig.
+func runWatch(args []string) error {
+	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
+	path := fs.String("config", "", "path to opsgate.yaml (required)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *path == "" || fs.NArg() != 0 {
+		return fmt.Errorf("usage: opsgate watch -config <file>")
+	}
+	cfg, err := config.Load(*path)
+	if err != nil {
+		return err
+	}
+	if err := cfg.ValidateWatch(); err != nil {
+		return err
+	}
+	w := cfg.Watch
+	var secret []byte
+	if w.SecretFile != "" {
+		b, err := os.ReadFile(w.SecretFile)
+		if err != nil {
+			return fmt.Errorf("watch.secret_file: %w", err)
+		}
+		if secret = bytes.TrimSpace(b); len(secret) < 16 {
+			return fmt.Errorf("watch.secret_file must hold at least 16 bytes")
+		}
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	// Validation allows plain http only to loopback or private receivers.
+	privateOnly := strings.HasPrefix(strings.ToLower(w.WebhookURL), "http:")
+	d := alert.New(alert.Options{URL: w.WebhookURL, Secret: secret, Batch: w.Batch, Cooldown: w.Cooldown, MaxAlerts: w.MaxAlerts, PrivateOnly: privateOnly})
+	done := make(chan struct{})
+	go func() {
+		d.Run(ctx)
+		close(done)
+	}()
+	err = kube.Watch(ctx, cfg.WatchClusters(), w.ProblemsOnly, d.Emit)
+	stop()
+	<-done
+	return err
 }
 
 // runPasskeyInvite prints a one-time passkey registration link. It writes

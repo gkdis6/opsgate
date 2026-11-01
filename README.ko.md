@@ -228,6 +228,7 @@ opsgate -transport http -config /etc/opsgate/opsgate.yaml
 | [노트](docs/ko/notes.md) | Markdown 폴더에 런북과 장애 기록 남기기 |
 | [배포](docs/ko/deploy.md) | 릴리스 검증, systemd, Kubernetes, 리버스 프록시 |
 | [Dev provider](docs/ko/dev.md) | 별도 runner로 코딩 에이전트 실행 |
+| [Watch 알림](docs/ko/watch.md) | 별도 `opsgate watch` 프로세스로 Kubernetes 알림을 webhook에 전송 |
 | [로드맵](docs/ko/roadmap.md) | 완료한 기능과 앞으로의 계획 |
 
 

@@ -158,6 +158,23 @@ Set `approval.require_web: true` with `approval.web: true` to require browser ap
 
 Client registration can be restricted with `allowed_redirect_hosts`. With a nonempty list, `unknown_redirect_hosts: deny` rejects other hosts; `approve` keeps such clients pending until an allowlisted administrator approves at `/admin/clients`. Pending clients cannot authorize. `notify_url` optionally receives a JSON POST containing event, client ID/name, redirect hosts and the admin URL; notifications are bounded and best effort. Client names are self-reported. Approval of a registration does not grant user scopes or skip consent. An empty host list accepts any otherwise valid redirect destination and ignores the unknown-host policy.
 
+## Watch alerts
+
+The `watch` section is read only by `opsgate watch`, a separate process; the MCP server ignores it. `opsgate watch` requires `providers.kubernetes.enabled` and `watch.webhook_url`.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `webhook_url` | empty | https, or http to a loopback address; no credentials or fragment |
+| `allow_private_http` | `false` | Also allow http to private receivers (Service names, private IPs); connections must reach private addresses |
+| `secret_file` | empty | Optional key (at least 16 bytes) for the `X-Opsgate-Signature` HMAC |
+| `clusters` | all | Configured cluster names to watch |
+| `problems_only` | `false` | Send warnings only |
+| `batch` | `30s` | How long alerts are gathered into one POST (1s–10m) |
+| `cooldown` | `15m` | Repeat warnings for one object are counted, not sent (0–24h) |
+| `max_alerts` | `50` | Alerts per POST (1–500) |
+
+See [watch alerts](watch.md) for what is reported and the payload.
+
 ## Dev runner configuration
 
 The runner uses a separate YAML file, never nested under `providers`. Its configuration is trusted and must be unwritable by the HTTP account. See [setup and risks](dev.md) and [the example](../deploy/dev-runner.example.yaml).

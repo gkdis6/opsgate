@@ -50,6 +50,7 @@ type Config struct {
 	Auth      Auth      `yaml:"auth"`
 	Approval  Approval  `yaml:"approval"`
 	Providers Providers `yaml:"providers"`
+	Watch     Watch     `yaml:"watch"`
 }
 
 type Server struct {
@@ -323,6 +324,11 @@ func Default() Config {
 				MaxNoteBytes: 1 << 20,
 			},
 		},
+		Watch: Watch{
+			Batch:     30 * time.Second,
+			Cooldown:  15 * time.Minute,
+			MaxAlerts: 50,
+		},
 	}
 }
 
@@ -402,7 +408,10 @@ func (c Config) Validate() error {
 			return fmt.Errorf("providers.host.command_prefix: %q must be an absolute path or a flag", p)
 		}
 	}
-	return c.Providers.Kubernetes.validate()
+	if err := c.Providers.Kubernetes.validate(); err != nil {
+		return err
+	}
+	return c.Watch.validate(c.Providers.Kubernetes)
 }
 
 // validateRegistrationPolicy checks administrator-controlled DCR settings.

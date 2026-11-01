@@ -231,6 +231,7 @@ Full details: [SECURITY.md](SECURITY.md).
 | [Notes](docs/notes.md) | Runbooks and incident memory in a Markdown folder |
 | [Deployment](docs/deploy.md) | Release verification, systemd, Kubernetes, reverse proxy |
 | [Dev provider](docs/dev.md) | Running coding agents through the separate runner |
+| [Watch alerts](docs/watch.md) | Separate `opsgate watch` process posting Kubernetes alerts to a webhook |
 | [Roadmap](docs/roadmap.md) | What is done and what may come |
 
 

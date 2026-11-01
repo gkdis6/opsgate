@@ -136,6 +136,14 @@ providers:
 # for that user/tool/target. Protected Kubernetes clusters require fresh approval.
 # Keep it off for coding task starts.
 
+# ---- KUBERNETES WATCH ALERTS (read only by `opsgate watch`) ----
+# watch:
+#   webhook_url: https://n8n.example.com/webhook/opsgate-watch
+#   secret_file: /etc/opsgate/watch-secret  # optional HMAC key
+#   problems_only: false
+#   batch: 30s
+#   cooldown: 15m
+
 # ---- MULTIPLE KUBERNETES CLUSTERS (replace the kubernetes section above) ----
 # Do not combine clusters with single-cluster connection/policy fields.
 # providers:

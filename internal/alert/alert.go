@@ -1,0 +1,317 @@
+// Package alert batches watch alerts and delivers them to a webhook.
+//
+// Delivery is best effort: a slow or failing webhook never blocks the
+// watchers, and alerts that do not fit are counted as dropped.
+package alert
+
+import (
+	"bytes"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+)
+
+// Severities.
+const (
+	Warning = "warning"
+	Info    = "info"
+)
+
+// Alert is one observed change. Text fields must already be redacted.
+type Alert struct {
+	Time      time.Time `json:"time"`
+	Cluster   string    `json:"cluster"`
+	Severity  string    `json:"severity"`
+	Kind      string    `json:"kind"`
+	Namespace string    `json:"namespace,omitempty"`
+	Name      string    `json:"name"`
+	// Reason is a short machine-readable cause, e.g. OOMKilled or ImageChanged.
+	Reason  string `json:"reason"`
+	Summary string `json:"summary"`
+	// Suppressed counts repeats folded into this alert during the cooldown.
+	Suppressed int `json:"suppressed,omitempty"`
+	// Key identifies repeats; it includes the container for pod alerts.
+	Key string `json:"-"`
+}
+
+// Batch is the JSON body of one webhook POST.
+type Batch struct {
+	Source string    `json:"source"`
+	SentAt time.Time `json:"sent_at"`
+	Alerts []Alert   `json:"alerts"`
+	// Dropped counts alerts lost to the queue or batch limit.
+	Dropped int `json:"dropped,omitempty"`
+	// Text renders the batch for chat forwarding without further code.
+	Text string `json:"text"`
+}
+
+// Options configures a Dispatcher.
+type Options struct {
+	URL       string
+	Secret    []byte
+	Batch     time.Duration
+	Cooldown  time.Duration
+	MaxAlerts int
+	// PrivateOnly refuses connections to addresses that are neither
+	// private nor loopback, checked after DNS resolution. Use it for
+	// plain http, where a host name could otherwise lead anywhere.
+	PrivateOnly bool
+	Client      *http.Client
+}
+
+const queueSize = 1000
+
+// Dispatcher gathers alerts and posts them in batches.
+type Dispatcher struct {
+	opts  Options
+	queue chan Alert
+
+	mu      sync.Mutex
+	dropped int
+	// last holds when each warning key was last sent; repeats within the
+	// cooldown only increment suppressed.
+	last       map[string]time.Time
+	suppressed map[string]int
+	now        func() time.Time
+	// backoff holds the wait before each delivery attempt.
+	backoff []time.Duration
+}
+
+// New returns a Dispatcher; call Run to deliver.
+func New(opts Options) *Dispatcher {
+	if opts.Client == nil {
+		opts.Client = &http.Client{}
+		if opts.PrivateOnly {
+			opts.Client.Transport = privateTransport()
+		}
+	}
+	client := *opts.Client
+	client.Timeout = 10 * time.Second
+	// A redirect could move signed alerts to an unconfigured host.
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	opts.Client = &client
+	return &Dispatcher{opts: opts, queue: make(chan Alert, queueSize), last: map[string]time.Time{}, suppressed: map[string]int{}, now: time.Now, backoff: []time.Duration{0, time.Second, 4 * time.Second}}
+}
+
+func privateTransport() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	// The checked address must be the receiver's, not a proxy's.
+	t.Proxy = nil
+	dialer := &net.Dialer{Timeout: 10 * time.Second, Control: func(_, address string, _ syscall.RawConn) error {
+		host, _, err := net.SplitHostPort(address)
+		ip := net.ParseIP(host)
+		if err != nil || ip == nil || !ip.IsPrivate() && !ip.IsLoopback() {
+			return fmt.Errorf("webhook address %s is not private", host)
+		}
+		return nil
+	}}
+	t.DialContext = dialer.DialContext
+	return t
+}
+
+// Emit queues a without blocking.
+func (d *Dispatcher) Emit(a Alert) {
+	select {
+	case d.queue <- a:
+	default:
+		d.mu.Lock()
+		d.dropped++
+		d.mu.Unlock()
+	}
+}
+
+// Run delivers batches until ctx ends, then sends what is pending.
+func (d *Dispatcher) Run(ctx context.Context) {
+	ticker := time.NewTicker(d.opts.Batch)
+	defer ticker.Stop()
+	var pending []Alert
+	for {
+		select {
+		case a := <-d.queue:
+			pending = d.add(pending, a)
+		case <-ticker.C:
+			pending = d.flush(ctx, pending)
+		case <-ctx.Done():
+			for {
+				select {
+				case a := <-d.queue:
+					pending = d.add(pending, a)
+				default:
+					shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+					d.flush(shutdown, pending)
+					cancel()
+					return
+				}
+			}
+		}
+	}
+}
+
+// add bounds the alerts held between flushes to the queue size.
+func (d *Dispatcher) add(pending []Alert, a Alert) []Alert {
+	if len(pending) >= queueSize {
+		d.mu.Lock()
+		d.dropped++
+		d.mu.Unlock()
+		return pending
+	}
+	return append(pending, a)
+}
+
+func (d *Dispatcher) flush(ctx context.Context, pending []Alert) []Alert {
+	batch := d.prepare(pending)
+	if batch == nil {
+		return pending[:0]
+	}
+	if err := d.post(ctx, batch); err != nil {
+		log.Printf("watch webhook: %v; %d alerts lost", err, len(batch.Alerts))
+	}
+	return pending[:0]
+}
+
+// prepare applies coalescing, cooldown and the batch limit. It returns nil
+// when there is nothing to send.
+func (d *Dispatcher) prepare(pending []Alert) *Batch {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	now := d.now()
+	var alerts []Alert
+	index := map[string]int{}
+	for _, a := range pending {
+		if a.Key == "" {
+			a.Key = strings.Join([]string{a.Cluster, a.Kind, a.Namespace, a.Name, a.Reason}, "/")
+		}
+		if i, ok := index[a.Key]; ok {
+			// Keep the first alert of a burst, count the rest.
+			alerts[i].Suppressed++
+			if a.Severity == Info {
+				alerts[i].Summary = a.Summary
+				alerts[i].Time = a.Time
+			}
+			continue
+		}
+		if a.Severity == Warning && d.opts.Cooldown > 0 {
+			if sent, ok := d.last[a.Key]; ok && now.Sub(sent) < d.opts.Cooldown {
+				d.suppressed[a.Key]++
+				continue
+			}
+			a.Suppressed += d.suppressed[a.Key]
+			delete(d.suppressed, a.Key)
+			d.last[a.Key] = now
+		}
+		index[a.Key] = len(alerts)
+		alerts = append(alerts, a)
+	}
+	// Suppressed repeats ride along with the key's next alert; keys that
+	// stay quiet for a day are forgotten so pod churn cannot grow the maps.
+	for key, sent := range d.last {
+		if age := now.Sub(sent); age >= d.opts.Cooldown && (d.suppressed[key] == 0 || age >= 24*time.Hour) {
+			delete(d.last, key)
+			delete(d.suppressed, key)
+		}
+	}
+	dropped := d.dropped
+	if len(alerts) > d.opts.MaxAlerts {
+		dropped += len(alerts) - d.opts.MaxAlerts
+		alerts = alerts[:d.opts.MaxAlerts]
+	}
+	if len(alerts) == 0 && dropped == 0 {
+		return nil
+	}
+	d.dropped = 0
+	b := &Batch{Source: "opsgate", SentAt: now.UTC(), Alerts: alerts, Dropped: dropped}
+	b.Text = render(b)
+	return b
+}
+
+func render(b *Batch) string {
+	var s strings.Builder
+	for _, a := range b.Alerts {
+		object := a.Kind + " " + a.Name
+		if a.Namespace != "" {
+			object = a.Kind + " " + a.Namespace + "/" + a.Name
+		}
+		fmt.Fprintf(&s, "[%s] %s %s: %s", a.Severity, a.Cluster, object, a.Summary)
+		if a.Suppressed > 0 {
+			fmt.Fprintf(&s, " (+%d similar)", a.Suppressed)
+		}
+		s.WriteByte('\n')
+	}
+	if b.Dropped > 0 {
+		fmt.Fprintf(&s, "%d alerts dropped\n", b.Dropped)
+	}
+	return strings.TrimSuffix(s.String(), "\n")
+}
+
+// post sends b, retrying network errors and 5xx responses.
+func (d *Dispatcher) post(ctx context.Context, b *Batch) error {
+	body, err := json.Marshal(b)
+	if err != nil {
+		return err
+	}
+	var last error
+	for _, wait := range d.backoff {
+		if wait > 0 {
+			select {
+			case <-time.After(wait):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		retry, err := d.send(ctx, body)
+		if err == nil {
+			return nil
+		}
+		last = err
+		if !retry {
+			break
+		}
+	}
+	return last
+}
+
+func (d *Dispatcher) send(ctx context.Context, body []byte) (retry bool, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.opts.URL, bytes.NewReader(body))
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if len(d.opts.Secret) > 0 {
+		req.Header.Set("X-Opsgate-Signature", Sign(d.opts.Secret, body))
+	}
+	resp, err := d.opts.Client.Do(req)
+	if err != nil {
+		// The URL may carry a secret query key; report only the failure.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
+		return true, fmt.Errorf("post failed: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return resp.StatusCode >= 500, fmt.Errorf("post returned HTTP %d", resp.StatusCode)
+	}
+	return false, nil
+}
+
+// Sign returns the X-Opsgate-Signature value for a body:
+// "sha256=" + hex(HMAC-SHA256(secret, body)). Receivers check freshness
+// with the signed sent_at field.
+func Sign(secret []byte, body []byte) string {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}

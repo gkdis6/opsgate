@@ -29,7 +29,7 @@ func (p *provider) tags(ctx context.Context, _ tool.Caller, in tagInput) (string
 		if err != nil {
 			return nil
 		}
-		tags := extractTags(n.text)
+		tags := extractTags(maskedText(n.text))
 		if tag != "" {
 			if hasTag(tags, tag) {
 				notes = append(notes, e.name)

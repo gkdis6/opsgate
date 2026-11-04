@@ -258,11 +258,7 @@ func TestSearchRedactsSecretSnippets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			line := 1
-			if tc.name == "PEM" {
-				line = 2
-			}
-			want := fmt.Sprintf("note.md:%d: %s\ntotal matches: 1; files scanned: 1; stopped at limit: false\n", line, redact.Mask)
+			want := "total matches: 0; files scanned: 1; stopped at limit: false\n"
 			if out != want {
 				t.Fatalf("search = %q, want %q", out, want)
 			}

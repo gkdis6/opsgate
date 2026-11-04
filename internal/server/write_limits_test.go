@@ -66,6 +66,17 @@ func TestLargeNoteThroughMCP(t *testing.T) {
 				return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}, nil
 			}})
 			result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "note_create", Arguments: map[string]any{"path": "large", "content": content}})
+			if realApproval {
+				// The preview omits content and stdio has no web channel, so a
+				// human could not review this write through elicitation.
+				if err != nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "split it into smaller writes") {
+					t.Fatalf("create = %+v, error = %v", result, err)
+				}
+				if _, err := os.Stat(filepath.Join(cfg.Providers.Note.Vault, "large.md")); !os.IsNotExist(err) || prompts.Load() != 0 {
+					t.Fatalf("stat = %v, prompts = %d", err, prompts.Load())
+				}
+				return
+			}
 			if err != nil || result.IsError {
 				t.Fatalf("create = %+v, error = %v", result, err)
 			}
@@ -73,8 +84,8 @@ func TestLargeNoteThroughMCP(t *testing.T) {
 			if err != nil || string(data) != content {
 				t.Fatalf("note size = %d, error = %v", len(data), err)
 			}
-			if maxArgs.Load() <= int64(len(content)) || realApproval && prompts.Load() != 1 {
-				t.Fatalf("limit = %d, prompts = %d", maxArgs.Load(), prompts.Load())
+			if maxArgs.Load() <= int64(len(content)) {
+				t.Fatalf("limit = %d", maxArgs.Load())
 			}
 			f, err := os.Open(auditPath)
 			if err != nil {

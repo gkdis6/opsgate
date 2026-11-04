@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 )
 
@@ -14,12 +15,13 @@ func preview(d writePlan, before, after string) tool.Plan {
 	if d.action == "create" {
 		header = fmt.Sprintf("create note %s\ncurrent sha256: absent\n", d.name)
 	} else {
-		header = fmt.Sprintf("%s note %s\ncurrent sha256: %x; size: %d; modified: %s\n", d.action, d.name, d.hash[:8], d.size, d.mtime.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"))
+		currentHash := sha256.Sum256([]byte(redact.String(before)))
+		header = fmt.Sprintf("%s note %s\ncurrent sha256: %x; size: %d; modified: %s\n", d.action, d.name, currentHash[:8], d.size, d.mtime.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"))
 	}
 	if d.name != d.resolved {
 		header += "resolved target: " + d.resolved + "\n"
 	}
-	resultHash := sha256.Sum256([]byte(after))
+	resultHash := sha256.Sum256([]byte(redact.String(after)))
 	header += fmt.Sprintf("result sha256: %x\n", resultHash)
 	if d.action == "trash" {
 		header += "destination: " + d.destination + " (retain in local trash)\n"
@@ -31,12 +33,13 @@ func preview(d writePlan, before, after string) tool.Plan {
 	} else {
 		body = unifiedDiff(d.name, before, after)
 	}
-	return tool.Plan{Summary: header + truncatePreview(body, max(0, (8<<10)-len(header)-80)), Data: d}
+	body, truncated := truncatePreview(body, max(0, (8<<10)-len(header)-80))
+	return tool.Plan{Summary: header + body, FullReviewRequired: truncated, Data: d}
 }
 
-func truncatePreview(text string, maxBytes int) string {
+func truncatePreview(text string, maxBytes int) (string, bool) {
 	if len(text) <= maxBytes {
-		return text
+		return text, false
 	}
 	cut := maxBytes
 	for cut > 0 && !utf8.RuneStart(text[cut]) {
@@ -47,7 +50,7 @@ func truncatePreview(text string, maxBytes int) string {
 		cut = newline + 1
 	}
 	more := len(strings.Split(strings.TrimSuffix(text[cut:], "\n"), "\n"))
-	return text[:cut] + fmt.Sprintf("\n… %d more lines\n", more)
+	return text[:cut] + fmt.Sprintf("\n… %d more lines\n", more), true
 }
 
 func unifiedDiff(name, before, after string) string {
@@ -109,19 +112,27 @@ func unifiedDiff(name, before, after string) string {
 }
 
 func sectionEnd(text, wanted string) (int, error) {
-	lines := strings.SplitAfter(text, "\n")
+	// Parse masked text, retaining raw offsets for the insertion.
+	rawLines := strings.SplitAfter(text, "\n")
+	ranges := redact.Ranges(text)
+	lines := strings.SplitAfter(redact.Fragment(text, ranges, 0, len(text)), "\n")
 	offset, matchAt, matchLevel, matches := 0, -1, 0, 0
+	rangeAt := 0
 	end := len(text)
 	var fence byte
 	width := 0
 	front := len(lines) > 0 && strings.TrimSpace(lines[0]) == "---"
 	for i, line := range lines {
+		for rangeAt < len(ranges) && ranges[rangeAt].End <= offset {
+			rangeAt++
+		}
+		hidden := rangeAt < len(ranges) && ranges[rangeAt].Start < offset+len(rawLines[i])
 		trimmed := strings.TrimSpace(line)
 		if front {
 			if i > 0 && (trimmed == "---" || trimmed == "...") {
 				front = false
 			}
-			offset += len(line)
+			offset += len(rawLines[i])
 			continue
 		}
 		left := strings.TrimLeft(line, " ")
@@ -138,7 +149,7 @@ func sectionEnd(text, wanted string) (int, error) {
 				} else if fence == left[0] && n >= width && strings.TrimSpace(left[n:]) == "" {
 					fence = 0
 				}
-				offset += len(line)
+				offset += len(rawLines[i])
 				continue
 			}
 		}
@@ -156,7 +167,7 @@ func sectionEnd(text, wanted string) (int, error) {
 				if matchAt >= 0 && end == len(text) && level <= matchLevel {
 					end = offset
 				}
-				if heading == wanted {
+				if heading == wanted && !hidden {
 					matches++
 					if matches == 1 {
 						matchAt = offset
@@ -165,7 +176,7 @@ func sectionEnd(text, wanted string) (int, error) {
 				}
 			}
 		}
-		offset += len(line)
+		offset += len(rawLines[i])
 	}
 	if matches == 0 {
 		return 0, fmt.Errorf("heading absent")

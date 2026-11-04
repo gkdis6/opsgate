@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/gkdis6/opsgate/internal/redact"
 )
 
 var errMissing = fs.ErrNotExist
@@ -21,6 +23,9 @@ func (p *provider) validPath(name string, rootOK bool) error {
 	}
 	if name == "" || len(name) > 1024 || !utf8.ValidString(name) || strings.HasPrefix(name, "/") || strings.Contains(name, "\\") || strings.ContainsFunc(name, unicode.IsControl) {
 		return fmt.Errorf("invalid vault-relative path")
+	}
+	if redact.String(name) != name {
+		return errMissing
 	}
 	for _, segment := range strings.Split(name, "/") {
 		if segment == "" || segment == ".." {

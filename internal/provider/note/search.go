@@ -50,7 +50,8 @@ func (p *provider) search(ctx context.Context, _ tool.Caller, in searchInput) (s
 			return nil
 		}
 		scanned++
-		if tag != "" && !hasTag(extractTags(n.text), tag) {
+		text := maskedText(n.text)
+		if tag != "" && !hasTag(extractTags(text), tag) {
 			return nil
 		}
 		name := e.name
@@ -63,9 +64,8 @@ func (p *provider) search(ctx context.Context, _ tool.Caller, in searchInput) (s
 				return errStopWalk
 			}
 		}
-		ranges := redact.Ranges(n.text)
 		lineEnd := -1
-		for i, line := range noteLines(n.text) {
+		for i, line := range noteLines(text) {
 			lineStart := lineEnd + 1
 			lineEnd = lineStart + len(line)
 			if err := ctx.Err(); err != nil {
@@ -82,7 +82,7 @@ func (p *provider) search(ctx context.Context, _ tool.Caller, in searchInput) (s
 				}
 				center := utf8.RuneCountInString(folded[:cursor+at])
 				hits++
-				fmt.Fprintf(&out, "%s:%d: %s\n", e.name, i+1, snippetRange(n.text, ranges, lineStart, lineEnd, center))
+				fmt.Fprintf(&out, "%s:%d: %s\n", e.name, i+1, snippetRange(text, nil, lineStart, lineEnd, center))
 				if hits >= max {
 					return errStopWalk
 				}

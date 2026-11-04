@@ -108,7 +108,7 @@ func (p *provider) links(ctx context.Context, _ tool.Caller, in pathInput) (stri
 	var out strings.Builder
 	fmt.Fprintln(&out, "outgoing:")
 	emitted := 0
-	for _, l := range extractLinks(n.text) {
+	for _, l := range extractLinks(maskedText(n.text)) {
 		if emitted >= 1000 {
 			fmt.Fprintln(&out, "truncated: outgoing link limit 1000")
 			break
@@ -139,7 +139,7 @@ func (p *provider) links(ctx context.Context, _ tool.Caller, in pathInput) (stri
 		if err != nil {
 			continue
 		}
-		for _, l := range extractLinks(n.text) {
+		for _, l := range extractLinks(maskedText(n.text)) {
 			if p.resolveLink(other, l, notes, basenames) == name {
 				fmt.Fprintln(&out, other)
 				backlinks++

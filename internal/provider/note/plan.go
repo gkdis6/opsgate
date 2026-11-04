@@ -9,6 +9,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 )
 
@@ -21,6 +22,9 @@ func (p *provider) planCreate(ctx context.Context, _ tool.Caller, in createInput
 	}
 	name, err := p.notePath(in.Path)
 	if err != nil {
+		if errors.Is(err, errMissing) {
+			return tool.Plan{}, fmt.Errorf("cannot create note at a hidden, excluded or masked path: %w", err)
+		}
 		return tool.Plan{}, err
 	}
 	if len(in.Content) > maxContentBytes || len(in.Content) > p.cfg.MaxNoteBytes {
@@ -28,6 +32,9 @@ func (p *provider) planCreate(ctx context.Context, _ tool.Caller, in createInput
 	}
 	resolved, err := p.resolve(name, true)
 	if err != nil {
+		if errors.Is(err, errMissing) {
+			return tool.Plan{}, fmt.Errorf("cannot create note at a hidden, excluded or masked path: %w", err)
+		}
 		return tool.Plan{}, err
 	}
 	if _, err := p.root.Lstat(name); err == nil {
@@ -108,7 +115,8 @@ func (p *provider) planReplace(ctx context.Context, _ tool.Caller, in replaceInp
 	if err != nil {
 		return tool.Plan{}, err
 	}
-	found := strings.Count(before, in.OldText)
+	matches := replacementMatches(before, in.OldText)
+	found := len(matches)
 	if found != count {
 		return tool.Plan{}, fmt.Errorf("replace count mismatch: expected %d, found %d", count, found)
 	}
@@ -118,11 +126,41 @@ func (p *provider) planReplace(ctx context.Context, _ tool.Caller, in replaceInp
 	if size > int64(p.cfg.MaxNoteBytes)+2 {
 		return tool.Plan{}, fmt.Errorf("result exceeds max_note_bytes")
 	}
-	d.text = preserveEnding(strings.ReplaceAll(before, in.OldText, in.NewText), before)
+	var out strings.Builder
+	cursor := 0
+	for _, at := range matches {
+		out.WriteString(before[cursor:at])
+		out.WriteString(in.NewText)
+		cursor = at + len(in.OldText)
+	}
+	out.WriteString(before[cursor:])
+	d.text = preserveEnding(out.String(), before)
 	if len(d.text) > p.cfg.MaxNoteBytes {
 		return tool.Plan{}, fmt.Errorf("result exceeds max_note_bytes")
 	}
 	return preview(d, before, d.text), nil
+}
+
+// replacementMatches excludes matches touching secret ranges.
+func replacementMatches(text, old string) []int {
+	var matches []int
+	find := func(start, end int) {
+		for start < end {
+			at := strings.Index(text[start:end], old)
+			if at < 0 {
+				break
+			}
+			matches = append(matches, start+at)
+			start += at + len(old)
+		}
+	}
+	start := 0
+	for _, r := range redact.Ranges(text) {
+		find(start, r.Start)
+		start = r.End
+	}
+	find(start, len(text))
+	return matches
 }
 
 func (p *provider) planTrash(ctx context.Context, _ tool.Caller, in trashInput) (tool.Plan, error) {

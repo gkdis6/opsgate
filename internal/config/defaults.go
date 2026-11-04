@@ -1,0 +1,81 @@
+package config
+
+import (
+	"fmt"
+	"time"
+)
+
+// Default returns the configuration used when no file is given.
+func Default() Config {
+	return Config{
+		Server: Server{
+			Name:           "opsgate",
+			MaxOutputBytes: 64 << 10,
+			ToolTimeout:    30 * time.Second,
+		},
+		Stdio: Stdio{
+			User:   "local",
+			Scopes: []string{ScopeRead},
+		},
+		HTTP: HTTP{
+			Listen: "127.0.0.1:8787",
+		},
+		Auth: Auth{
+			Builtin: BuiltinAuth{
+				AccessTokenTTL:  time.Hour,
+				RefreshTokenTTL: 30 * 24 * time.Hour,
+				MaxClients:      100,
+			},
+			External: ExternalAuth{
+				UserClaim: "sub",
+			},
+		},
+		Approval: Approval{
+			TTL: 10 * time.Minute,
+		},
+		Providers: Providers{
+			Host: Host{
+				DiskPaths:   []string{"/"},
+				MaxLogLines: 500,
+			},
+			Kubernetes: Kubernetes{
+				KubernetesCluster: KubernetesCluster{
+					MaxLogLines: 500,
+					MaxReplicas: 10,
+				},
+			},
+			Note: Note{
+				MaxNoteBytes: 1 << 20,
+			},
+		},
+		Watch: Watch{
+			Batch:     30 * time.Second,
+			Cooldown:  15 * time.Minute,
+			MaxAlerts: 50,
+		},
+	}
+}
+
+// DefaultFor returns the defaults of a deployment mode. Both modes serve
+// HTTP with builtin passkey sign-in and keep its state in /var/lib/opsgate.
+func DefaultFor(mode string) (Config, error) {
+	c := Default()
+	c.Mode = mode
+	switch mode {
+	case "":
+		return c, nil
+	case ModeHost:
+		c.Server.AuditLog = "/var/log/opsgate/audit.jsonl"
+		c.Providers.Host.Enabled = true
+	case ModeKubernetes:
+		// Audit events go to stderr for the cluster's log collection.
+		c.HTTP.Listen = "0.0.0.0:8787"
+		c.Providers.Kubernetes.Enabled = true
+	default:
+		return c, fmt.Errorf("mode must be %s or %s, got %q", ModeHost, ModeKubernetes, mode)
+	}
+	c.Auth.Mode = AuthBuiltin
+	c.Auth.Builtin.StateFile = "/var/lib/opsgate/oauth.json"
+	c.Auth.Builtin.Upstream.Provider = "passkey"
+	return c, nil
+}

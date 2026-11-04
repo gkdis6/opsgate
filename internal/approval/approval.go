@@ -47,6 +47,7 @@ type Manager struct {
 	window      time.Duration
 	windowTools []string
 	grants      map[grantKey]time.Time
+	direct      func(name string) *tool.Direct
 }
 
 const splitWriteMessage = "change is too large to review in the client; split it into smaller writes"
@@ -62,6 +63,9 @@ type pending struct {
 	decision                                        string
 	used                                            bool
 	window                                          time.Duration
+	// run applies a direct write once approved; no MCP client can claim it.
+	run    func(context.Context) (string, error)
+	result string
 }
 
 // New returns a Manager. browser may be nil, which disables web approval.
@@ -144,7 +148,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	if r.ApprovalID != "" {
 		defer m.mu.Unlock()
 		p := m.approvals[r.ApprovalID]
-		if p == nil || p.user != r.Caller.User || p.transport != r.Caller.Transport || p.tool != r.Tool || p.hash != hash ||
+		if p == nil || p.run != nil || p.user != r.Caller.User || p.transport != r.Caller.Transport || p.tool != r.Tool || p.hash != hash ||
 			p.summary != r.Summary || p.target != r.Target || p.noWindow != r.NoWindow || p.fullReviewRequired != r.FullReviewRequired || p.used {
 			return "web", tool.Denied("invalid or expired approval")
 		}

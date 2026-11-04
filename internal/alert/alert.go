@@ -51,6 +51,8 @@ type Workload struct {
 	Kind      string `json:"kind"`
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
+	// URL opens the approval page for this restart, if the watcher knows it.
+	URL string `json:"url,omitempty"`
 }
 
 // Batch is one delivery, also the JSON body of a webhook POST.
@@ -252,6 +254,9 @@ func renderAlerts(b *Batch, advice bool) string {
 		}
 		if advice && a.Restart != nil {
 			fmt.Fprintf(&s, "  if needed, ask to restart: %s %s/%s\n", a.Restart.Kind, a.Restart.Namespace, a.Restart.Name)
+			if a.Restart.URL != "" {
+				fmt.Fprintf(&s, "  or approve it here: %s\n", a.Restart.URL)
+			}
 		}
 	}
 	if b.Dropped > 0 {

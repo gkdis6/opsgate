@@ -206,6 +206,7 @@ OAuth GET 경로는 요청 본문을 거부하며, POST 본문 읽기에는 10�
 | 키 | 기본값 | 의미 |
 | --- | --- | --- |
 | `webhook_url` | 없음 | https이거나 루프백 주소로 가는 http. 자격 증명과 프래그먼트는 쓸 수 없습니다 |
+| `approval_url` | 없음 | opsgate 서버의 공개 https 오리진. 설정하면 재시작 제안에 승인 링크를 붙입니다 |
 | `allow_private_http` | `false` | 사설 네트워크(Service 이름, 사설 IP)로 가는 http도 허용합니다. 연결은 사설 주소에 닿아야 합니다 |
 | `secret_file` | 없음 | 선택. `X-Opsgate-Signature` HMAC 키(16바이트 이상) |
 | `clusters` | 전체 | watch할 클러스터 이름 |

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -620,5 +621,16 @@ func TestBrowserPagesEscaping(t *testing.T) {
 				t.Fatal("security headers changed")
 			}
 		})
+	}
+}
+
+func TestAccessReturnsConfiguredRights(t *testing.T) {
+	s := &Server{cfg: config.BuiltinAuth{Users: []config.User{{Subject: "alice", Scopes: []string{config.ScopeRead, config.ScopeWrite, "made:up"}, Tools: []string{"k8s_*"}}}}}
+	scopes, tools, ok := s.Access("alice")
+	if !ok || !slices.Equal(scopes, []string{config.ScopeRead, config.ScopeWrite}) || !slices.Equal(tools, []string{"k8s_*"}) {
+		t.Fatalf("access = %v %v %v", scopes, tools, ok)
+	}
+	if _, _, ok := s.Access("mallory"); ok {
+		t.Fatal("unknown user has access")
 	}
 }

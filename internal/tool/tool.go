@@ -44,6 +44,8 @@ type Env struct {
 	Confirm Confirmer
 	// Policy filters tools during registration. Nil allows every tool.
 	Policy *Policy
+	// direct holds writes a person may run from a browser approval page.
+	direct map[string]*Direct
 }
 
 // Spec describes a tool. Scope defaults to ops:read.

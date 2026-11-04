@@ -84,7 +84,7 @@ func writeKind(kind string, daemon bool) (resource, error) {
 
 func (r *registry) registerWrites(s *mcp.Server, env *tool.Env, note string) {
 	if r.any(func(p *provider) bool { return len(p.cfg.RolloutRestart) > 0 }) {
-		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_rollout_restart", Title: "Restart Kubernetes workload", Description: "Select cluster and restart an allowlisted deployment, statefulset or daemonset by updating its pod template after human approval." + note}, clusterWrite(r, (*provider).planRollout, (*provider).applyRollout))
+		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_rollout_restart", Title: "Restart Kubernetes workload", Description: "Select cluster and restart an allowlisted deployment, statefulset or daemonset by updating its pod template after human approval." + note, Direct: true}, clusterWrite(r, (*provider).planRollout, (*provider).applyRollout))
 	}
 	if r.any(func(p *provider) bool { return len(p.cfg.Scale) > 0 }) {
 		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_scale", Title: "Scale Kubernetes workload", Description: "Select cluster and scale an allowlisted deployment or statefulset within max_replicas after human approval." + note, Idempotent: true}, clusterWrite(r, (*provider).planScale, (*provider).applyScale))

@@ -200,6 +200,7 @@ The `watch` section is read only by `opsgate watch`, a separate process; the MCP
 | --- | --- | --- |
 | `webhook_url` | empty | https, or http to a loopback address; no credentials or fragment |
 | `allow_private_http` | `false` | Also allow http to private receivers (Service names, private IPs); connections must reach private addresses |
+| `approval_url` | empty | Public https origin of the opsgate server; adds an approval link to restart suggestions |
 | `secret_file` | empty | Optional key (at least 16 bytes) for the `X-Opsgate-Signature` HMAC |
 | `clusters` | all | Configured cluster names to watch |
 | `problems_only` | `false` | Produce warnings only for every channel |

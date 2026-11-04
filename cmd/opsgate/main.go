@@ -126,6 +126,7 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 	}
 	am := approval.New(cfg.Approval, cfg.HTTP.PublicURL, browser, env.Audit)
 	env.Confirm = am
+	am.SetDirect(env.Direct)
 	o.Routes = append(o.Routes, am.Routes)
 
 	s, err := server.New(cfg, env)
@@ -216,6 +217,7 @@ func (c *application) runWatch(args []string) error {
 		}()
 	}
 	emit := func(a alert.Alert) {
+		addApprovalLink(&a, w.ApprovalURL)
 		for _, d := range dispatchers {
 			d.Emit(a)
 		}
@@ -225,6 +227,13 @@ func (c *application) runWatch(args []string) error {
 	cancelDeliveries()
 	deliveries.Wait()
 	return err
+}
+
+// addApprovalLink lets a restart suggestion open the server's approval page.
+func addApprovalLink(a *alert.Alert, base string) {
+	if base != "" && a.Restart != nil {
+		a.Restart.URL = approval.RestartURL(base, a.Cluster, a.Restart.Kind, a.Restart.Namespace, a.Restart.Name)
+	}
 }
 
 // watchDispatchers loads credentials before any watchers start.

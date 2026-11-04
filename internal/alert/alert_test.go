@@ -208,4 +208,8 @@ func TestRenderIncludesAdvice(t *testing.T) {
 	if subject := emailSubject(b); strings.Contains(subject, "hint") || strings.Contains(subject, "restart:") {
 		t.Fatalf("subject carries advice: %q", subject)
 	}
+	b.Alerts[0].Restart.URL = "https://ops.example/approve/restart/main/deployment/apps/web"
+	if got := render(b); got != want+"\n  or approve it here: "+b.Alerts[0].Restart.URL {
+		t.Fatalf("text with link = %q", got)
+	}
 }

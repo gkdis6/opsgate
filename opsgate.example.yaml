@@ -155,6 +155,7 @@ providers:
 #     to: [me@example.com]
 #     batch: 5m                      # default; 1m–1h
 #     problems_only: false           # warnings only for email when true
+#   approval_url: https://mcp.example.com   # optional; links restart suggestions to approval
 #   secret_file: /etc/opsgate/watch-secret  # optional HMAC key
 #   problems_only: false
 #   batch: 30s

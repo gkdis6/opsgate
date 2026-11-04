@@ -116,6 +116,18 @@ func (s *Server) VerifyWithTools(ctx context.Context, token string, r *http.Requ
 	info.Extra["tools"] = slices.Clone(u.Tools)
 	return info, nil
 }
+
+// Access returns what a configured user may do when acting from a browser.
+func (s *Server) Access(subject string) (scopes, tools []string, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.configuredUser(subject)
+	if !ok {
+		return nil, nil, false
+	}
+	return intersection(u.Scopes, config.Scopes), slices.Clone(u.Tools), true
+}
+
 func pkceSyntax(v string) bool {
 	if len(v) < 43 || len(v) > 128 {
 		return false

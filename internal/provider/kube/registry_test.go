@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -287,6 +288,48 @@ func TestEveryToolRequiresCluster(t *testing.T) {
 					}
 				}
 			})
+		}
+	}
+}
+
+func TestOnlyRolloutRestartIsDirect(t *testing.T) {
+	cfg, clients := clusterFixture()
+	env := &tool.Env{Timeout: 5 * time.Second, MaxOutputBytes: 65536}
+	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
+	if err := register(s, env, cfg, clients); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"k8s_scale", "k8s_delete_pod"} {
+		if env.Direct(name) != nil {
+			t.Fatalf("%s can run without a client", name)
+		}
+	}
+	d := env.Direct("k8s_rollout_restart")
+	if d == nil {
+		t.Fatal("k8s_rollout_restart is not direct")
+	}
+	ctx := context.Background()
+	caller := tool.Caller{User: "a", Transport: "web", Scopes: config.Scopes}
+	raw := json.RawMessage(`{"cluster":"kind","kind":"deployment","namespace":"apps","name":"web"}`)
+	_, shown, err := d.Plan(ctx, caller, raw)
+	if err != nil || !strings.Contains(shown, "Rollout restart deployment apps/web") {
+		t.Fatalf("plan: %q %v", shown, err)
+	}
+	client := clients["kind"].(*fake.Clientset)
+	if _, err := d.Run(ctx, caller, raw, shown); err != nil {
+		t.Fatal(err)
+	}
+	dep, err := client.AppsV1().Deployments("apps").Get(ctx, "web", metav1.GetOptions{})
+	if err != nil || dep.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] == "" {
+		t.Fatalf("restart not applied: %+v %v", dep.Spec.Template.Annotations, err)
+	}
+	for name, target := range map[string]string{
+		"not allowlisted":      `{"cluster":"prod","kind":"deployment","namespace":"apps","name":"web"}`,
+		"namespace not listed": `{"cluster":"kind","kind":"deployment","namespace":"other","name":"web"}`,
+		"unsupported kind":     `{"cluster":"kind","kind":"pod","namespace":"apps","name":"web"}`,
+	} {
+		if _, _, err := d.Plan(ctx, caller, json.RawMessage(target)); err == nil {
+			t.Fatalf("%s: plan succeeded", name)
 		}
 	}
 }

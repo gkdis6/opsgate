@@ -134,6 +134,17 @@ The watcher only suggests. It has no write permission and nothing acts on the
 suggestion. A person asks an MCP client for the restart, and `k8s_rollout_restart`
 checks the allowlist again and requires approval as usual.
 
+The restart suggestion appears on the first alert sent after those conditions
+hold. The cooldown holds back repeats, so a crash-looping pod usually shows it
+about one cooldown after its first alert.
+
+With `watch.approval_url`, `restart.url` also links to the server's approval
+page, so a chat button can open it. The link holds no secret. Opening it needs
+browser sign-in, the same scope and tool rules as the MCP path, and a fresh plan.
+Only pressing Approve restarts the workload, once, and only if the plan is
+unchanged. An approval window never covers this path. The server must use web
+approval with built-in sign-in. Other writes cannot run this way.
+
 ## Webhook payload
 
 ```json

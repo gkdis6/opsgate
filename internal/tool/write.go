@@ -38,6 +38,9 @@ type WriteSpec struct {
 	// MaxArgBytes caps the raw JSON arguments (default 16 KiB). Raise it only
 	// for tools that carry document content.
 	MaxArgBytes int
+	// Direct also lets a person run this tool from a browser approval page,
+	// without an MCP client. See Direct. Keep it to small, reversible writes.
+	Direct bool
 }
 
 // Plan is the side-effect-free preview of a write. Summary is shown to the
@@ -125,6 +128,9 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 		maxArgs = maxArgumentBytes
 	}
 	maxSummary := (ConfirmRequest{MaxArgBytes: maxArgs}).SummaryLimit()
+	if spec.Direct {
+		env.addDirect(spec.Name, newDirect(env, spec, scope, maxArgs, maxSummary, h))
+	}
 	t := &mcp.Tool{
 		Name: spec.Name, Title: spec.Title, Description: spec.Description,
 		Annotations: &mcp.ToolAnnotations{
@@ -153,40 +159,10 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 			if !ok {
 				return "", Denied("unauthenticated")
 			}
-			if !c.allowsTool(spec.Name) {
-				return "", Denied("tool not allowed for this user")
-			}
-			if !c.Has(scope) {
-				return "", Denied("missing scope %s", scope)
-			}
-			if argsErr != nil {
-				return "", argsErr
-			}
-			if h.Plan == nil || h.Apply == nil {
-				return "", Denied("write handler unavailable")
-			}
-			planCtx, cancel := context.WithTimeout(ctx, env.Timeout)
-			plan, err := h.Plan(planCtx, c, in)
-			if err == nil {
-				err = planCtx.Err()
-			}
-			cancel()
-			if len(plan.Summary) > maxSummary {
-				return "", Denied("approval summary exceeds %d KiB limit", maxSummary>>10)
-			}
-			ev.Plan = truncate(redact.String(plan.Summary), maxSummary)
+			plan, shown, err := planWrite(ctx, env, spec.Name, scope, maxSummary, h, c, in, args, argsHash, argsErr)
+			ev.Plan = shown
 			if err != nil {
 				return "", err
-			}
-			if ev.Plan != plan.Summary || len(plan.Target) > 256 || redact.String(plan.Target) != plan.Target {
-				return "", Denied("target cannot be shown unambiguously")
-			}
-			if plan.FullReviewRequired {
-				display, err := json.Marshal(args)
-				// Compare with the raw canonical arguments, excluding approval_id.
-				if err != nil || sha256.Sum256(display) != argsHash {
-					return "", Denied("arguments cannot be shown unambiguously; split the change or remove the masked value")
-				}
 			}
 			if env.Confirm == nil {
 				return "", Denied("no human confirmation channel is available")
@@ -240,4 +216,45 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 		env.Audit.Record(ev)
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil
 	})
+}
+
+// planWrite makes the checks every write needs before anyone is asked to
+// approve it, then returns the plan and its displayable summary.
+func planWrite[In WriteInput](ctx context.Context, env *Env, name, scope string, maxSummary int, h WriteHandler[In], c Caller, in In, args map[string]any, argsHash [sha256.Size]byte, argsErr error) (Plan, string, error) {
+	if !c.allowsTool(name) {
+		return Plan{}, "", Denied("tool not allowed for this user")
+	}
+	if !c.Has(scope) {
+		return Plan{}, "", Denied("missing scope %s", scope)
+	}
+	if argsErr != nil {
+		return Plan{}, "", argsErr
+	}
+	if h.Plan == nil || h.Apply == nil {
+		return Plan{}, "", Denied("write handler unavailable")
+	}
+	planCtx, cancel := context.WithTimeout(ctx, env.Timeout)
+	plan, err := h.Plan(planCtx, c, in)
+	if err == nil {
+		err = planCtx.Err()
+	}
+	cancel()
+	if len(plan.Summary) > maxSummary {
+		return Plan{}, "", Denied("approval summary exceeds %d KiB limit", maxSummary>>10)
+	}
+	shown := truncate(redact.String(plan.Summary), maxSummary)
+	if err != nil {
+		return Plan{}, shown, err
+	}
+	if shown != plan.Summary || len(plan.Target) > 256 || redact.String(plan.Target) != plan.Target {
+		return Plan{}, shown, Denied("target cannot be shown unambiguously")
+	}
+	if plan.FullReviewRequired {
+		display, err := json.Marshal(args)
+		// Compare with the raw canonical arguments, excluding approval_id.
+		if err != nil || sha256.Sum256(display) != argsHash {
+			return Plan{}, shown, Denied("arguments cannot be shown unambiguously; split the change or remove the masked value")
+		}
+	}
+	return plan, shown, nil
 }

@@ -2,6 +2,7 @@ package approval
 
 import (
 	"bytes"
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
@@ -36,6 +37,9 @@ func (m *Manager) Routes(mux *http.ServeMux) {
 			m.browser.RequireUser(m.page).ServeHTTP(w, r)
 		}))))
 	}
+	mux.Handle("GET "+restartPattern, securityHeaders(protect.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		m.browser.RequireUser(m.restartRequest).ServeHTTP(w, r)
+	}))))
 }
 
 func securityHeaders(next http.Handler) http.Handler {
@@ -125,12 +129,24 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 		view.PageTitle = view.Status
 	}
 	argsJSON := p.args
+	var run func(context.Context) (string, error)
+	if decisionEvent != nil && p.decision == "approved" && p.run != nil {
+		run = p.run
+	}
+	view.Direct = p.run != nil
+	view.Result = p.result
 	m.mu.Unlock()
 	if grantEvent != nil {
 		m.audit.Record(*grantEvent)
 	}
 	if decisionEvent != nil {
 		m.audit.Record(*decisionEvent)
+	}
+	if run != nil {
+		view.Result = m.runDirect(r.Context(), p, run)
+	}
+	if view.Direct && strings.HasPrefix(view.Result, notApplied) {
+		view.Status, view.PageTitle = "Not applied", "Not applied"
 	}
 	var args bytes.Buffer
 	_ = json.Indent(&args, argsJSON, "", "  ")
@@ -162,6 +178,9 @@ func unavailablePage(w http.ResponseWriter) {
 
 type approvalView struct {
 	PageTitle, Tool, Args, User, Transport, Expires, CSRF, Status, Window string
+	// Direct means approving runs the write here, so Result replaces the chat.
+	Direct bool
+	Result string
 	// FullReview opens the arguments because the summary omits content.
 	FullReview     bool
 	Target         string
@@ -197,8 +216,9 @@ var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
 {{if .NoWindow}}<p class="note">This target requires approval for every call.</p>{{end}}
 <div class="target plan" aria-label="Target and plan">{{range .Lines}}<span class="plan-line {{.Class}}">{{if .Text}}{{.Text}}{{else}} {{end}}</span>{{end}}</div>
 {{if .Status}}
+{{if .Direct}}{{if .Result}}<p>{{.Result}}</p>{{end}}{{else}}
 {{if .Used}}<p class="muted">Approval already used.</p>{{end}}
-<p>Return to your chat — the assistant will continue when you ask it to retry.</p>
+<p>Return to your chat — the assistant will continue when you ask it to retry.</p>{{end}}
 {{else}}
 <dl><dt>Requester</dt><dd>{{.User}} via {{.Transport}}</dd><dt>Expires</dt><dd>{{.Expires}}</dd></dl>
 <details{{if .FullReview}} open{{end}}><summary>Arguments</summary><pre>{{.Args}}</pre></details>

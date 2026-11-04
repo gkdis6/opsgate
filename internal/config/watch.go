@@ -25,6 +25,10 @@ type Watch struct {
 	// Every connection must then reach a private or loopback address after
 	// DNS resolution, and alerts cross that network unencrypted.
 	AllowPrivateHTTP bool `yaml:"allow_private_http"`
+	// ApprovalURL is the public https origin of the opsgate server. When set,
+	// restart suggestions link to its approval page. The link holds no secret:
+	// opening it still needs sign-in and approval.
+	ApprovalURL string `yaml:"approval_url"`
 	// SecretFile optionally holds a key used to sign each POST with
 	// HMAC-SHA256 (X-Opsgate-Signature).
 	SecretFile string `yaml:"secret_file"`
@@ -107,6 +111,13 @@ func (w Watch) validate(k Kubernetes) error {
 		if err != nil || len(w.WebhookURL) > 4096 || u.Hostname() == "" || u.User != nil || u.Opaque != "" || strings.Contains(w.WebhookURL, "#") ||
 			(u.Scheme != "https" && !(u.Scheme == "http" && (isLoopback(strings.ToLower(u.Hostname())) || w.AllowPrivateHTTP && privateHost(u.Hostname())))) {
 			return fmt.Errorf("watch.webhook_url must use https or loopback http (or private http with allow_private_http) without credentials or fragments")
+		}
+	}
+	if w.ApprovalURL != "" {
+		u, err := url.Parse(w.ApprovalURL)
+		if err != nil || len(w.ApprovalURL) > 2048 || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Opaque != "" ||
+			strings.Trim(u.Path, "/") != "" || u.RawQuery != "" || strings.Contains(w.ApprovalURL, "#") {
+			return fmt.Errorf("watch.approval_url must be an https origin without credentials, path, query or fragment")
 		}
 	}
 	if w.Batch < time.Second || w.Batch > 10*time.Minute {

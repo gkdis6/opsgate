@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	appsv1 "k8s.io/api/apps/v1"
@@ -152,6 +153,50 @@ func TestEnvFieldsAndWorkloads(t *testing.T) {
 				envContains(t, out, "FIELD_0 = <field metadata.name>", "FIELD_5 = <field status.podIP>", "FIELD_7 = <field metadata.labels['app']>")
 			}
 		})
+	}
+}
+
+func TestEnvMetadataKeyRedaction(t *testing.T) {
+	for _, metadata := range []string{"annotations", "labels"} {
+		for _, tc := range []struct {
+			key    string
+			hidden bool
+		}{
+			{"password", true},
+			{"DB_PASSWORD", true},
+			{"dbpassword", true},
+			{"example.com/token", true},
+			{"session_id", true},
+			{"COOKIE", true},
+			{"app", false},
+			{"password_file", false},
+			{"monkey", false},
+		} {
+			t.Run(metadata+"/"+tc.key, func(t *testing.T) {
+				pod := envPod()
+				values := pod.Annotations
+				if metadata == "labels" {
+					values = pod.Labels
+				}
+				values[tc.key] = "hunter2"
+				field := "metadata." + metadata + "['" + tc.key + "']"
+				pod.Spec.Containers[0].Env = []corev1.EnvVar{
+					{Name: "CONFIG", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: field}}},
+					{Name: "COPY", Value: "prefix-$(CONFIG)-suffix"},
+					{Name: "LATER", Value: "$(COPY)"},
+				}
+				p := testProvider(pod)
+				out := envRead(t, p, envInput{Namespace: "public", Name: "web"})
+				want := "hunter2"
+				if tc.hidden {
+					want = redact.Mask
+					if strings.Contains(out, "hunter2") {
+						t.Errorf("metadata value leaked: %s", out)
+					}
+				}
+				envContains(t, out, "CONFIG = "+want+" (field "+field+")", "COPY = prefix-"+want+"-suffix", "LATER = prefix-"+want+"-suffix")
+			})
+		}
 	}
 }
 

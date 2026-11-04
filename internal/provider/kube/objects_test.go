@@ -30,6 +30,7 @@ func TestListPolicyAndValidation(t *testing.T) {
 		{"deny", listInput{Kind: "pods", Namespace: "private"}, "", true},
 		{"invalid namespace", listInput{Kind: "pods", Namespace: "../x"}, "invalid name", false},
 		{"selector", listInput{Kind: "po", LabelSelector: "x in ("}, "invalid label_selector", false},
+		{"invalid sensitive selector", listInput{Kind: "po", LabelSelector: "password in ("}, "invalid label_selector", false},
 		{"secret", listInput{Kind: "secrets"}, "supported kinds:", false},
 		{"cluster namespace", listInput{Kind: "no", Namespace: "public"}, "cluster scoped", false},
 	} {
@@ -52,6 +53,73 @@ func TestListPolicyAndValidation(t *testing.T) {
 				t.Fatal(text, err)
 			}
 		})
+	}
+}
+
+func TestListSensitiveSelectors(t *testing.T) {
+	for _, key := range []string{"password", "DB_PASSWORD", "dbpassword", "example.com/token", "session_id", "COOKIE"} {
+		for _, selector := range []string{
+			key + "=hunter2",
+			key + "=wrongguess",
+			key + "==hunter2",
+			key + "!=hunter2",
+			key + " in (hunter2,wrongguess)",
+			key + " notin (hunter2,wrongguess)",
+			key,
+			"!" + key,
+			"app=web," + key + "=hunter2",
+		} {
+			t.Run(selector, func(t *testing.T) {
+				p := testProvider(&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "visible", Namespace: "public", Labels: map[string]string{key: "hunter2", "app": "web"}}})
+				out, err := p.list(context.Background(), tool.Caller{}, listInput{Kind: "pods", LabelSelector: selector})
+				if !errors.Is(err, tool.ErrDenied) || out != "" {
+					t.Fatalf("selector was not denied: %q, %v", out, err)
+				}
+				if !strings.Contains(err.Error(), "sensitive key") || !strings.Contains(err.Error(), key) || strings.Contains(err.Error(), "hunter2") || strings.Contains(err.Error(), "wrongguess") {
+					t.Fatalf("denial must name the key rule without values: %v", err)
+				}
+				if len(p.client.(*fake.Clientset).Actions()) != 0 {
+					t.Fatal("denied selector reached cluster")
+				}
+			})
+		}
+	}
+}
+
+func TestListOrdinarySelectors(t *testing.T) {
+	for _, key := range []string{"app", "password_file", "monkey"} {
+		for _, tc := range []struct {
+			selector string
+			match    bool
+		}{
+			{"", true},
+			{key + "=web", true},
+			{key + "==web", true},
+			{key + "=other", false},
+			{key + "!=web", false},
+			{key + " in (web,other)", true},
+			{key + " notin (web,other)", false},
+			{key, true},
+			{"!" + key, false},
+		} {
+			t.Run(tc.selector, func(t *testing.T) {
+				p := testProvider(&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "visible", Namespace: "public", Labels: map[string]string{key: "web"}}})
+				client := p.client.(*fake.Clientset)
+				client.PrependReactor("list", "pods", func(action ktesting.Action) (bool, runtime.Object, error) {
+					if got := action.(ktesting.ListActionImpl).GetListOptions().LabelSelector; got != tc.selector {
+						t.Errorf("selector changed to %q", got)
+					}
+					return false, nil, nil
+				})
+				out, err := p.list(context.Background(), tool.Caller{}, listInput{Kind: "pods", LabelSelector: tc.selector})
+				if err != nil || strings.Contains(out, "visible") != tc.match {
+					t.Fatal(out, err)
+				}
+				if len(client.Actions()) != 1 {
+					t.Fatal(client.Actions())
+				}
+			})
+		}
 	}
 }
 

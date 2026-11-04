@@ -128,8 +128,15 @@ func (p *provider) list(ctx context.Context, _ tool.Caller, in listInput) (strin
 	if err != nil {
 		return "", err
 	}
-	if _, err = labels.Parse(in.LabelSelector); err != nil {
+	selector, err := labels.Parse(in.LabelSelector)
+	if err != nil {
 		return "", fmt.Errorf("invalid label_selector: %w", err)
+	}
+	requirements, _ := selector.Requirements()
+	for _, requirement := range requirements {
+		if redact.SensitiveKey(requirement.Key()) {
+			return "", tool.Denied("label_selector key %q is denied by the sensitive key redaction rule", requirement.Key())
+		}
 	}
 	limit := clamp(in.Limit, 100, 500)
 	items, err := p.collect(ctx, r, in.Namespace, in.LabelSelector, limit)

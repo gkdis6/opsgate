@@ -328,7 +328,11 @@ func envField(pod *corev1.Pod, field string) string {
 		}
 		for prefix, values := range map[string]map[string]string{"metadata.labels['": pod.Labels, "metadata.annotations['": pod.Annotations} {
 			if strings.HasPrefix(field, prefix) && strings.HasSuffix(field, "']") {
-				return values[strings.TrimSuffix(strings.TrimPrefix(field, prefix), "']")]
+				key := strings.TrimSuffix(strings.TrimPrefix(field, prefix), "']")
+				if redact.SensitiveKey(key) {
+					return redact.Mask
+				}
+				return values[key]
 			}
 		}
 	}

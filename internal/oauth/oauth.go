@@ -42,6 +42,7 @@ type Server struct {
 	httpClient        *http.Client
 	githubUserURL     string
 	registrationLimit *rate.Limiter
+	loginLimit        *rate.Limiter
 	now               func() time.Time
 	storageErr        error
 	stop              chan struct{}
@@ -97,6 +98,7 @@ func newServer(cfg config.BuiltinAuth, issuer, resource string, transport http.R
 		return nil, fmt.Errorf("token TTLs and max clients must be positive")
 	}
 	s := &Server{cfg: cfg, issuer: issuer, resource: resource, clients: map[string]*client{}, access: map[string]*accessToken{}, refresh: map[string]*refreshToken{}, families: map[string]time.Time{}, codes: map[string]*authorizationCode{}, pending: map[string]*pendingAuth{}, sessions: map[string]*browserSession{}, passkeys: map[string]*passkeyUser{}, registrations: map[string]*passkeyRegistration{}, invites: map[string]*passkeyInvite{}, registrationLimit: rate.NewLimiter(rate.Every(3*time.Second), 5), now: time.Now, githubUserURL: "https://api.github.com/user", stop: make(chan struct{}), done: make(chan struct{})}
+	s.loginLimit = rate.NewLimiter(rate.Every(loginInterval), loginBurst)
 	if transport == nil {
 		transport = http.DefaultTransport
 	}

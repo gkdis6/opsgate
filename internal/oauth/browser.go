@@ -105,13 +105,19 @@ func (s *Server) authorizeResponse(v url.Values) response {
 // Caller holds mu; the pending cookie binds the browser to this one transaction.
 func (s *Server) startLogin(p *pendingAuth) response {
 	s.sweep()
-	s.makePendingRoom(p)
+	now := s.now()
+	if p.Kind == "login" && !s.loginLimit.AllowN(now, 1) || !s.makePendingRoom(p) {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Retry-After", "3")
+			htmlError(w, http.StatusTooManyRequests, "Too many sign-in requests. Try again shortly.")
+		}
+	}
 	id := random()
 	p.UpstreamState = random()
 	p.Verifier = oauth2.GenerateVerifier()
 	p.Nonce = random()
 	p.CSRF = random()
-	p.Expires = s.now().Add(10 * time.Minute)
+	p.Expires = now.Add(loginTTL)
 	s.pending[hash(id)] = p
 	if s.passkey != nil {
 		return redirectResponse("/oauth/passkey").withCookie(pendingCookie, id, 600)

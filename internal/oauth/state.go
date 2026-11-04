@@ -290,7 +290,8 @@ func (s *Server) revokeFamily(family string) bool {
 
 // Caller holds mu. Pending browser approvals use a separate, smaller pool so
 // DCR clients cannot crowd out logins needed to approve existing operations.
-func (s *Server) makePendingRoom(in *pendingAuth) {
+// Login entries expire in sweep; live entries are never evicted.
+func (s *Server) makePendingRoom(in *pendingAuth) bool {
 	login := in.Kind == "login"
 	limit := maxPending
 	if login {
@@ -317,9 +318,12 @@ func (s *Server) makePendingRoom(in *pendingAuth) {
 		if clientCount >= maxClientPending {
 			delete(s.pending, clientOldest)
 		} else if count >= limit {
+			if login {
+				return false
+			}
 			delete(s.pending, oldest)
 		} else {
-			return
+			return true
 		}
 	}
 }

@@ -9,7 +9,9 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -346,6 +348,34 @@ func TestPasskeyInvites(t *testing.T) {
 		if info.Mode().Perm()&0077 != 0 {
 			t.Fatalf("invite file mode %v", info.Mode())
 		}
+	}
+}
+
+func TestPasskeyBootstrapLog(t *testing.T) {
+	for _, persistent := range []bool{false, true} {
+		t.Run(fmt.Sprint(persistent), func(t *testing.T) {
+			var logs bytes.Buffer
+			prior := log.Writer()
+			log.SetOutput(&logs)
+			defer log.SetOutput(prior)
+			state := ""
+			if persistent {
+				state = filepath.Join(t.TempDir(), "state.json")
+			}
+			f := newPasskeyFixture(t, state, "passkey:alice")
+			const prefix = "passkey setup for passkey:alice (valid 24h): " + pkIssuer + "/passkey/register?invite="
+			_, token, ok := strings.Cut(logs.String(), prefix)
+			if !ok {
+				t.Fatalf("missing invitation in startup log: %q", logs.String())
+			}
+			token = strings.TrimSpace(token)
+			if b, err := b64.DecodeString(token); err != nil || len(b) != 32 {
+				t.Fatalf("startup token = %q, err = %v", token, err)
+			}
+			if w := f.do(t, "POST", "/passkey/register/begin", map[string]string{"invite": token}, nil); w.Code != http.StatusOK {
+				t.Fatalf("startup invite unusable: %d %s", w.Code, w.Body)
+			}
+		})
 	}
 }
 

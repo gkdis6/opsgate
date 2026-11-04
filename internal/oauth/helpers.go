@@ -28,8 +28,12 @@ const (
 	bodyLimit        = 64 << 10
 	maxPending       = 1000
 	maxClientPending = 20
-	maxLoginPending  = 100
-	maxTokens        = 100000
+	// Keep loginBurst + loginTTL/loginInterval <= maxLoginPending.
+	maxLoginPending = 256
+	loginTTL        = 10 * time.Minute
+	loginInterval   = 3 * time.Second
+	loginBurst      = 20
+	maxTokens       = 100000
 )
 
 func random() string {

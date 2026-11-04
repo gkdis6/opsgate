@@ -280,7 +280,7 @@ func TestRegistrationCapacityProtectsActiveClients(t *testing.T) {
 }
 
 func TestPendingAuthorizationEviction(t *testing.T) {
-	for _, pool := range []string{"client", "global", "login isolated", "login eviction"} {
+	for _, pool := range []string{"client", "global", "login isolated", "login full"} {
 		t.Run(pool, func(t *testing.T) {
 			f := newFixture(t, false, true, true, "Alice")
 			f.s.mu.Lock()
@@ -288,7 +288,7 @@ func TestPendingAuthorizationEviction(t *testing.T) {
 			// Every pool has an older entry belonging to the other pool. It must
 			// survive eviction even when the pool under test has reached its cap.
 			otherKind := "login"
-			if pool == "login eviction" {
+			if pool == "login full" {
 				otherKind = "authorize"
 			}
 			f.s.pending["other-pool"] = &pendingAuth{Kind: otherKind, ClientID: "other-pool", Expires: oldest.Add(-time.Second)}
@@ -299,8 +299,8 @@ func TestPendingAuthorizationEviction(t *testing.T) {
 			if pool == "global" || pool == "login isolated" {
 				limit = maxPending
 			}
-			if pool == "login eviction" {
-				limit = 100
+			if pool == "login full" {
+				limit = maxLoginPending
 			}
 			for i := range limit {
 				key := strings.Repeat("x", i+1)
@@ -308,19 +308,23 @@ func TestPendingAuthorizationEviction(t *testing.T) {
 				if pool != "client" {
 					id = key
 				}
-				if pool == "login eviction" {
+				if pool == "login full" {
 					kind = "login"
 				}
 				f.s.pending[key] = &pendingAuth{Kind: kind, ClientID: id, Expires: oldest.Add(time.Duration(i) * time.Millisecond)}
 			}
 			f.s.mu.Unlock()
 			path := "/oauth/authorize?" + f.authQuery().Encode()
-			if pool == "login isolated" || pool == "login eviction" {
+			if pool == "login isolated" || pool == "login full" {
 				path = "/private"
 			}
 			r := f.request(t, "GET", path, "", false)
-			if r.StatusCode != 303 {
-				t.Fatalf("full pending pool rejected login: %d", r.StatusCode)
+			status := http.StatusSeeOther
+			if pool == "login full" {
+				status = http.StatusTooManyRequests
+			}
+			if r.StatusCode != status {
+				t.Fatalf("full pending pool: status=%d want=%d", r.StatusCode, status)
 			}
 			f.s.mu.Lock()
 			defer f.s.mu.Unlock()
@@ -334,7 +338,7 @@ func TestPendingAuthorizationEviction(t *testing.T) {
 			if f.s.pending["other-pool"] == nil || pool == "client" && f.s.pending["other-client"] == nil {
 				t.Fatal("evicted from unrelated pool")
 			}
-			if (f.s.pending["x"] != nil) != (pool == "login isolated") {
+			if (f.s.pending["x"] != nil) != (pool == "login isolated" || pool == "login full") {
 				t.Fatal("incorrect oldest-entry eviction")
 			}
 		})

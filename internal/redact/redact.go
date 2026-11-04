@@ -18,7 +18,7 @@ var (
 	header          = regexp.MustCompile(`(?im)(\b(?:proxy-)?authorization[ \t]*:[ \t]*)[^\r\n]+`)
 	auth            = regexp.MustCompile(`(?i)\b(Bearer|Basic)[ \t]+[A-Za-z0-9._~+/=-]+`)
 	jwt             = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)
-	tokens          = regexp.MustCompile(`\b(?:AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16}|gh[pousr]_[A-Za-z0-9_]{8,}|github_pat_[A-Za-z0-9_]{8,}|glpat-[A-Za-z0-9_-]{8,}|xox[abprs]-[A-Za-z0-9-]{8,}|[sr]k_live_[A-Za-z0-9]{8,}|sk-(?:ant-)?[A-Za-z0-9_-]{20,}|AIza[A-Za-z0-9_-]{35}|[0-9]{8,10}:[A-Za-z0-9_-]{35})`)
+	tokens          = regexp.MustCompile(`\b(?:AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16}|gh[pousr]_[A-Za-z0-9_]{8,}|github_pat_[A-Za-z0-9_]{8,}|glpat-[A-Za-z0-9_-]{8,}|xox[abprs]-[A-Za-z0-9-]{8,}|[sr]k_live_[A-Za-z0-9]{8,}|sk-(?:ant-)?[A-Za-z0-9_-]{20,}|AIza[A-Za-z0-9_-]{35}|[0-9]{8,10}:[A-Za-z0-9_-]{35}|og_[ars]t_[A-Za-z0-9_-]{43,})`)
 	urlPassword     = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://[^\s/:@]+:)[^\s/@]*(@)`)
 	assignmentValue = regexp.MustCompile(`^("(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\s,;"'<>{}]+)`)
 )
@@ -31,6 +31,7 @@ type Range struct {
 
 // Ranges returns sorted, non-overlapping sensitive ranges in s.
 // Incomplete private-key PEM blocks extend to the source boundary.
+// Quoted assignments left open on their line extend to the line boundary.
 func Ranges(s string) []Range {
 	var ranges []Range
 	if strings.Contains(s, "PRIVATE KEY-----") {
@@ -162,7 +163,7 @@ func assignmentRanges(s string) []Range {
 	} else {
 		// All sensitive env keys contain one of these uppercase endings.
 		// Keep the usual separator scan for text without any candidates.
-		for _, ending := range []string{"PASSWORD", "PASSWD", "SECRET", "TOKEN", "APIKEY", "API_KEY", "CREDENTIAL", "PWD", "ACCESS_KEY", "SECRET_KEY", "PRIVATE_KEY", "SESSION_ID", "COOKIE"} {
+		for _, ending := range []string{"PASSWORD", "PASSWD", "SECRET", "TOKEN", "APIKEY", "API_KEY", "CREDENTIAL", "PWD", "ACCESS_KEY", "SECRET_KEY", "PRIVATE_KEY", "SESSION_ID", "COOKIE", "INVITE"} {
 			if strings.Contains(s, ending) {
 				separators = ":= \t"
 				break
@@ -220,7 +221,7 @@ func assignmentRanges(s string) []Range {
 			(start == 0 || s[start-1] == ' ' || s[start-1] == '\t' || s[start-1] == '\n')) {
 			continue
 		}
-		if !sensitiveKey(strings.TrimPrefix(key, "--")) {
+		if !SensitiveKey(strings.TrimPrefix(key, "--")) {
 			continue
 		}
 		for pos < len(s) && (s[pos] == ' ' || s[pos] == '\t') {
@@ -230,13 +231,25 @@ func assignmentRanges(s string) []Range {
 			continue
 		}
 		value := assignmentValue.FindString(s[pos:])
+		complete := value != ""
+		if !complete {
+			value = quotedTail(s[pos:])
+		}
 		if value == "" {
 			continue
 		}
+		// Keep the rest of an invitation URL visible.
+		if strings.EqualFold(key, "invite") && start > 0 && (s[start-1] == '?' || s[start-1] == '&') && value[0] != '"' && value[0] != '\'' {
+			if end := strings.IndexAny(value, "&#"); end >= 0 {
+				value = value[:end]
+			}
+		}
 		valueStart, valueEnd := pos, pos+len(value)
-		if value[0] == '"' || value[0] == '\'' {
+		if len(value) > 0 && (value[0] == '"' || value[0] == '\'') {
 			valueStart++
-			valueEnd--
+			if complete {
+				valueEnd--
+			}
 		}
 		ranges = append(ranges, Range{valueStart, valueEnd})
 		pos += len(value)
@@ -244,7 +257,20 @@ func assignmentRanges(s string) []Range {
 	return ranges
 }
 
-func sensitiveKey(k string) bool {
+// quotedTail returns a quoted value left open on its line, through that line.
+// A later quote may belong to other text, so it never closes this value.
+func quotedTail(s string) string {
+	if len(s) == 0 || s[0] != '"' && s[0] != '\'' {
+		return ""
+	}
+	if end := strings.IndexAny(s, "\r\n"); end >= 0 {
+		return s[:end]
+	}
+	return s
+}
+
+// SensitiveKey reports whether a key's value is masked by Value.
+func SensitiveKey(k string) bool {
 	k = strings.ToLower(k)
 	for _, suffix := range []string{"password", "passwd", "secret", "token", "apikey", "api_key", "credential", "credentials"} {
 		if strings.HasSuffix(k, suffix) {
@@ -253,7 +279,7 @@ func sensitiveKey(k string) bool {
 	}
 	for {
 		switch k {
-		case "password", "passwd", "pwd", "secret", "client_secret", "token", "access_token", "refresh_token", "api_key", "api-key", "apikey", "access_key", "secret_key", "private_key", "credential", "credentials", "auth_token", "session_id", "cookie", "set-cookie":
+		case "password", "passwd", "pwd", "secret", "client_secret", "token", "access_token", "refresh_token", "api_key", "api-key", "apikey", "access_key", "secret_key", "private_key", "credential", "credentials", "auth_token", "session_id", "cookie", "set-cookie", "invite":
 			return true
 		}
 		i := strings.IndexByte(k, '_')
@@ -272,7 +298,7 @@ func sensitiveKey(k string) bool {
 // SensitiveFlag reports whether a standalone long flag takes a secret value.
 // Short flags are deliberately excluded because their meanings vary by program.
 func SensitiveFlag(flag string) bool {
-	return strings.HasPrefix(flag, "--") && strings.IndexAny(flag, "=: \t\r\n") < 0 && sensitiveKey(strings.TrimPrefix(flag, "--"))
+	return strings.HasPrefix(flag, "--") && strings.IndexAny(flag, "=: \t\r\n") < 0 && SensitiveKey(strings.TrimPrefix(flag, "--"))
 }
 
 func envKey(k string) bool {
@@ -293,7 +319,7 @@ func keyByte(c byte) bool {
 }
 
 func hasToken(s string) bool {
-	for _, prefix := range []string{"AKIA", "ASIA", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "glpat-", "xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-", "sk-", "sk_live_", "rk_live_", "AIza"} {
+	for _, prefix := range []string{"AKIA", "ASIA", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "glpat-", "xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-", "sk-", "sk_live_", "rk_live_", "AIza", "og_at_", "og_rt_", "og_st_"} {
 		if strings.Contains(s, prefix) {
 			return true
 		}
@@ -327,7 +353,7 @@ func Value(v any) any {
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		for k, value := range v {
-			if sensitiveKey(k) {
+			if SensitiveKey(k) {
 				out[k] = Mask
 			} else {
 				out[k] = Value(value)

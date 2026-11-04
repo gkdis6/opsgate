@@ -22,6 +22,13 @@ func TestString(t *testing.T) {
 		{"URL sensitive username", "postgres://password:secret@db/app", "postgres://password:" + Mask + "@db/app"},
 		{"URL sensitive scheme", "secret://alice:pass@db/app", "secret://alice:" + Mask + "@db/app"},
 		{"URL secret assignment", "password=postgres://alice:pass@db/app", "password=" + Mask},
+		{"passkey invitation", "passkey setup for passkey:alice (valid 24h): https://ops.example/passkey/register?invite=R4nd0m_unprefixed-setup", "passkey setup for passkey:alice (valid 24h): https://ops.example/passkey/register?invite=" + Mask},
+		{"invitation query", "https://ops.example/passkey/register?next=ok&invite=R4nd0m_unprefixed-setup&lang=en#register", "https://ops.example/passkey/register?next=ok&invite=" + Mask + "&lang=en#register"},
+		{"invitation URL fragment", "https://ops.example/passkey/register?invite=R4nd0m_unprefixed-setup#register", "https://ops.example/passkey/register?invite=" + Mask + "#register"},
+		{"invitation assignment", "invite=R4nd0m_unprefixed-setup next=ok", "invite=" + Mask + " next=ok"},
+		{"invitation env", "INVITE R4nd0m_unprefixed-setup next=ok", "INVITE " + Mask + " next=ok"},
+		{"invitation quoted", `invite="two words"`, `invite="` + Mask + `"`},
+		{"empty invitation query", "https://ops.example/passkey/register?invite=&lang=en", "https://ops.example/passkey/register?invite=" + Mask + "&lang=en"},
 		{"brackets", "password=abc[def]", "password=" + Mask},
 		{"assignment", "DB_PASSWORD=hunter2, next=ok", "DB_PASSWORD=" + Mask + ", next=ok"},
 		{"colon", "Password: hunter2", "Password: " + Mask},
@@ -37,7 +44,7 @@ func TestString(t *testing.T) {
 	for _, prefix := range []string{"ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "glpat-", "xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-", "sk_live_", "rk_live_", "sk-", "sk-ant-", "AIza", "123456789:"} {
 		tests = append(tests, struct{ name, in, want string }{prefix, prefix + strings.Repeat("a", 35), Mask})
 	}
-	for _, key := range []string{"password", "passwd", "pwd", "secret", "client_secret", "token", "access_token", "refresh_token", "api_key", "apikey", "access_key", "secret_key", "private_key", "credential", "credentials", "auth_token", "session_id", "cookie", "set-cookie", "APP_DB_PASSWORD"} {
+	for _, key := range []string{"password", "passwd", "pwd", "secret", "client_secret", "token", "access_token", "refresh_token", "api_key", "apikey", "access_key", "secret_key", "private_key", "credential", "credentials", "auth_token", "session_id", "cookie", "set-cookie", "invite", "APP_DB_PASSWORD"} {
 		tests = append(tests, struct{ name, in, want string }{key, key + "=hidden", key + "=" + Mask})
 	}
 	for _, tc := range tests {
@@ -160,6 +167,7 @@ func TestValue(t *testing.T) {
 	}{
 		{"nested", map[string]any{"DB_PASSWORD": map[string]any{"nested": "secret"}, "rows": []any{"pwd=hidden", float64(2), nil, map[string]any{"token": 123}}}, map[string]any{"DB_PASSWORD": Mask, "rows": []any{"pwd=" + Mask, float64(2), nil, map[string]any{"token": Mask}}}},
 		{"negative", map[string]any{"PASSWORD_FILE": "/run/secret", "tokenizer": "v2", "tokens": 120}, map[string]any{"PASSWORD_FILE": "/run/secret", "tokenizer": "v2", "tokens": 120}},
+		{"invitation", map[string]any{"invite": "R4nd0m_unprefixed-setup"}, map[string]any{"invite": Mask}},
 		{"scalar", true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -221,6 +229,71 @@ func TestTruncatedPEM(t *testing.T) {
 	}
 }
 
+func TestQuotedAssignments(t *testing.T) {
+	for _, tc := range []struct{ name, in, secret string }{
+		{"double", `password="hunter2`, "hunter2"},
+		{"single", `password='hunter2`, "hunter2"},
+		{"JSON", `{"password":"hunter2`, "hunter2"},
+		{"line end", "x password=\"hunter2\nnext", "hunter2"},
+		{"CRLF", "x password='hunter2\r\nnext", "hunter2"},
+		{"escaped quote", `password="hun\"ter2`, `hun\"ter2`},
+		{"trailing escape", `password='hunter2\`, `hunter2\`},
+		{"incomplete multiline", "password=\"hunter2\nstill secret", "hunter2"},
+		{"complete double", `password="hun\"ter2" next=ok`, `hun\"ter2`},
+		{"complete single", `password='hun\'ter2' next=ok`, `hun\'ter2`},
+		{"escaped newline", "password=\"hunter2\\\nnext", "hunter2\\"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			start := strings.Index(tc.in, tc.secret)
+			end := start + len(tc.secret)
+			checkString(t, tc.in, tc.in[:start]+Mask+tc.in[end:])
+			ranges := Ranges(tc.in)
+			if want := []Range{{start, end}}; !reflect.DeepEqual(ranges, want) {
+				t.Errorf("Ranges = %v, want %v", ranges, want)
+			}
+			want := tc.in[:start] + Mask + tc.in[end:]
+			if got := Fragment(tc.in, ranges, 0, len(tc.in)); got != want {
+				t.Errorf("Fragment = %q, want %q", got, want)
+			}
+			if got := Fragment(tc.in, ranges, start, start+1); got != Mask {
+				t.Errorf("partial Fragment = %q", got)
+			}
+		})
+	}
+	// A later quote cannot be told apart from other text, so only the first
+	// line of a multi-line value is masked.
+	for in, want := range map[string]string{
+		"password=\"hunter2\nmore\r\nsecret\" next=ok": "password=\"" + Mask + "\nmore\r\nsecret\" next=ok",
+		"password='hunter2\nmore' next=ok":             "password='" + Mask + "\nmore' next=ok",
+		"password=\"hunter2\nother=\"visible\"":        "password=\"" + Mask + "\nother=\"visible\"",
+	} {
+		checkString(t, in, want)
+		if got := Fragment(in, Ranges(in), 0, len(in)); got != want {
+			t.Errorf("multiline Fragment = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestOpsgateTokens(t *testing.T) {
+	for _, prefix := range []string{"og_at_", "og_rt_", "og_st_"} {
+		t.Run(prefix, func(t *testing.T) {
+			token := prefix + strings.Repeat("a", 41) + "_-"
+			in := "session " + token + " continues"
+			checkString(t, in, "session "+Mask+" continues")
+			ranges := Ranges(in)
+			if want := []Range{{8, 8 + len(token)}}; !reflect.DeepEqual(ranges, want) {
+				t.Errorf("Ranges = %v, want %v", ranges, want)
+			}
+			if got := Fragment(in, ranges, 10, 20); got != Mask {
+				t.Errorf("partial Fragment = %q", got)
+			}
+			for _, ordinary := range []string{strings.TrimSuffix(prefix, "_"), prefix, prefix + "short"} {
+				checkString(t, "ordinary "+ordinary+" word", "ordinary "+ordinary+" word")
+			}
+		})
+	}
+}
+
 func TestRanges(t *testing.T) {
 	for _, tc := range []struct{ in, secret string }{
 		{"before ghp_abcdefghijk after", "ghp_abcdefghijk"},
@@ -228,6 +301,7 @@ func TestRanges(t *testing.T) {
 		{"Authorization: Digest username=alice\nnext", "Digest username=alice"},
 		{"Bearer abcdef", "abcdef"},
 		{"password=hidden next=ok", "hidden"},
+		{"https://ops.example/passkey/register?invite=R4nd0m_unprefixed-setup&lang=en#register", "R4nd0m_unprefixed-setup"},
 		{`password="two words"`, "two words"},
 		{"password=ghp_abcdefghijk", "ghp_abcdefghijk"},
 		{"postgres://alice:hidden@host/db", "hidden"},
@@ -255,6 +329,28 @@ func TestRanges(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestInvitationLogFiltering(t *testing.T) {
+	const token = "R4nd0m_unprefixed-setup"
+	in := "ready\npasskey setup for passkey:alice (valid 24h): https://ops.example/passkey/register?invite=" + token + "\nserving\n"
+	text := Fragment(in, Ranges(in), 0, len(in))
+	for _, needle := range []string{"passkey setup", token, token[:8], token[8:]} {
+		var matched []string
+		for _, line := range strings.Split(text, "\n") {
+			if strings.Contains(strings.ToLower(line), strings.ToLower(needle)) {
+				matched = append(matched, line)
+			}
+		}
+		if needle == "passkey setup" {
+			want := "passkey setup for passkey:alice (valid 24h): https://ops.example/passkey/register?invite=" + Mask
+			if len(matched) != 1 || matched[0] != want {
+				t.Fatalf("filtered log = %q, want %q", matched, want)
+			}
+		} else if len(matched) != 0 {
+			t.Errorf("secret filter %q matched %q", needle, matched)
+		}
 	}
 }
 

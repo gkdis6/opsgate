@@ -66,7 +66,7 @@ func (c *application) runInit(args []string) error {
 	}
 	if o.Mode == config.ModeKubernetes || o.Kubeconfig != "" {
 		ask.list(set["namespaces"], namespaces, "Namespaces to allow (comma-separated globs, * for all)", "*")
-		ask.list(set["deny-namespaces"], deny, "Namespaces to deny", "kube-system,kube-public,kube-node-lease")
+		ask.list(set["deny-namespaces"], deny, "Namespaces to deny", "kube-system,kube-public,kube-node-lease,opsgate")
 		ask.yesNo(set["pod-logs"], &o.PodLogs, "Allow reading pod logs?", true)
 	}
 	ask.optional(set["note-vault"], &o.NoteVault, "Notes vault path (empty: off)")

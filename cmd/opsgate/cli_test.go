@@ -2,8 +2,14 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
+	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -148,6 +154,68 @@ func TestInitStreams(t *testing.T) {
 	args := []string{"init", "-yes", "-mode", "host", "-public-url", "https://example.com", "-login", "passkey", "-user", "alice", "-o", "-"}
 	if code := c.execute(args); code != 0 || !strings.Contains(out.String(), "mode: host") || errout.Len() != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, out, errout)
+	}
+}
+
+func TestInitNamespaceDenies(t *testing.T) {
+	for _, mode := range []string{"kubernetes", "host"} {
+		t.Run(mode, func(t *testing.T) {
+			for _, override := range []bool{false, true} {
+				c, out, errout, _ := testApp()
+				args := []string{"init", "-yes", "-mode", mode, "-public-url", "https://example.com", "-login", "passkey", "-user", "alice", "-o", "-"}
+				if mode == "host" {
+					args = append(args, "-kubeconfig", "/etc/opsgate/kubeconfig")
+				}
+				want := `deny_namespaces: ["kube-system", "kube-public", "kube-node-lease", "opsgate"]`
+				if override {
+					args = append(args, "-deny-namespaces", "private-*")
+					want = `deny_namespaces: ["private-*"]`
+				}
+				if code := c.execute(args); code != 0 || errout.Len() != 0 {
+					t.Fatalf("exit=%d stderr=%q", code, errout)
+				}
+				if !strings.Contains(out.String(), want) {
+					t.Fatalf("generated config missing %q: %s", want, out)
+				}
+			}
+		})
+	}
+}
+
+func TestPasskeyInviteOutput(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "opsgate.yaml")
+	data := fmt.Sprintf(`mode: host
+http:
+  public_url: https://ops.example
+auth:
+  builtin:
+    state_file: %q
+    users:
+      - subject: passkey:alice
+        scopes: [ops:read]
+`, filepath.Join(dir, "state.json"))
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, out, errout, _ := testApp()
+	if code := c.execute([]string{"passkey", "invite", "-config", path, "-subject", "passkey:alice"}); code != 0 || errout.Len() != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, errout)
+	}
+	u, err := url.Parse(strings.TrimSpace(out.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := u.Query().Get("invite")
+	if b, err := base64.RawURLEncoding.DecodeString(token); err != nil || len(b) != 32 {
+		t.Fatalf("invite token = %q, err = %v", token, err)
+	}
+	if out.String() != "https://ops.example/passkey/register?invite="+token+"\n" {
+		t.Fatalf("invite output = %q", out)
+	}
+	key := sha256.Sum256([]byte(token))
+	if _, err := os.Stat(filepath.Join(dir, "passkey-invites", fmt.Sprintf("%x.json", key))); err != nil {
+		t.Fatalf("invite not stored for printed token: %v", err)
 	}
 }
 

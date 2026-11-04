@@ -6,6 +6,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -280,11 +281,11 @@ func Parse(data []byte, name string) (Config, error) {
 	}
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
-	if err := dec.Decode(&cfg); err != nil && err != io.EOF {
+	if err := dec.Decode(&cfg); err != nil && !errors.Is(err, io.EOF) {
 		return cfg, fmt.Errorf("parse %s: %w", name, err)
 	}
 	var extra any
-	if err := dec.Decode(&extra); err != io.EOF {
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return cfg, fmt.Errorf("parse %s: multiple YAML documents are not supported", name)
 	}
 	// Browser approval needs builtin sign-in, so a mode turns it on only

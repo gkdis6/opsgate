@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -66,7 +67,7 @@ func LoadDevRunner(path string) (DevRunner, error) {
 		return c, fmt.Errorf("parse runner configuration: %w", err)
 	}
 	var extra any
-	if err := dec.Decode(&extra); err != io.EOF {
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return c, fmt.Errorf("runner configuration must contain one YAML document")
 	}
 	for i := range c.Projects {

@@ -473,7 +473,7 @@ func TestProcessGroupTermination(t *testing.T) {
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "sleep 60 & wait")
 	cmd.Cancel = func() error { return nil }
 	go func() { time.Sleep(50 * time.Millisecond); cancel() }()
-	if err := runProcess(ctx, cmd); err != context.Canceled {
+	if err := runProcess(ctx, cmd); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 }

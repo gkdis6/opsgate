@@ -2,6 +2,7 @@ package note
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,7 +14,7 @@ type entry struct {
 	info fs.FileInfo
 }
 
-var stopWalk = fmt.Errorf("stop walk")
+var errStopWalk = errors.New("stop walk")
 
 func (p *provider) walk(ctx context.Context, folder string, recursive bool, visit func(entry) error) error {
 	resolved, err := p.resolve(folder, false)
@@ -97,7 +98,7 @@ func (p *provider) walk(ctx context.Context, folder string, recursive bool, visi
 		}
 	}
 	err = walk(resolved, folder, 0)
-	if err == stopWalk {
+	if errors.Is(err, errStopWalk) {
 		return nil
 	}
 	return err

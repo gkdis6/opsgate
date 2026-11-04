@@ -1,6 +1,7 @@
 package kubernetes_test
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -26,7 +27,7 @@ func TestWatchManifest(t *testing.T) {
 			Data map[string]string     `json:"data"`
 			Spec appsv1.DeploymentSpec `json:"spec"`
 		}
-		if err := decoder.Decode(&doc); err == io.EOF {
+		if err := decoder.Decode(&doc); errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
 			t.Fatal(err)

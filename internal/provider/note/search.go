@@ -60,7 +60,7 @@ func (p *provider) search(ctx context.Context, _ tool.Caller, in searchInput) (s
 		if strings.Contains(name, query) {
 			emit(e.name, 0, e.name)
 			if hits >= max {
-				return stopWalk
+				return errStopWalk
 			}
 		}
 		ranges := redact.Ranges(n.text)
@@ -84,7 +84,7 @@ func (p *provider) search(ctx context.Context, _ tool.Caller, in searchInput) (s
 				hits++
 				fmt.Fprintf(&out, "%s:%d: %s\n", e.name, i+1, snippetRange(n.text, ranges, lineStart, lineEnd, center))
 				if hits >= max {
-					return stopWalk
+					return errStopWalk
 				}
 				cursor += at + len(query)
 			}

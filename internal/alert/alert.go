@@ -298,7 +298,7 @@ func (d *Dispatcher) send(ctx context.Context, body []byte) (retry bool, err err
 		if errors.As(err, &ue) {
 			err = ue.Err
 		}
-		return true, fmt.Errorf("post failed: %v", err)
+		return true, fmt.Errorf("post failed: %w", err)
 	}
 	resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

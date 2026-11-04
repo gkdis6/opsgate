@@ -29,6 +29,7 @@ type Caller struct {
 	Tools []string
 }
 
+// Has reports whether the caller has scope.
 func (c Caller) Has(scope string) bool { return slices.Contains(c.Scopes, scope) }
 
 // Env is shared by all tools of one server.

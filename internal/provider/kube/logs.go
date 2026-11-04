@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,7 +93,9 @@ func (p *provider) logs(ctx context.Context, _ tool.Caller, in logsInput) (strin
 	if err != nil {
 		return "", err
 	}
-	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	text := string(data)
+	text = redact.Fragment(text, redact.Ranges(text), 0, len(text))
+	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 	if len(lines) > int(tail) {
 		lines = lines[len(lines)-int(tail):]
 	}

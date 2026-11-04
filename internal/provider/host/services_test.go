@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gkdis6/opsgate/internal/config"
+	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 )
 
@@ -166,6 +167,42 @@ func TestLogsGrepWindow(t *testing.T) {
 			counts := fmt.Sprintf("scanned: %d; matched: %d;", tt.scanned, tt.matched)
 			if err != nil || body != tt.body || !strings.Contains(header, counts) {
 				t.Fatalf("got %q, %v", out, err)
+			}
+		})
+	}
+}
+
+func TestLogsRedactBeforeFiltering(t *testing.T) {
+	pem := "-----BEGIN PRIVATE KEY-----\nMIIEvQ/abcKEYBODY\n-----END PRIVATE KEY-----\n"
+	for _, tt := range []struct {
+		name, source, grep, body string
+		lines, scanned, matched  int
+	}{
+		{name: "prefix h", source: "password=hunter2\n", grep: "password=h", scanned: 1},
+		{name: "prefix hu", source: "password=hunter2\n", grep: "password=hu", scanned: 1},
+		{name: "wrong prefix", source: "password=hunter2\n", grep: "password=x", scanned: 1},
+		{name: "PEM body", source: pem, grep: "/", scanned: 3},
+		{name: "PEM without begin", source: "MIIEvQ/abcKEYBODY\n-----END PRIVATE KEY-----\n", grep: "/", scanned: 2},
+		{name: "PEM without end", source: "-----BEGIN PRIVATE KEY-----\nMIIEvQ/abcKEYBODY", grep: "/", scanned: 2},
+		{name: "ordinary text", source: "ok\nERROR password=hunter2\n", grep: "error", body: "ERROR password=" + redact.Mask + "\n", scanned: 2, matched: 1},
+		{name: "masked text", source: "password=hunter2\n", grep: "redacted", body: "password=" + redact.Mask + "\n", scanned: 1, matched: 1},
+		{name: "PEM lines", source: "before\n" + pem + "after\n", body: "before\n" + strings.Repeat(redact.Mask+"\n", 3) + "after\n", scanned: 5, matched: 5},
+		{name: "tail inside PEM", source: "before\n" + pem, lines: 2, body: strings.Repeat(redact.Mask+"\n", 2), scanned: 2, matched: 2},
+		{name: "tail matching lines", source: "ERROR old\npassword=hunter2\nerror new\n", lines: 1, grep: "error", body: "error new\n", scanned: 3, matched: 2},
+		{name: "empty", grep: "error"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p := provider{cfg: config.Host{Units: []string{"nginx"}, MaxLogLines: 5}, run: func(context.Context, string, ...string) (string, error) {
+				return tt.source, nil
+			}}
+			lines := tt.lines
+			if lines == 0 {
+				lines = 5
+			}
+			out, err := p.logs(context.Background(), logsInput{Unit: "nginx", Lines: lines, Grep: tt.grep})
+			want := fmt.Sprintf("unit: nginx.service; lines: %d; scanned: %d; matched: %d; since: %q; priority: %q; grep: %q\n%s", lines, tt.scanned, tt.matched, "", "", tt.grep, tt.body)
+			if err != nil || out != want {
+				t.Fatalf("got %q, %v; want %q", out, err, want)
 			}
 		})
 	}

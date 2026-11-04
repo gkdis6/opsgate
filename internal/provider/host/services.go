@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gkdis6/opsgate/internal/redact"
 )
 
 var dayDuration = regexp.MustCompile(`(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)d`)
@@ -211,9 +213,13 @@ func (p *provider) logs(ctx context.Context, in logsInput) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	out = redact.Fragment(out, redact.Ranges(out), 0, len(out))
 	var scanned, matched []string
 	if out != "" {
 		scanned = strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	}
+	if len(scanned) > scan {
+		scanned = scanned[len(scanned)-scan:]
 	}
 	needle := strings.ToLower(in.Grep)
 	for _, line := range scanned {

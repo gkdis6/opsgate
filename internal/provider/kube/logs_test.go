@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,6 +50,46 @@ func TestLogsRequest(t *testing.T) {
 			out, err := p.logs(context.Background(), tool.Caller{}, logsInput{Namespace: "public", Pod: "app", Tail: tt.tail, Since: "1m", Previous: true, Grep: tt.grep})
 			if err != nil || out != tt.want {
 				t.Fatal(out, err)
+			}
+		})
+	}
+}
+
+func TestLogsRedactBeforeFiltering(t *testing.T) {
+	pem := "-----BEGIN PRIVATE KEY-----\nMIIEvQ/abcKEYBODY\n-----END PRIVATE KEY-----\n"
+	for _, tt := range []struct {
+		name, source, grep, want string
+		tail                     int
+	}{
+		{name: "prefix h", source: "password=hunter2\n", grep: "password=h"},
+		{name: "prefix hu", source: "password=hunter2\n", grep: "password=hu"},
+		{name: "wrong prefix", source: "password=hunter2\n", grep: "password=x"},
+		{name: "PEM body", source: pem, grep: "/"},
+		{name: "PEM without begin", source: "MIIEvQ/abcKEYBODY\n-----END PRIVATE KEY-----\n", grep: "/"},
+		{name: "PEM without end", source: "-----BEGIN PRIVATE KEY-----\nMIIEvQ/abcKEYBODY", grep: "/"},
+		{name: "ordinary text", source: "ok\nERROR password=hunter2\n", grep: "error", want: "ERROR password=" + redact.Mask},
+		{name: "masked text", source: "password=hunter2\n", grep: "redacted", want: "password=" + redact.Mask},
+		{name: "PEM lines", source: "before\n" + pem + "after\n", want: "before\n" + strings.Repeat(redact.Mask+"\n", 3) + "after"},
+		{name: "tail inside PEM", source: "before\n" + pem, tail: 2, want: redact.Mask + "\n" + redact.Mask},
+		{name: "tail before grep", source: "ERROR old\nok\n", tail: 1, grep: "error"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				body := `{"metadata":{"name":"app","namespace":"public"},"spec":{"containers":[{"name":"web"}]}}`
+				if strings.HasSuffix(r.URL.Path, "/log") {
+					body = tt.source
+				}
+				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+			})
+			client, err := kubernetes.NewForConfig(&rest.Config{Host: "https://cluster.invalid", Transport: transport})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := testProvider()
+			p.client = client
+			out, err := p.logs(context.Background(), tool.Caller{}, logsInput{Namespace: "public", Pod: "app", Tail: tt.tail, Grep: tt.grep})
+			if err != nil || out != tt.want {
+				t.Fatalf("got %q, %v; want %q", out, err, tt.want)
 			}
 		})
 	}

@@ -61,6 +61,7 @@ func TestLogRedactsFragments(t *testing.T) {
 }
 
 func TestLogRedactsAcrossWindow(t *testing.T) {
+	const margin = 1 << 20 // Former context window on either side of a page.
 	r := ownershipRunner(t)
 	id := strings.Repeat("a", 20)
 	r.tasks = []*Task{{ID: id, owner: "owner", State: "succeeded"}}
@@ -68,11 +69,11 @@ func TestLogRedactsAcrossWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A key whose BEGIN marker lies before the scanned window is still masked.
-	key := "-----BEGIN PRIVATE KEY-----\n" + strings.Repeat("QUJD\n", (logRedactMargin+4096)/5) + "-----END PRIVATE KEY-----\nafter"
+	key := "-----BEGIN PRIVATE KEY-----\n" + strings.Repeat("QUJD\n", (margin+4096)/5) + "-----END PRIVATE KEY-----\nafter"
 	if err := r.root.WriteFile("tasks/"+id+"/log.txt", []byte(key), 0600); err != nil {
 		t.Fatal(err)
 	}
-	offset := logRedactMargin + 2048
+	offset := margin + 2048
 	out := ownershipRequest(r, "GET", fmt.Sprintf("/v1/tasks/%s/log?offset=%d&limit=64", id, offset), "owner")
 	var page Log
 	if out.Code != 200 || json.Unmarshal(out.Body.Bytes(), &page) != nil {
@@ -80,5 +81,69 @@ func TestLogRedactsAcrossWindow(t *testing.T) {
 	}
 	if strings.Contains(page.Text, "QUJD") || !strings.Contains(page.Text, redact.Mask) {
 		t.Fatalf("key material visible: %q", page.Text)
+	}
+}
+
+func TestLogRedactsBeyondWindow(t *testing.T) {
+	const margin = 1 << 20 // Former context window on either side of a page.
+	for _, tc := range []struct{ name, source, first, last string }{
+		{"quoted", `password="` + strings.Repeat("secret-value ", (3*margin)/13) + `"` + "\nafter", `password="` + redact.Mask, redact.Mask + "\"\nafter"},
+		{"PEM", "-----BEGIN PRIVATE KEY-----\n" + strings.Repeat("QUJD", (3*margin)/4) + "\n-----END PRIVATE KEY-----\nafter", redact.Mask + "\n" + redact.Mask, redact.Mask + "\n" + redact.Mask + "\nafter"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := ownershipRunner(t)
+			id := strings.Repeat("a", 20)
+			r.tasks = []*Task{{ID: id, owner: "owner", State: "succeeded"}}
+			if err := r.root.MkdirAll("tasks/"+id, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.root.WriteFile("tasks/"+id+"/log.txt", []byte(tc.source), 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, offset := range []int{0, margin + 2048, len(tc.source) - 64} {
+				for _, limit := range []int{1, 64, MaxReadBytes} {
+					out := ownershipRequest(r, "GET", fmt.Sprintf("/v1/tasks/%s/log?offset=%d&limit=%d", id, offset, limit), "owner")
+					var page Log
+					if out.Code != 200 || json.Unmarshal(out.Body.Bytes(), &page) != nil {
+						t.Fatalf("%d %s", out.Code, out.Body)
+					}
+					end := min(offset+limit, len(tc.source))
+					want := redact.Mask
+					if offset == 0 {
+						if limit > 1 {
+							want = tc.first
+						} else if tc.name == "quoted" {
+							want = "p"
+						}
+					} else if end == len(tc.source) {
+						want = tc.last
+					}
+					if page.Text != want || page.NextOffset != int64(end) || page.Truncated != (end < len(tc.source)) {
+						t.Fatalf("offset %d limit %d: next %d truncated %t text %.80q", offset, limit, page.NextOffset, page.Truncated, page.Text)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestLogRejectsOversizedSource(t *testing.T) {
+	r := ownershipRunner(t)
+	id := strings.Repeat("a", 20)
+	r.tasks = []*Task{{ID: id, owner: "owner", State: "succeeded"}}
+	if err := r.root.MkdirAll("tasks/"+id, 0700); err != nil {
+		t.Fatal(err)
+	}
+	f, err := r.root.Create("tasks/" + id + "/log.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := f.Truncate(maxLogBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	out := ownershipRequest(r, "GET", "/v1/tasks/"+id+"/log?limit=1", "owner")
+	if out.Code != 503 || !strings.Contains(out.Body.String(), "20 MiB") {
+		t.Fatalf("oversized log: %d %.80s", out.Code, out.Body)
 	}
 }

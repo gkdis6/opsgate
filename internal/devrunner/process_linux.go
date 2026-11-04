@@ -142,10 +142,10 @@ func (r *runner) execute(ctx context.Context, t Task) Task {
 	closeErr := log.Close()
 	// OpenRoot prevents agent-created symlinks from escaping the task directory;
 	// O_NONBLOCK and a regular-file check also reject FIFOs and devices.
-	if b, e := readRegular(taskRoot, "output.txt", 0, MaxReadBytes); e == nil {
-		t.Message = redactedText(b)
-	} else if b, e := readTail(taskRoot, "log.txt", 8<<10); e == nil {
-		t.Message = redactedText(b)
+	if msg, e := readMessage(taskRoot, "output.txt", MaxReadBytes, false); e == nil {
+		t.Message = msg
+	} else if msg, e := readMessage(taskRoot, "log.txt", 8<<10, true); e == nil {
+		t.Message = msg
 	}
 	if closeErr != nil {
 		return finish("failed", "cannot save task log")
@@ -213,11 +213,22 @@ func readRegular(root *os.Root, path string, offset int64, limit int) ([]byte, e
 	}
 	return io.ReadAll(io.LimitReader(f, int64(limit)))
 }
-func readTail(root *os.Root, path string, limit int) ([]byte, error) {
-	fi, err := root.Stat(path)
+func readMessage(root *os.Root, path string, limit int, tail bool) (string, error) {
+	// Scan the complete source before selecting a fragment. Larger sources
+	// cannot be redacted safely within the read bound.
+	b, err := readRegular(root, path, 0, maxLogBytes+1)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	offset := max(int64(0), fi.Size()-int64(limit))
-	return readRegular(root, path, offset, limit)
+	if len(b) > maxLogBytes {
+		return "task message omitted: source exceeds 20 MiB safe read limit", nil
+	}
+	if len(b) <= limit {
+		return redactedText(b), nil
+	}
+	start, end := 0, min(limit, len(b))
+	if tail {
+		start, end = max(0, len(b)-limit), len(b)
+	}
+	return redactedFragment(string(b), start, end), nil
 }

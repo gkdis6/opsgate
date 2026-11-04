@@ -263,11 +263,8 @@ func (r *runner) log(w http.ResponseWriter, req *http.Request) {
 	if !ok {
 		return
 	}
-	// Detect secrets in a window around the page so ones crossing its edges
-	// stay masked without rescanning the whole log for every page. A private
-	// key cut by the window is masked to the window edge.
-	lo := max(0, offset-logRedactMargin)
-	b, err := readRegular(r.root, "tasks/"+t.ID+"/log.txt", lo, int(offset-lo+limit+logRedactMargin))
+	// Scan the complete bounded source before selecting a page.
+	b, err := readRegular(r.root, "tasks/"+t.ID+"/log.txt", 0, maxLogBytes+1)
 	if os.IsNotExist(err) {
 		reply(w, 200, Log{NextOffset: offset})
 		return
@@ -276,11 +273,13 @@ func (r *runner) log(w http.ResponseWriter, req *http.Request) {
 		bad(w, 503, "task log unavailable")
 		return
 	}
-	start := min(int(offset-lo), len(b))
+	if len(b) > maxLogBytes {
+		bad(w, 503, "task log exceeds 20 MiB safe read limit")
+		return
+	}
+	start := min(int(offset), len(b))
 	end := start + min(int(limit), len(b)-start)
-	s := string(b)
-	text := redact.Fragment(s, redact.Ranges(s), start, end)
-	reply(w, 200, Log{Text: redactedText([]byte(text)), NextOffset: offset + int64(end-start), Truncated: end < len(b)})
+	reply(w, 200, Log{Text: redactedFragment(string(b), start, end), NextOffset: offset + int64(end-start), Truncated: end < len(b)})
 }
 func (r *runner) diff(w http.ResponseWriter, req *http.Request) {
 	if !queryOnly(req) {
@@ -304,12 +303,25 @@ func (r *runner) diff(w http.ResponseWriter, req *http.Request) {
 		reply(w, 200, Diff{})
 		return
 	}
-	out, cut, err := git(req.Context(), r.dir(t.ID)+"/worktree", MaxReadBytes, "diff", "--no-ext-diff", "--no-textconv", "--stat", "--patch", t.BaseCommit, "--")
+	out, cut, err := git(req.Context(), r.dir(t.ID)+"/worktree", maxLogBytes, "diff", "--no-ext-diff", "--no-textconv", "--stat", "--patch", t.BaseCommit, "--")
 	if err != nil {
 		bad(w, 503, "task diff unavailable")
 		return
 	}
-	reply(w, 200, Diff{Text: redactedText([]byte(out)), Truncated: cut})
+	if cut {
+		bad(w, 503, "task diff exceeds 20 MiB safe read limit")
+		return
+	}
+	if len(out) > MaxReadBytes {
+		reply(w, 200, Diff{Text: redactedFragment(out, 0, MaxReadBytes), Truncated: true})
+		return
+	}
+	reply(w, 200, Diff{Text: redactedText([]byte(out))})
+}
+
+func redactedFragment(s string, start, end int) string {
+	text := redact.Fragment(s, redact.Ranges(s), start, end)
+	return redactedText([]byte(text))
 }
 
 func redactedText(b []byte) string {

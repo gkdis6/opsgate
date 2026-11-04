@@ -302,6 +302,37 @@ func TestEmailContextClosesConversation(t *testing.T) {
 	}
 }
 
+func TestEmailBoundsServerReply(t *testing.T) {
+	client, server := net.Pipe()
+	const chunk = 64 << 10
+	// The server stops by itself, so a missing limit fails this test instead
+	// of exhausting the memory of the machine running it.
+	const sendLimit = 4 * maxSMTPRead
+	written := make(chan int, 1)
+	go func() {
+		defer server.Close()
+		total := 0
+		data := []byte("220 " + strings.Repeat("A", chunk))
+		for total < sendLimit {
+			n, err := server.Write(data)
+			total += n
+			if err != nil {
+				break
+			}
+		}
+		written <- total
+	}()
+	s := NewEmail(testEmail()).(*emailSender)
+	s.dial = func(context.Context, string, string) (net.Conn, error) { return client, nil }
+	retry, err := s.Send(context.Background(), &Batch{})
+	if err == nil || retry {
+		t.Fatalf("Send = retry %v, err %v; want a failure without retry", retry, err)
+	}
+	if total := <-written; total > maxSMTPRead+chunk+4 {
+		t.Fatalf("server wrote %d bytes before the sender stopped reading", total)
+	}
+}
+
 func TestSMTPFailureClassification(t *testing.T) {
 	for _, tc := range []struct {
 		stage string

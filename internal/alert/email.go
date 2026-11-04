@@ -23,6 +23,10 @@ import (
 	"unicode"
 )
 
+// maxSMTPRead bounds the bytes read from a server in one exchange, because
+// net/smtp buffers reply lines without a limit.
+const maxSMTPRead = 1 << 20
+
 // EmailOptions configures TLS-only SMTP delivery.
 type EmailOptions struct {
 	Host     string
@@ -58,6 +62,7 @@ func (s *emailSender) Send(ctx context.Context, b *Batch) (bool, error) {
 		return smtpFailure("connect", err)
 	}
 	defer conn.Close()
+	conn = &limitedConn{Conn: conn, left: maxSMTPRead}
 	stop := context.AfterFunc(ctx, func() { conn.Close() })
 	defer stop()
 	deadline, _ := ctx.Deadline()
@@ -119,6 +124,24 @@ func (s *emailSender) Send(ctx context.Context, b *Batch) (bool, error) {
 	// The server accepted the message; retrying a failed QUIT would send it twice.
 	_ = c.Quit()
 	return false, nil
+}
+
+// limitedConn fails reads after left bytes.
+type limitedConn struct {
+	net.Conn
+	left int64
+}
+
+func (c *limitedConn) Read(p []byte) (int, error) {
+	if c.left <= 0 {
+		return 0, errors.New("smtp reply too large")
+	}
+	if int64(len(p)) > c.left {
+		p = p[:c.left]
+	}
+	n, err := c.Conn.Read(p)
+	c.left -= int64(n)
+	return n, err
 }
 
 // smtpFailure omits server text, which may echo credentials. Connection and

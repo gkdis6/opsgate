@@ -156,7 +156,8 @@ func number(req *http.Request, key string, fallback, maximum int64) (int64, erro
 	if len(values) != 1 || values[0] == "" {
 		return 0, fmt.Errorf("invalid number")
 	}
-	n, err := strconv.ParseInt(values[0], 10, 64)
+	// Every maximum fits in 32 bits, so callers can convert the result to int.
+	n, err := strconv.ParseInt(values[0], 10, 32)
 	if err != nil || n < 0 || n > maximum {
 		return 0, fmt.Errorf("invalid number")
 	}

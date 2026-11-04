@@ -113,6 +113,9 @@ func TestGenerate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if !c.Approval.RequireWeb || strings.Contains(string(data), "require_web:") {
+			t.Fatalf("generated config must inherit web-only approval: %s", data)
+		}
 		u := c.Auth.Builtin.Users
 		if c.Mode != o.Mode || len(u) != 1 || u[0].Subject != o.Subject() || len(c.Auth.Builtin.Admins) != 1 || (len(u[0].Scopes) == 2) != o.Write {
 			t.Fatalf("%s: %+v\n%s", name, c.Auth.Builtin, data)
@@ -138,5 +141,44 @@ func TestGenerate(t *testing.T) {
 		if _, err := Generate(o); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+func TestRequireWebDefault(t *testing.T) {
+	for _, mode := range []string{ModeHost, ModeKubernetes} {
+		for _, tc := range []struct {
+			name, settings string
+			want           bool
+		}{
+			{name: "unset", want: true},
+			{name: "explicit false", settings: "approval:\n  require_web: false\n"},
+			{name: "explicit true", settings: "approval:\n  require_web: true\n", want: true},
+			{name: "web disabled", settings: "approval:\n  web: false\n"},
+			{name: "external", settings: "auth:\n  mode: external\n"},
+			{name: "static", settings: "auth:\n  mode: static\n"},
+		} {
+			t.Run(mode+"/"+tc.name, func(t *testing.T) {
+				c, err := Parse([]byte("mode: "+mode+"\nhttp:\n  public_url: https://ops.example\n"+tc.settings), "test")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if c.Approval.RequireWeb != tc.want {
+					t.Fatalf("require_web = %v, want %v", c.Approval.RequireWeb, tc.want)
+				}
+				if err := c.ValidateHTTP(); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+	c, err := Parse([]byte("auth:\n  mode: builtin\napproval:\n  web: true\nhttp:\n  public_url: https://ops.example\n"), "explicit web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Approval.RequireWeb {
+		t.Fatal("explicit web without a mode must default to require_web")
+	}
+	if err := c.ValidateHTTP(); err != nil {
+		t.Fatal(err)
 	}
 }

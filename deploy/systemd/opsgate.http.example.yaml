@@ -31,7 +31,7 @@ auth:
 approval:
   ttl: 10m
   web: true
-  require_web: false
+  require_web: true # Default with web enabled; browser confirmation only.
   window: 0s
   window_tools: [] # Never include dev_task_start.
 providers:
@@ -72,5 +72,6 @@ providers:
 #     scale: [apps/myapp]
 # Host restarts need the exact sudoers rule and systemd drop-in in docs/deploy.md.
 # Kubernetes writes need narrowly scoped RBAC. Keep approval windows off by default.
+# Browser confirmation is required by default. To opt in to in-client elicitation:
 # approval:
-#   require_web: true # With web=true: require browser confirmation, deny stdio writes.
+#   require_web: false # A compromised client can approve its own writes.

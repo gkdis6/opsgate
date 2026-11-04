@@ -189,12 +189,14 @@ type StaticToken struct {
 type Approval struct {
 	// TTL bounds how long a pending web approval stays valid.
 	TTL time.Duration `yaml:"ttl"`
-	// Web enables browser approval links for clients without elicitation.
+	// Web enables browser approval links.
 	// Requires auth.mode builtin (the approver signs in upstream).
 	Web bool `yaml:"web"`
 	// RequireWeb disables in-client elicitation, including for stdio.
 	RequireWeb bool `yaml:"require_web"`
-	// Window is the optional lifetime of a user/tool auto-approval grant.
+	// RequireWebDefaulted records the HTTP default so stdio can allow elicitation.
+	RequireWebDefaulted bool `yaml:"-"`
+	// Window is the optional lifetime of a user/tool/target auto-approval grant.
 	// Zero disables grants; otherwise it must be between 1 minute and 12 hours.
 	Window time.Duration `yaml:"window"`
 	// WindowTools is a path.Match glob allowlist. Empty permits no grants.
@@ -292,6 +294,10 @@ func Parse(data []byte, name string) (Config, error) {
 	// when the file keeps builtin and does not decide itself.
 	if cfg.Mode != "" && cfg.Auth.Mode == AuthBuiltin && lookup(&root, "approval", "web") == nil {
 		cfg.Approval.Web = true
+	}
+	if cfg.Approval.Web && lookup(&root, "approval", "require_web") == nil {
+		cfg.Approval.RequireWeb = true
+		cfg.Approval.RequireWebDefaulted = true
 	}
 	return cfg, cfg.Validate()
 }

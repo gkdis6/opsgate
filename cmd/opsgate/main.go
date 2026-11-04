@@ -71,6 +71,9 @@ func run(cfgPath, transport string) error {
 
 	switch transport {
 	case "stdio":
+		if cfg.Approval.RequireWebDefaulted {
+			cfg.Approval.RequireWeb = false
+		}
 		env.Fallback = &tool.Caller{User: cfg.Stdio.User, Transport: "stdio", Scopes: cfg.Stdio.Scopes}
 		env.Confirm = approval.New(cfg.Approval, "", nil, al) // elicitation only
 		s, err := server.New(cfg, env)
@@ -129,6 +132,9 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 		return err
 	}
 	o.Server = s
+	if !cfg.Approval.RequireWeb {
+		log.Printf("warning: a compromised client can approve its own writes through elicitation; approval.require_web: true avoids this where web approval is available")
+	}
 	log.Printf("serving %s on %s", cfg.ResourceURL(), cfg.HTTP.Listen)
 	return httpserver.Serve(ctx, cfg, httpserver.Handler(cfg, o))
 }

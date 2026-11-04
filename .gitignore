@@ -3,3 +3,5 @@
 *.jsonl
 /.gocache/
 /bin/
+/opsgate.yaml
+/coverage.out

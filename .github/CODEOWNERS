@@ -1,0 +1,9 @@
+* @gkdis6
+
+/internal/oauth/ @gkdis6
+/internal/authn/ @gkdis6
+/internal/approval/ @gkdis6
+/internal/tool/ @gkdis6
+/internal/redact/ @gkdis6
+/.github/workflows/ @gkdis6
+/.goreleaser.yaml @gkdis6

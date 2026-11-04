@@ -22,6 +22,24 @@ jobs:
       - run: sh scripts/check-pins.sh
       - run: sh scripts/check-pins_test.sh
       - run: sh scripts/third-party-licenses_test.sh
+      - name: Check formatting
+        if: matrix.go == '1.26.x'
+        run: |
+          files=$(gofmt -l .)
+          if [ -n "$files" ]; then
+            printf 'Run gofmt on:\n%s\n' "$files"
+            exit 1
+          fi
+      - name: Check module tidiness
+        if: matrix.go == '1.26.x'
+        run: go mod tidy -diff
+      - name: Check GoReleaser configuration
+        if: matrix.go == '1.26.x'
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+        with:
+          distribution: goreleaser
+          version: v2.19.0
+          args: check
       - run: go vet ./...
       - run: go test -race ./...
       - run: make build

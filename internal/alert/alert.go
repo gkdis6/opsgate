@@ -34,10 +34,23 @@ type Alert struct {
 	// Reason is a short machine-readable cause, e.g. OOMKilled or ImageChanged.
 	Reason  string `json:"reason"`
 	Summary string `json:"summary"`
+	// Hint is fixed advice chosen by the watcher. It never contains cluster text.
+	Hint string `json:"hint,omitempty"`
+	// Restart names a workload a person may choose to restart. Nothing acts on
+	// it automatically.
+	Restart *Workload `json:"restart,omitempty"`
 	// Suppressed counts repeats folded into this alert during the cooldown.
 	Suppressed int `json:"suppressed,omitempty"`
 	// Key identifies repeats; it includes the container for pod alerts.
 	Key string `json:"-"`
+}
+
+// Workload identifies the target of a suggested k8s_rollout_restart call.
+type Workload struct {
+	// Kind is deployment, statefulset or daemonset.
+	Kind      string `json:"kind"`
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
 }
 
 // Batch is one delivery, also the JSON body of a webhook POST.
@@ -219,7 +232,10 @@ func (d *Dispatcher) prepare(pending []Alert) *Batch {
 	return b
 }
 
-func render(b *Batch) string {
+func render(b *Batch) string { return renderAlerts(b, true) }
+
+// renderAlerts writes one line per alert, plus indented advice lines if asked.
+func renderAlerts(b *Batch, advice bool) string {
 	var s strings.Builder
 	for _, a := range b.Alerts {
 		object := a.Kind + " " + a.Name
@@ -231,6 +247,12 @@ func render(b *Batch) string {
 			fmt.Fprintf(&s, " (+%d similar)", a.Suppressed)
 		}
 		s.WriteByte('\n')
+		if advice && a.Hint != "" {
+			fmt.Fprintf(&s, "  hint: %s\n", a.Hint)
+		}
+		if advice && a.Restart != nil {
+			fmt.Fprintf(&s, "  if needed, ask to restart: %s %s/%s\n", a.Restart.Kind, a.Restart.Namespace, a.Restart.Name)
+		}
 	}
 	if b.Dropped > 0 {
 		fmt.Fprintf(&s, "%d alerts dropped\n", b.Dropped)

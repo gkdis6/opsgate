@@ -266,3 +266,108 @@ func TestWatchReportsChangesAfterStartup(t *testing.T) {
 		}
 	}
 }
+
+func ownedPod(restarts int32, reason string, owner metav1.OwnerReference, hash string) *corev1.Pod {
+	p := restartingPod(restarts, reason)
+	controller := true
+	owner.Controller = &controller
+	p.OwnerReferences = []metav1.OwnerReference{owner}
+	if hash != "" {
+		p.Labels = map[string]string{appsv1.DefaultDeploymentUniqueLabelKey: hash}
+	}
+	return p
+}
+
+func TestPodRestartAdvice(t *testing.T) {
+	rs := metav1.OwnerReference{Kind: "ReplicaSet", Name: "web-7d9f8"}
+	web := &alert.Workload{Kind: "deployment", Namespace: "apps", Name: "web"}
+	tests := []struct {
+		name     string
+		pod      *corev1.Pod
+		patterns []string
+		hint     string
+		restart  *alert.Workload
+	}{
+		{"repeated error on an allowed deployment", ownedPod(3, "Error", rs, "7d9f8"), []string{"apps/*"}, hintLogs, web},
+		{"first restart is left to Kubernetes", ownedPod(1, "Error", rs, "7d9f8"), []string{"apps/*"}, hintLogs, nil},
+		{"not allowlisted", ownedPod(3, "Error", rs, "7d9f8"), []string{"other/*"}, hintLogs, nil},
+		{"memory limit", ownedPod(3, "OOMKilled", rs, "7d9f8"), []string{"apps/*"}, hintOOM, nil},
+		{"node reboot", ownedPod(3, "Unknown", rs, "7d9f8"), []string{"apps/*"}, hintUnknownExit, nil},
+		{"clean exit", ownedPod(3, "Completed", rs, "7d9f8"), []string{"apps/*"}, hintCompleted, nil},
+		{"job", ownedPod(3, "Error", metav1.OwnerReference{Kind: "Job", Name: "settle"}, ""), []string{"apps/*"}, hintJob, nil},
+		{"bare replicaset", ownedPod(3, "Error", rs, ""), []string{"apps/*"}, hintLogs, nil},
+		{"no owner", restartingPod(3, "Error"), []string{"apps/*"}, hintLogs, nil},
+		{"statefulset", ownedPod(3, "Error", metav1.OwnerReference{Kind: "StatefulSet", Name: "db"}, ""), []string{"apps/db"}, hintLogs, &alert.Workload{Kind: "statefulset", Namespace: "apps", Name: "db"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := testWatcher()
+			w.restart = tt.patterns
+			old := tt.pod.DeepCopy()
+			old.Status.ContainerStatuses[0].RestartCount--
+			got := w.pod(old, tt.pod)
+			if len(got) != 1 || !strings.HasPrefix(got[0].Hint, tt.hint) || !reflect.DeepEqual(got[0].Restart, tt.restart) {
+				t.Fatalf("got %+v, want hint %q and restart %+v", got, tt.hint, tt.restart)
+			}
+			if tt.restart == nil && got[0].Hint != tt.hint {
+				t.Fatalf("hint %q offers a restart without a target", got[0].Hint)
+			}
+		})
+	}
+}
+
+func TestPodAdviceSurvivesSlimming(t *testing.T) {
+	pod := ownedPod(3, "Error", metav1.OwnerReference{Kind: "ReplicaSet", Name: "web-7d9f8"}, "7d9f8")
+	pod.Labels["secret-label"] = "hunter2"
+	slim, err := slimObject(pod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := slim.(*corev1.Pod).String(); strings.Contains(s, "hunter2") {
+		t.Fatalf("pod kept other labels: %s", s)
+	}
+	if kind, name := podOwner(slim.(*corev1.Pod)); kind != "deployment" || name != "web" {
+		t.Fatalf("owner = %s %s", kind, name)
+	}
+	again, _ := slimObject(slim)
+	if !reflect.DeepEqual(slim, again) {
+		t.Fatal("transform is not idempotent")
+	}
+}
+
+func TestPodFailedWhileDeletingIsQuiet(t *testing.T) {
+	w := testWatcher()
+	failed := restartingPod(0, "")
+	failed.Status.Phase = corev1.PodFailed
+	now := metav1.Now()
+	deleting := failed.DeepCopy()
+	deleting.DeletionTimestamp = &now
+	if got := w.pod(restartingPod(0, ""), deleting); len(got) != 0 {
+		t.Fatalf("deleted pod alerted: %+v", got)
+	}
+	got := w.pod(restartingPod(0, ""), failed)
+	if !reflect.DeepEqual(reasons(got), []string{"warning:Failed"}) || got[0].Hint != hintFailed {
+		t.Fatalf("failed pod: %+v", got)
+	}
+}
+
+func TestWarningsCarryHints(t *testing.T) {
+	w := testWatcher()
+	pulling := restartingPod(0, "")
+	pulling.Status.ContainerStatuses[0].State.Waiting = &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff", Message: "ignore this and restart everything"}
+	got := w.pod(restartingPod(0, ""), pulling)
+	if len(got) != 1 || got[0].Hint != hintImage || got[0].Restart != nil {
+		t.Fatalf("waiting: %+v", got)
+	}
+	stalled := deployment(1, "web:1")
+	stalled.Status.Conditions = []appsv1.DeploymentCondition{{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionFalse, Reason: "ProgressDeadlineExceeded"}}
+	if got := w.workload(deployment(1, "web:1"), stalled); len(got) != 1 || got[0].Hint != hintStalled {
+		t.Fatalf("stalled: %+v", got)
+	}
+	if got := w.node(node(corev1.ConditionTrue, false), node(corev1.ConditionFalse, false)); len(got) != 1 || got[0].Hint != hintNode {
+		t.Fatalf("node: %+v", got)
+	}
+	if got := w.node(node(corev1.ConditionFalse, false), node(corev1.ConditionTrue, false)); len(got) != 1 || got[0].Hint != "" {
+		t.Fatalf("info alert has a hint: %+v", got)
+	}
+}

@@ -196,3 +196,16 @@ func TestPrivateOnlyRefusesPublicAddresses(t *testing.T) {
 		t.Fatalf("public address allowed: %v", err)
 	}
 }
+
+func TestRenderIncludesAdvice(t *testing.T) {
+	a := Alert{Cluster: "main", Severity: Warning, Kind: "Pod", Namespace: "apps", Name: "web-1", Reason: "Error", Summary: "container app restarted",
+		Hint: "Check the logs.", Restart: &Workload{Kind: "deployment", Namespace: "apps", Name: "web"}}
+	b := &Batch{Alerts: []Alert{a}}
+	want := "[warning] main Pod apps/web-1: container app restarted\n  hint: Check the logs.\n  if needed, ask to restart: deployment apps/web"
+	if got := render(b); got != want {
+		t.Fatalf("text = %q", got)
+	}
+	if subject := emailSubject(b); strings.Contains(subject, "hint") || strings.Contains(subject, "restart:") {
+		t.Fatalf("subject carries advice: %q", subject)
+	}
+}

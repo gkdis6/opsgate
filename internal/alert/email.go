@@ -202,7 +202,7 @@ func emailSubject(b *Batch) string {
 	case 0:
 		subject += fmt.Sprintf("%d alerts dropped", b.Dropped)
 	case 1:
-		subject += render(&Batch{Alerts: b.Alerts})
+		subject += renderAlerts(&Batch{Alerts: b.Alerts}, false)
 	default:
 		warnings := 0
 		var clusters []string

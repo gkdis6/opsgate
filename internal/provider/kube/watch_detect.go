@@ -91,7 +91,16 @@ func setAnnotation(m *metav1.ObjectMeta, k, v string) {
 }
 
 func slimMeta(m metav1.ObjectMeta) metav1.ObjectMeta {
-	return metav1.ObjectMeta{Name: m.Name, Namespace: m.Namespace, UID: m.UID, ResourceVersion: m.ResourceVersion, Generation: m.Generation, DeletionTimestamp: m.DeletionTimestamp}
+	slim := metav1.ObjectMeta{Name: m.Name, Namespace: m.Namespace, UID: m.UID, ResourceVersion: m.ResourceVersion, Generation: m.Generation, DeletionTimestamp: m.DeletionTimestamp}
+	// The pod's controller and template hash let a hint name its workload.
+	if owner := metav1.GetControllerOfNoCopy(&m); owner != nil {
+		controller := true
+		slim.OwnerReferences = []metav1.OwnerReference{{Kind: owner.Kind, Name: owner.Name, Controller: &controller}}
+	}
+	if hash := m.Labels[appsv1.DefaultDeploymentUniqueLabelKey]; hash != "" {
+		slim.Labels = map[string]string{appsv1.DefaultDeploymentUniqueLabelKey: hash}
+	}
+	return slim
 }
 
 func slimConditions(conditions []corev1.PodCondition, keep corev1.PodConditionType) []corev1.PodCondition {
@@ -150,8 +159,9 @@ func (w *watcher) pod(oldObj, curObj any) []alert.Alert {
 		return nil
 	}
 	var result []alert.Alert
-	warn := func(key, reason, summary string) {
-		result = append(result, alert.Alert{Severity: alert.Warning, Kind: "Pod", Namespace: cur.Namespace, Name: cur.Name, Reason: reason, Summary: summary,
+	owner, ownerName := podOwner(cur)
+	warn := func(key, reason, summary, hint string, restart *alert.Workload) {
+		result = append(result, alert.Alert{Severity: alert.Warning, Kind: "Pod", Namespace: cur.Namespace, Name: cur.Name, Reason: reason, Summary: summary, Hint: hint, Restart: restart,
 			Key: strings.Join([]string{"Pod", cur.Namespace, cur.Name, key}, "/")})
 	}
 	before := map[string]corev1.ContainerStatus{}
@@ -168,22 +178,31 @@ func (w *watcher) pod(oldObj, curObj any) []alert.Alert {
 				}
 				summary += fmt.Sprintf(": %s, exit code %d", display(t.Reason), t.ExitCode)
 			}
-			warn(s.Name+"/restart", reason, summary)
+			hint, restartable := restartAdvice(reason, owner)
+			var restart *alert.Workload
+			if restartable && s.RestartCount >= repeatedRestarts {
+				restart = w.restartTarget(owner, cur.Namespace, ownerName)
+			}
+			if restart != nil {
+				hint += " If they show stale state rather than a bad release, a restart may clear it."
+			}
+			warn(s.Name+"/restart", reason, summary, hint, restart)
 		}
 		if s.State.Waiting != nil && slices.Contains(waitingProblems, s.State.Waiting.Reason) &&
 			(!seen || prev.State.Waiting == nil || prev.State.Waiting.Reason != s.State.Waiting.Reason) {
-			warn(s.Name+"/"+s.State.Waiting.Reason, s.State.Waiting.Reason, fmt.Sprintf("container %s: %s: %s", s.Name, s.State.Waiting.Reason, s.State.Waiting.Message))
+			warn(s.Name+"/"+s.State.Waiting.Reason, s.State.Waiting.Reason, fmt.Sprintf("container %s: %s: %s", s.Name, s.State.Waiting.Reason, s.State.Waiting.Message), waitingHint(s.State.Waiting.Reason), nil)
 		}
 	}
-	if cur.Status.Phase == corev1.PodFailed && old.Status.Phase != corev1.PodFailed {
+	// A pod being deleted often ends as Failed; that is not a separate problem.
+	if cur.Status.Phase == corev1.PodFailed && old.Status.Phase != corev1.PodFailed && cur.DeletionTimestamp == nil {
 		reason := cur.Status.Reason
 		if reason == "" {
 			reason = "Failed"
 		}
-		warn("failed", reason, fmt.Sprintf("pod failed: %s: %s", reason, cur.Status.Message))
+		warn("failed", reason, fmt.Sprintf("pod failed: %s: %s", reason, cur.Status.Message), failedHint(reason, owner), nil)
 	}
 	if c := unschedulable(cur); c != nil && unschedulable(old) == nil {
-		warn("unschedulable", "Unschedulable", "pod cannot be scheduled: "+c.Message)
+		warn("unschedulable", "Unschedulable", "pod cannot be scheduled: "+c.Message, hintUnschedulable, nil)
 	}
 	return result
 }
@@ -251,7 +270,7 @@ func (w *watcher) workload(oldObj, curObj any) []alert.Alert {
 		result = append(result, info("Scaled", fmt.Sprintf("replicas %d → %d", *old.replicas, *cur.replicas)))
 	}
 	if cur.stalled && !old.stalled {
-		result = append(result, alert.Alert{Severity: alert.Warning, Kind: ref.kind, Namespace: ref.namespace, Name: ref.name, Reason: "ProgressDeadlineExceeded", Summary: "rollout stalled: progress deadline exceeded"})
+		result = append(result, alert.Alert{Severity: alert.Warning, Kind: ref.kind, Namespace: ref.namespace, Name: ref.name, Reason: "ProgressDeadlineExceeded", Summary: "rollout stalled: progress deadline exceeded", Hint: hintStalled})
 	}
 	return result
 }
@@ -297,7 +316,11 @@ func (w *watcher) node(oldObj, curObj any) []alert.Alert {
 	old, _ := oldObj.(*corev1.Node)
 	cur, _ := curObj.(*corev1.Node)
 	alertFor := func(n *corev1.Node, severity, reason, summary string) alert.Alert {
-		return alert.Alert{Severity: severity, Kind: "Node", Name: n.Name, Reason: reason, Summary: summary}
+		a := alert.Alert{Severity: severity, Kind: "Node", Name: n.Name, Reason: reason, Summary: summary}
+		if severity == alert.Warning {
+			a.Hint = hintNode
+		}
+		return a
 	}
 	switch {
 	case old == nil && cur == nil:

@@ -33,7 +33,7 @@ func Watch(ctx context.Context, clusters []config.KubernetesCluster, problemsOnl
 func watch(ctx context.Context, clusters []config.KubernetesCluster, clients map[string]kubernetes.Interface, problemsOnly bool, emit func(alert.Alert)) error {
 	var factories []informers.SharedInformerFactory
 	for _, cluster := range clusters {
-		w := &watcher{cluster: cluster.Name, policy: namespacePolicy{cluster.Namespaces, cluster.DenyNamespaces}, problemsOnly: problemsOnly, emit: emit, now: time.Now}
+		w := &watcher{cluster: cluster.Name, policy: namespacePolicy{cluster.Namespaces, cluster.DenyNamespaces}, restart: cluster.RolloutRestart, problemsOnly: problemsOnly, emit: emit, now: time.Now}
 		if err := w.policy.validate(); err != nil {
 			return fmt.Errorf("cluster %q: %w", cluster.Name, err)
 		}
@@ -109,6 +109,7 @@ func scopeNames(scopes []string) string {
 type watcher struct {
 	cluster      string
 	policy       namespacePolicy
+	restart      []string // rollout_restart patterns; only used to suggest restarts
 	problemsOnly bool
 	emit         func(alert.Alert)
 	now          func() time.Time

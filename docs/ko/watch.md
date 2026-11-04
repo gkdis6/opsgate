@@ -69,6 +69,19 @@ watcher가 시작할 때 이미 있던 객체는 기준점일 뿐 알리지 않�
 
 네임스페이스 허용·거부 규칙은 도구와 똑같이 적용됩니다. 네임스페이스를 정확한 이름으로 적으면 그 네임스페이스만 각각 watch합니다. 글롭 패턴(`*` 포함)이 하나라도 있으면 클러스터 전체를 watch하고 로컬에서 거르므로, 나중에 생긴 네임스페이스도 포함됩니다. 이때는 클러스터 전체의 list/watch RBAC 권한이 필요합니다. 노드는 항상 watch합니다.
 
+### 힌트와 재시작 제안
+
+경고에는 `hint`가 붙습니다. 경고 종류에 따라 고른 고정 문구이며, 클러스터에서 온 텍스트는 들어가지 않습니다. 삭제되는 중에 실패한 파드는 알리지 않습니다.
+
+다음 조건을 모두 만족하면 `restart`에 워크로드 이름도 넣습니다.
+
+- 컨테이너가 3회 이상 재시작했습니다.
+- 종료 사유가 `OOMKilled`, `Unknown`, `Completed`가 아닙니다.
+- 파드가 Job이 아니라 Deployment, StatefulSet, DaemonSet에 속합니다.
+- watch 설정의 `providers.kubernetes.rollout_restart`에 그 워크로드가 있습니다. 서버와 같은 목록을 쓰세요.
+
+watch는 제안만 합니다. 쓰기 권한이 없고, 제안을 자동으로 실행하는 구성요소도 없습니다. 사람이 MCP 클라이언트에 재시작을 요청하면, `k8s_rollout_restart`가 허용 목록을 다시 확인하고 평소처럼 승인을 요구합니다.
+
 ## Webhook 본문
 
 ```json
@@ -85,11 +98,12 @@ watcher가 시작할 때 이미 있던 객체는 기준점일 뿐 알리지 않�
       "name": "web-7d9f8-abcde",
       "reason": "OOMKilled",
       "summary": "container app restarted (3 restarts): OOMKilled, exit code 137",
+      "hint": "The container hit its memory limit. Check the limit and the app's usage; a restart will not prevent a repeat.",
       "suppressed": 2
     }
   ],
   "dropped": 0,
-  "text": "[warning] default Pod apps/web-7d9f8-abcde: container app restarted (3 restarts): OOMKilled, exit code 137 (+2 similar)"
+  "text": "[warning] default Pod apps/web-7d9f8-abcde: container app restarted (3 restarts): OOMKilled, exit code 137 (+2 similar)\n  hint: The container hit its memory limit. Check the limit and the app's usage; a restart will not prevent a repeat."
 }
 ```
 

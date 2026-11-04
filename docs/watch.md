@@ -117,6 +117,23 @@ names are watched one by one. Any glob pattern (including `*`) watches the whole
 cluster and filters locally, so namespaces created later are covered. That needs
 cluster-wide list/watch RBAC. Nodes are always watched.
 
+### Hints and restart suggestions
+
+Warnings carry a `hint`: fixed advice chosen from the alert type, never text
+from the cluster. A pod that fails while it is being deleted is not reported.
+
+An alert also names a workload in `restart` when all of these hold:
+
+- the container has restarted at least 3 times;
+- its exit reason is not `OOMKilled`, `Unknown` or `Completed`;
+- the pod belongs to a Deployment, StatefulSet or DaemonSet, not a Job;
+- the watch configuration lists the workload under
+  `providers.kubernetes.rollout_restart`. Use the same list as the server.
+
+The watcher only suggests. It has no write permission and nothing acts on the
+suggestion. A person asks an MCP client for the restart, and `k8s_rollout_restart`
+checks the allowlist again and requires approval as usual.
+
 ## Webhook payload
 
 ```json
@@ -133,11 +150,12 @@ cluster-wide list/watch RBAC. Nodes are always watched.
       "name": "web-7d9f8-abcde",
       "reason": "OOMKilled",
       "summary": "container app restarted (3 restarts): OOMKilled, exit code 137",
+      "hint": "The container hit its memory limit. Check the limit and the app's usage; a restart will not prevent a repeat.",
       "suppressed": 2
     }
   ],
   "dropped": 0,
-  "text": "[warning] default Pod apps/web-7d9f8-abcde: container app restarted (3 restarts): OOMKilled, exit code 137 (+2 similar)"
+  "text": "[warning] default Pod apps/web-7d9f8-abcde: container app restarted (3 restarts): OOMKilled, exit code 137 (+2 similar)\n  hint: The container hit its memory limit. Check the limit and the app's usage; a restart will not prevent a repeat."
 }
 ```
 

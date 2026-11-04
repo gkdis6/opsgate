@@ -15,7 +15,7 @@ builds:
     goarch: [amd64, arm64]
     flags: [-trimpath]
     ldflags:
-      - -s -w -X github.com/gkdis6/opsgate/internal/server.Version={{.Version}}
+      - -s -w -X github.com/gkdis6/opsgate/internal/buildinfo.version={{.Version}}
     mod_timestamp: '{{ .CommitTimestamp }}'
 archives:
   - id: opsgate

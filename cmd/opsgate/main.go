@@ -8,8 +8,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -36,57 +36,7 @@ func main() {
 	log.SetFlags(0)
 	log.SetPrefix("opsgate: ")
 	log.SetOutput(os.Stderr) // stdout belongs to the stdio transport
-
-	if len(os.Args) > 1 && os.Args[1] == "dev-runner" {
-		if err := runDevRunner(os.Args[2:]); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "watch" {
-		if err := runWatch(os.Args[2:]); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "init" {
-		if err := runInit(os.Args[2:]); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-	if len(os.Args) > 2 && os.Args[1] == "config" && os.Args[2] == "show" {
-		if err := runConfigShow(os.Args[3:]); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-	if len(os.Args) > 2 && os.Args[1] == "passkey" && os.Args[2] == "invite" {
-		if err := runPasskeyInvite(os.Args[3:]); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-
-	cfgPath := flag.String("config", "", "path to opsgate.yaml")
-	transport := flag.String("transport", "", "transport: stdio or http (default: http with a mode, otherwise stdio)")
-	version := flag.Bool("version", false, "print version and exit")
-	genToken := flag.Bool("gen-token", false, "print a random static token and its sha256, then exit")
-	flag.Parse()
-
-	switch {
-	case *version:
-		fmt.Println(server.Version)
-		return
-	case *genToken:
-		if err := printToken(); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-	if err := run(*cfgPath, *transport); err != nil {
-		log.Fatal(err)
-	}
+	os.Exit(cli(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 func run(cfgPath, transport string) error {
@@ -183,25 +133,25 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 	return httpserver.Serve(ctx, cfg, httpserver.Handler(cfg, o))
 }
 
-func printToken() error {
+func printToken(out io.Writer) error {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return err
 	}
 	tok := "og_st_" + base64.RawURLEncoding.EncodeToString(b)
 	sum := sha256.Sum256([]byte(tok))
-	fmt.Printf("token:  %s\nsha256: %s\n", tok, hex.EncodeToString(sum[:]))
-	return nil
+	_, err := fmt.Fprintf(out, "token:  %s\nsha256: %s\n", tok, hex.EncodeToString(sum[:]))
+	return err
 }
 
-func runDevRunner(args []string) error {
-	fs := flag.NewFlagSet("dev-runner", flag.ContinueOnError)
+func (c *application) runDevRunner(args []string) error {
+	fs := c.flags("dev-runner")
 	path := fs.String("config", "", "path to dev-runner.yaml (required)")
-	if err := fs.Parse(args); err != nil {
+	if err := c.parse(fs, args); err != nil {
 		return err
 	}
-	if *path == "" || fs.NArg() != 0 {
-		return fmt.Errorf("usage: opsgate dev-runner -config <file>")
+	if *path == "" {
+		return usageError("missing required flag -config")
 	}
 	cfg, err := config.LoadDevRunner(*path)
 	if err != nil {
@@ -214,14 +164,14 @@ func runDevRunner(args []string) error {
 
 // runWatch watches Kubernetes and posts alerts to watch.webhook_url. It
 // serves no MCP clients, so it can run under its own account and kubeconfig.
-func runWatch(args []string) error {
-	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
+func (c *application) runWatch(args []string) error {
+	fs := c.flags("watch")
 	path := fs.String("config", "", "path to opsgate.yaml (required)")
-	if err := fs.Parse(args); err != nil {
+	if err := c.parse(fs, args); err != nil {
 		return err
 	}
-	if *path == "" || fs.NArg() != 0 {
-		return fmt.Errorf("usage: opsgate watch -config <file>")
+	if *path == "" {
+		return usageError("missing required flag -config")
 	}
 	cfg, err := config.Load(*path)
 	if err != nil {
@@ -260,16 +210,19 @@ func runWatch(args []string) error {
 // runPasskeyInvite prints a one-time passkey registration link. It writes
 // next to the OAuth state file, so run it as the server's account
 // (e.g. sudo -u opsgate opsgate passkey invite ...).
-func runPasskeyInvite(args []string) error {
-	fs := flag.NewFlagSet("passkey invite", flag.ContinueOnError)
+func (c *application) runPasskeyInvite(args []string) error {
+	fs := c.flags("passkey invite")
 	path := fs.String("config", "", "path to opsgate.yaml (required)")
 	subject := fs.String("subject", "", "configured user, e.g. passkey:alice (required)")
 	ttl := fs.Duration("ttl", 24*time.Hour, "how long the link stays valid (max 168h)")
-	if err := fs.Parse(args); err != nil {
+	if err := c.parse(fs, args); err != nil {
 		return err
 	}
-	if *path == "" || *subject == "" || fs.NArg() != 0 {
-		return fmt.Errorf("usage: opsgate passkey invite -config <file> -subject <user> [-ttl 24h]")
+	if *path == "" || *subject == "" {
+		return usageError("required flags: -config and -subject")
+	}
+	if *ttl <= 0 || *ttl > 168*time.Hour {
+		return usageError("-ttl must be greater than zero and at most 168h")
 	}
 	cfg, err := config.Load(*path)
 	if err != nil {
@@ -282,6 +235,6 @@ func runPasskeyInvite(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(link)
-	return nil
+	_, err = fmt.Fprintln(c.stdout, link)
+	return err
 }

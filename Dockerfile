@@ -10,7 +10,7 @@ ARG TARGETOS=linux
 ARG TARGETARCH
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
-    -ldflags "-s -w -X github.com/gkdis6/opsgate/internal/server.Version=$VERSION" \
+    -ldflags "-s -w -X github.com/gkdis6/opsgate/internal/buildinfo.version=$VERSION" \
     -o /out/opsgate ./cmd/opsgate
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH sh scripts/third-party-licenses.sh
 

@@ -17,8 +17,8 @@ import (
 // runInit asks for what cannot be defaulted and writes a mode-based
 // configuration. Flags answer questions ahead; without a terminal every
 // required answer must come from a flag.
-func runInit(args []string) error {
-	fs := flag.NewFlagSet("opsgate init", flag.ContinueOnError)
+func (c *application) runInit(args []string) error {
+	fs := c.flags("init")
 	out := fs.String("o", "opsgate.yaml", "file to write, or - for stdout")
 	force := fs.Bool("force", false, "overwrite an existing file")
 	yes := fs.Bool("yes", false, "use defaults for every question not answered by a flag")
@@ -36,13 +36,14 @@ func runInit(args []string) error {
 	fs.BoolVar(&o.PodLogs, "pod-logs", true, "allow reading pod logs")
 	units := fs.String("units", "", "mode host: comma-separated systemd unit globs")
 	fs.StringVar(&o.NoteVault, "note-vault", "", "absolute path of a Markdown/Obsidian vault; empty leaves notes off")
-	if err := fs.Parse(args); err != nil {
+	if err := c.parse(fs, args); err != nil {
 		return err
 	}
 	set := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
 
-	ask := &asker{in: bufio.NewReader(os.Stdin), interactive: !*yes && term.IsTerminal(int(os.Stdin.Fd()))}
+	input, terminal := c.stdin.(*os.File)
+	ask := &asker{in: bufio.NewReader(c.stdin), out: c.stderr, interactive: !*yes && terminal && term.IsTerminal(int(input.Fd()))}
 	ask.choice(set["mode"], &o.Mode, "Where will opsgate run? kubernetes (a pod) or host (a systemd service)", config.ModeKubernetes, config.ModeHost)
 	ask.text(set["public-url"], &o.PublicURL, "Public HTTPS URL clients connect to", "")
 	ask.choice(set["login"], &o.Login, "Sign-in: passkey, google or github", config.LoginPasskey, config.LoginGoogle, config.LoginGitHub)
@@ -76,10 +77,10 @@ func runInit(args []string) error {
 
 	data, err := config.Generate(o)
 	if err != nil {
-		return err
+		return usageError(err.Error())
 	}
 	if *out == "-" {
-		_, err = os.Stdout.Write(data)
+		_, err = c.stdout.Write(data)
 		return err
 	}
 	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
@@ -99,20 +100,21 @@ func runInit(args []string) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "wrote %s\n", *out)
+	fmt.Fprintf(c.stderr, "wrote %s\n", *out)
 	if o.Mode == config.ModeKubernetes {
-		fmt.Fprintf(os.Stderr, "Next: put it in the opsgate ConfigMap of deploy/kubernetes/opsgate-deployment.yaml and apply.\n")
+		fmt.Fprintf(c.stderr, "Next: put it in the opsgate ConfigMap of deploy/kubernetes/opsgate-deployment.yaml and apply.\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "Next: install it as /etc/opsgate/opsgate.yaml and start deploy/systemd/opsgate.service.\n")
+		fmt.Fprintf(c.stderr, "Next: install it as /etc/opsgate/opsgate.yaml and start deploy/systemd/opsgate.service.\n")
 	}
 	if o.Login == config.LoginPasskey {
-		fmt.Fprintf(os.Stderr, "On first start the log prints a one-time link to create the passkey for %s.\n", o.Subject())
+		fmt.Fprintf(c.stderr, "On first start the log prints a one-time link to create the passkey for %s.\n", o.Subject())
 	}
 	return nil
 }
 
 type asker struct {
 	in          *bufio.Reader
+	out         io.Writer
 	interactive bool
 	err         error
 }
@@ -134,20 +136,20 @@ func (a *asker) ask(answered bool, v *string, question, def string, required boo
 	}
 	if !a.interactive {
 		if required {
-			a.err = fmt.Errorf("no terminal to ask %q; pass it as a flag (see opsgate init -h)", question)
+			a.err = usageError(fmt.Sprintf("no terminal to ask %q; pass it as a flag", question))
 		}
 		*v = def
 		return
 	}
 	if def != "" {
-		fmt.Fprintf(os.Stderr, "%s [%s]: ", question, def)
+		fmt.Fprintf(a.out, "%s [%s]: ", question, def)
 	} else {
-		fmt.Fprintf(os.Stderr, "%s: ", question)
+		fmt.Fprintf(a.out, "%s: ", question)
 	}
 	line, err := a.in.ReadString('\n')
 	if err == io.EOF && line == "" {
 		// Input ended: answer the rest like -yes.
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(a.out)
 		a.interactive = false
 		a.ask(false, v, question, def, required)
 		return
@@ -170,7 +172,7 @@ func (a *asker) choice(answered bool, v *string, question string, options ...str
 		if answered || !a.interactive || slices.Contains(options, *v) {
 			return
 		}
-		fmt.Fprintf(os.Stderr, "Please answer %s.\n", strings.Join(options, ", "))
+		fmt.Fprintf(a.out, "Please answer %s.\n", strings.Join(options, ", "))
 	}
 }
 
@@ -198,10 +200,10 @@ func split(s string) []string {
 }
 
 // runConfigShow prints the effective configuration, mode defaults included.
-func runConfigShow(args []string) error {
-	fs := flag.NewFlagSet("opsgate config show", flag.ContinueOnError)
+func (c *application) runConfigShow(args []string) error {
+	fs := c.flags("config show")
 	path := fs.String("config", "", "path to opsgate.yaml")
-	if err := fs.Parse(args); err != nil {
+	if err := c.parse(fs, args); err != nil {
 		return err
 	}
 	cfg, err := config.Load(*path)
@@ -212,6 +214,6 @@ func runConfigShow(args []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = os.Stdout.Write(data)
+	_, err = c.stdout.Write(data)
 	return err
 }

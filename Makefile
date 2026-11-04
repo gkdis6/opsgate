@@ -5,7 +5,7 @@ BIN := bin/opsgate
 
 .PHONY: build test vet lint vuln clean licenses fmt fmt-check tidy-check check help
 build:
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "-X github.com/gkdis6/opsgate/internal/server.Version=$(VERSION)" -o $(BIN) ./cmd/opsgate
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "-X github.com/gkdis6/opsgate/internal/buildinfo.version=$(VERSION)" -o $(BIN) ./cmd/opsgate
 
 fmt:
 	gofmt -w .

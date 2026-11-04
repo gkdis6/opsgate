@@ -6,6 +6,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/gkdis6/opsgate/internal/buildinfo"
 	"github.com/gkdis6/opsgate/internal/config"
 	"github.com/gkdis6/opsgate/internal/provider/dev"
 	"github.com/gkdis6/opsgate/internal/provider/host"
@@ -13,9 +14,6 @@ import (
 	"github.com/gkdis6/opsgate/internal/provider/note"
 	"github.com/gkdis6/opsgate/internal/tool"
 )
-
-// Version is set at build time with -ldflags.
-var Version = "dev"
 
 const instructions = `opsgate exposes server operations, note and coding-agent
 tools. Write tools change real systems and need a human's approval; show the
@@ -56,7 +54,7 @@ func New(cfg config.Config, env *tool.Env) (*mcp.Server, error) {
 		}
 	}
 	s := mcp.NewServer(
-		&mcp.Implementation{Name: cfg.Server.Name, Version: Version},
+		&mcp.Implementation{Name: cfg.Server.Name, Version: buildinfo.Version()},
 		&mcp.ServerOptions{Instructions: text},
 	)
 	if p := cfg.Providers.Host; p.Enabled {

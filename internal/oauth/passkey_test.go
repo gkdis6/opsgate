@@ -421,3 +421,47 @@ func TestPasskeyScriptAndOtherPagesStayScriptFree(t *testing.T) {
 		t.Fatalf("non-passkey page CSP %q", csp)
 	}
 }
+
+func TestPasskeyPageSurvivesAnotherBrowser(t *testing.T) {
+	f := newPasskeyFixture(t, filepath.Join(t.TempDir(), "state.json"), "passkey:alice")
+	const target = "/approve/restart/main/deployment/apps/web"
+
+	// The signed-out link keeps its address in the sign-in address.
+	r := httptest.NewRequest("GET", "https://ops.example"+target, nil)
+	w := httptest.NewRecorder()
+	f.s.RequireUser(func(http.ResponseWriter, *http.Request, string) { t.Fatal("unexpected session") }).ServeHTTP(w, r)
+	location := w.Header().Get("Location")
+	if w.Code != http.StatusSeeOther || location != "/oauth/passkey?return="+url.QueryEscape(target) {
+		t.Fatalf("link: %d %q", w.Code, location)
+	}
+
+	// The browser that holds the cookie stays on the sign-in page.
+	if page := f.do(t, "GET", location, nil, w.Result().Cookies()); page.Code != http.StatusOK {
+		t.Fatalf("with cookie: %d", page.Code)
+	}
+	// Another browser, with no cookie, goes back to the link and starts again.
+	other := f.do(t, "GET", location, nil, nil)
+	if other.Code != http.StatusSeeOther || other.Header().Get("Location") != target {
+		t.Fatalf("without cookie: %d %q", other.Code, other.Header().Get("Location"))
+	}
+
+	// Only approval pages are accepted, so this cannot redirect elsewhere.
+	for _, bad := range []string{"", "/admin/clients", "/approve", "//evil.example/approve/x", "https://evil.example/approve/x", "/\\evil.example/approve/x",
+		"/approve/../admin/clients", "/approve/%2e%2e/admin/clients", "/approve//evil.example", "/approve/x?next=//evil.example"} {
+		w := f.do(t, "GET", "/oauth/passkey?return="+url.QueryEscape(bad), nil, nil)
+		if w.Code != http.StatusBadRequest || w.Header().Get("Location") != "" {
+			t.Fatalf("return %q: %d %q", bad, w.Code, w.Header().Get("Location"))
+		}
+	}
+
+	// Other sign-ins keep the plain address.
+	r = httptest.NewRequest("GET", "https://ops.example/admin/clients", nil)
+	w = httptest.NewRecorder()
+	f.s.RequireUser(func(http.ResponseWriter, *http.Request, string) { t.Fatal("unexpected session") }).ServeHTTP(w, r)
+	if w.Header().Get("Location") != "/oauth/passkey" {
+		t.Fatalf("admin login: %q", w.Header().Get("Location"))
+	}
+	if got := passkeyPagePath(&pendingAuth{Kind: "authorize", ReturnPath: target}); got != "/oauth/passkey" {
+		t.Fatalf("authorize path = %q", got)
+	}
+}

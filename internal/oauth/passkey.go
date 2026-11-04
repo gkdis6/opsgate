@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -247,6 +248,25 @@ func (s *Server) pendingFromCookie(r *http.Request) (string, *pendingAuth) {
 	return key, p
 }
 
+// passkeyPagePath keeps an approval page's address in the sign-in address, so
+// another browser can start again from it. OAuth logins never expose their state.
+func passkeyPagePath(p *pendingAuth) string {
+	if p.Kind == "login" && approvalReturn(p.ReturnPath) {
+		return "/oauth/passkey?return=" + url.QueryEscape(p.ReturnPath)
+	}
+	return "/oauth/passkey"
+}
+
+// approvalReturn reports whether target is a plain approval page on this server,
+// the only place a sign-in address may send a browser without its cookie.
+func approvalReturn(target string) bool {
+	if !localPath(target) {
+		return false
+	}
+	u, err := url.ParseRequestURI(target)
+	return err == nil && strings.HasPrefix(u.Path, "/approve/") && u.RawQuery == "" && path.Clean(u.Path) == u.Path
+}
+
 func (s *Server) passkeyLoginPage(w http.ResponseWriter, r *http.Request) {
 	if !rejectGETBody(w, r) {
 		return
@@ -255,6 +275,11 @@ func (s *Server) passkeyLoginPage(w http.ResponseWriter, r *http.Request) {
 	_, p := s.pendingFromCookie(r)
 	s.mu.Unlock()
 	if p == nil {
+		// "Open in browser" from an app carries this address but not the cookie.
+		if target := r.URL.Query().Get("return"); approvalReturn(target) {
+			redirectResponse(target)(w, r)
+			return
+		}
 		htmlError(w, http.StatusBadRequest, "This sign-in has expired. Start the connection again from your app.")
 		return
 	}

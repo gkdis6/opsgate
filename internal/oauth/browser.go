@@ -120,7 +120,7 @@ func (s *Server) startLogin(p *pendingAuth) response {
 	p.Expires = now.Add(loginTTL)
 	s.pending[hash(id)] = p
 	if s.passkey != nil {
-		return redirectResponse("/oauth/passkey").withCookie(pendingCookie, id, 600)
+		return redirectResponse(passkeyPagePath(p)).withCookie(pendingCookie, id, 600)
 	}
 	opts := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(p.Verifier)}
 	if s.verifier != nil {

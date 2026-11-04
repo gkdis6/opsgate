@@ -86,7 +86,7 @@
       await (root.dataset.mode === "register" ? register() : login());
     } catch (e) {
       button.disabled = false;
-      show(e && e.name === "NotAllowedError" ? "Cancelled or timed out. Try again." : (e.message || String(e)), true);
+      show(e && e.name === "NotAllowedError" ? "Cancelled or timed out. Try again. In an app's built-in browser, open this page in Safari or Chrome." : (e.message || String(e)), true);
     }
   });
 })();

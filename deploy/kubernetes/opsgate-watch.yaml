@@ -1,7 +1,14 @@
-# `opsgate watch` posts Kubernetes alerts to a webhook. Apply rbac-readonly.yaml
+# `opsgate watch` sends Kubernetes alerts by webhook or email. Apply rbac-readonly.yaml
 # first: the watcher uses the opsgate ServiceAccount, needing only list/watch.
 # Optional HMAC key: kubectl -n opsgate create secret generic opsgate-watch-hmac \
 #   --from-literal=key="$(openssl rand -hex 32)"
+# Optional SMTP password: create opsgate-watch-smtp with a password key from a
+# protected file; use a dedicated credential (e.g. an app password).
+# Configure either channel or both; batching, cooldown and retries are independent.
+# TLS and certificate verification are mandatory. Alerts are not stored and are
+# lost after retries. Names and redacted summaries pass through the mail provider
+# outside the cluster. Check account limits, especially for shared accounts:
+# up to one message per batch interval, 288/day at 5m or 96/day at 15m.
 # Keep one replica: every replica watches the whole scope, so more would send
 # every alert more than once.
 apiVersion: v1
@@ -23,6 +30,16 @@ data:
       # http://n8n.n8n.svc.cluster.local:5678/webhook/opsgate-watch,
       # set allow_private_http: true (connections must reach private addresses).
       allow_private_http: false
+      # Optional email channel; uncomment with the smtp Secret mount below.
+      # email:
+      #   host: smtp.example.com
+      #   port: 587  # 465: implicit TLS; every other port: STARTTLS required
+      #   username: alerts@example.com
+      #   password_file: /etc/opsgate/smtp/password
+      #   from: alerts@example.com
+      #   to: [me@example.com]
+      #   batch: 5m
+      #   problems_only: false
       secret_file: /etc/opsgate/watch/key
       problems_only: false
       batch: 30s
@@ -82,6 +99,9 @@ spec:
             - name: hmac
               mountPath: /etc/opsgate/watch
               readOnly: true
+            # - name: smtp
+            #   mountPath: /etc/opsgate/smtp
+            #   readOnly: true
       volumes:
         - name: config
           configMap:
@@ -91,3 +111,7 @@ spec:
           secret:
             secretName: opsgate-watch-hmac
             defaultMode: 0440
+        # - name: smtp
+        #   secret:
+        #     secretName: opsgate-watch-smtp
+        #     defaultMode: 0440

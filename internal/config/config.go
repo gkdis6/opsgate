@@ -299,6 +299,15 @@ func Parse(data []byte, name string) (Config, error) {
 		cfg.Approval.RequireWeb = true
 		cfg.Approval.RequireWebDefaulted = true
 	}
+	if cfg.Watch.Email.Host == "" {
+		if email, ok := lookup(&root, "watch", "email").(map[string]any); ok {
+			for field := range email {
+				if field != "host" {
+					return cfg, fmt.Errorf("watch.email.%s requires watch.email.host", field)
+				}
+			}
+		}
+	}
 	return cfg, cfg.Validate()
 }
 

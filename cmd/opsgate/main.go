@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -168,7 +169,7 @@ func (c *application) runDevRunner(args []string) error {
 	return devrunner.Serve(ctx, cfg)
 }
 
-// runWatch watches Kubernetes and posts alerts to watch.webhook_url. It
+// runWatch watches Kubernetes and delivers alerts by webhook or email. It
 // serves no MCP clients, so it can run under its own account and kubeconfig.
 func (c *application) runWatch(args []string) error {
 	fs := c.flags("watch")
@@ -197,20 +198,58 @@ func (c *application) runWatch(args []string) error {
 			return fmt.Errorf("watch.secret_file must hold at least 16 bytes")
 		}
 	}
+	dispatchers, err := watchDispatchers(w, secret)
+	if err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	// Validation allows plain http only to loopback or private receivers.
-	privateOnly := strings.HasPrefix(strings.ToLower(w.WebhookURL), "http:")
-	d := alert.New(alert.Options{URL: w.WebhookURL, Secret: secret, Batch: w.Batch, Cooldown: w.Cooldown, MaxAlerts: w.MaxAlerts, PrivateOnly: privateOnly})
-	done := make(chan struct{})
-	go func() {
-		d.Run(ctx)
-		close(done)
-	}()
-	err = kube.Watch(ctx, cfg.WatchClusters(), w.ProblemsOnly, d.Emit)
+	// Keep delivery alive until watcher callbacks have stopped.
+	deliveryCtx, cancelDeliveries := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancelDeliveries()
+	var deliveries sync.WaitGroup
+	for _, d := range dispatchers {
+		deliveries.Add(1)
+		go func() {
+			defer deliveries.Done()
+			d.Run(deliveryCtx)
+		}()
+	}
+	emit := func(a alert.Alert) {
+		for _, d := range dispatchers {
+			d.Emit(a)
+		}
+	}
+	err = kube.Watch(ctx, cfg.WatchClusters(), w.ProblemsOnly, emit)
 	stop()
-	<-done
+	cancelDeliveries()
+	deliveries.Wait()
 	return err
+}
+
+// watchDispatchers loads credentials before any watchers start.
+func watchDispatchers(w config.Watch, secret []byte) ([]*alert.Dispatcher, error) {
+	var result []*alert.Dispatcher
+	if w.WebhookURL != "" {
+		privateOnly := strings.HasPrefix(strings.ToLower(w.WebhookURL), "http:")
+		result = append(result, alert.New(alert.Options{URL: w.WebhookURL, Secret: secret, Batch: w.Batch, Cooldown: w.Cooldown, MaxAlerts: w.MaxAlerts, PrivateOnly: privateOnly}))
+	}
+	if e := w.Email; e.Host != "" {
+		var password string
+		if e.PasswordFile != "" {
+			b, err := os.ReadFile(e.PasswordFile)
+			if err != nil {
+				return nil, fmt.Errorf("watch.email.password_file: %w", err)
+			}
+			password = strings.TrimSpace(string(b))
+			if password == "" {
+				return nil, fmt.Errorf("watch.email.password_file must not be empty")
+			}
+		}
+		sender := alert.NewEmail(alert.EmailOptions{Host: e.Host, Port: e.Port, Username: e.Username, Password: password, From: e.From, To: e.To})
+		result = append(result, alert.New(alert.Options{Sender: sender, Batch: e.Batch, ProblemsOnly: e.ProblemsOnly, Cooldown: w.Cooldown, MaxAlerts: w.MaxAlerts}))
+	}
+	return result, nil
 }
 
 // runPasskeyInvite prints a one-time passkey registration link. It writes

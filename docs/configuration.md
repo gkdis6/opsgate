@@ -194,7 +194,7 @@ Client registration can be restricted with `allowed_redirect_hosts`. With a none
 
 ## Watch alerts
 
-The `watch` section is read only by `opsgate watch`, a separate process; the MCP server ignores it. `opsgate watch` requires `providers.kubernetes.enabled` and `watch.webhook_url`.
+The `watch` section is read only by `opsgate watch`, a separate process; the MCP server ignores it. `opsgate watch` requires `providers.kubernetes.enabled` and at least one of `watch.webhook_url` and `watch.email.host`.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -202,10 +202,31 @@ The `watch` section is read only by `opsgate watch`, a separate process; the MCP
 | `allow_private_http` | `false` | Also allow http to private receivers (Service names, private IPs); connections must reach private addresses |
 | `secret_file` | empty | Optional key (at least 16 bytes) for the `X-Opsgate-Signature` HMAC |
 | `clusters` | all | Configured cluster names to watch |
-| `problems_only` | `false` | Send warnings only |
-| `batch` | `30s` | How long alerts are gathered into one POST (1s–10m) |
+| `problems_only` | `false` | Produce warnings only for every channel |
+| `batch` | `30s` | Webhook batch interval (1s–10m) |
 | `cooldown` | `15m` | Repeat warnings for one object are counted, not sent (0–24h) |
-| `max_alerts` | `50` | Alerts per POST (1–500) |
+| `max_alerts` | `50` | Alerts per channel batch (1–500) |
+| `email.host` | empty | Enables SMTP; no whitespace, scheme, port or slash |
+| `email.port` | `587` | 1–65535; 465 uses implicit TLS, every other port requires STARTTLS |
+| `email.username` | empty | Optional; set together with `email.password_file` |
+| `email.password_file` | empty | SMTP password, read at startup and trimmed; unreadable or empty files fail startup |
+| `email.from` | empty | Required bare address, no display name or CR/LF |
+| `email.to` | empty | 1–20 bare addresses, no display names or CR/LF |
+| `email.batch` | `5m` | Email batch interval (1m–1h) |
+| `email.problems_only` | `false` | Send warnings only by email |
+
+Email fields require `email.host`. Webhook and email are independent: configure
+either or both, with separate batching, cooldown state and retries. Both use
+`watch.cooldown` and `watch.max_alerts`. TLS and certificate verification are
+mandatory (TLS 1.2 or newer): port 465 uses implicit TLS, all other ports require
+STARTTLS. Use a dedicated credential, such as an app password, that can be
+revoked on its own. Alerts are not stored and are lost after retries, just as
+with webhook delivery.
+
+Namespace, pod and container names and redacted summaries pass through the mail
+provider outside the cluster. Worst-case volume is one message per batch
+interval: `5m` can send up to 288 messages a day and `15m` up to 96. Check the
+account's sending limit, especially when other services share it.
 
 See [watch alerts](watch.md) for what is reported and the payload.
 

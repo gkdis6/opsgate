@@ -3,19 +3,23 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/mail"
 	"net/url"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Watch configures `opsgate watch`, a separate long-running process that
-// watches Kubernetes and POSTs alerts to a webhook. The MCP server does not
+// watches Kubernetes and delivers alerts. The MCP server does not
 // use it.
 type Watch struct {
 	// WebhookURL receives alert batches as JSON POSTs, e.g. an n8n webhook
-	// that forwards them to chat. Required by `opsgate watch`.
+	// that forwards them to chat. `opsgate watch` requires this or Email.
 	WebhookURL string `yaml:"webhook_url"`
+	// Email delivers alerts by SMTP, alongside or instead of the webhook.
+	Email WatchEmail `yaml:"email,omitempty"`
 	// AllowPrivateHTTP also permits http to receivers without TLS on a
 	// private network, such as a Kubernetes Service name or ClusterIP.
 	// Every connection must then reach a private or loopback address after
@@ -30,15 +34,74 @@ type Watch struct {
 	// ProblemsOnly drops informational changes (images, replicas,
 	// ConfigMap keys, objects added or removed) and sends warnings only.
 	ProblemsOnly bool `yaml:"problems_only"`
-	// Batch is how long alerts are gathered into one POST.
+	// Batch is how long alerts are gathered into one webhook POST.
 	Batch time.Duration `yaml:"batch"`
 	// Cooldown suppresses repeats of the same warning for one object.
 	Cooldown time.Duration `yaml:"cooldown"`
-	// MaxAlerts caps the alerts in one POST; the rest are counted as dropped.
+	// MaxAlerts caps each batch; the rest are counted as dropped.
 	MaxAlerts int `yaml:"max_alerts"`
 }
 
+// WatchEmail configures SMTP delivery, enabled by Host.
+type WatchEmail struct {
+	Host string `yaml:"host"`
+	// Port 465 uses implicit TLS; every other port requires STARTTLS.
+	Port int `yaml:"port"`
+	// Username and PasswordFile are set together, or not at all for a relay
+	// that needs no authentication.
+	Username     string   `yaml:"username"`
+	PasswordFile string   `yaml:"password_file"`
+	From         string   `yaml:"from"`
+	To           []string `yaml:"to"`
+	// Batch is how long alerts are gathered into one message.
+	Batch time.Duration `yaml:"batch"`
+	// ProblemsOnly sends warnings only by email.
+	ProblemsOnly bool `yaml:"problems_only"`
+}
+
+// IsZero omits disabled email from effective configuration.
+func (e WatchEmail) IsZero() bool { return e.Host == "" }
+
+func (e WatchEmail) validate() error {
+	// Parse rejects fields set without a host.
+	if e.Host == "" {
+		return nil
+	}
+	if strings.ContainsAny(e.Host, ":/\\") || strings.ContainsFunc(e.Host, unicode.IsSpace) {
+		return fmt.Errorf("watch.email.host must be a host without whitespace, scheme, port or slash")
+	}
+	if e.Port < 1 || e.Port > 65535 {
+		return fmt.Errorf("watch.email.port must be between 1 and 65535")
+	}
+	if (e.Username == "") != (e.PasswordFile == "") {
+		return fmt.Errorf("watch.email.username and watch.email.password_file must be set together")
+	}
+	if !bareAddress(e.From) {
+		return fmt.Errorf("watch.email.from must be a bare email address")
+	}
+	if len(e.To) < 1 || len(e.To) > 20 {
+		return fmt.Errorf("watch.email.to must have 1 to 20 addresses")
+	}
+	for _, to := range e.To {
+		if !bareAddress(to) {
+			return fmt.Errorf("watch.email.to must contain bare email addresses")
+		}
+	}
+	if e.Batch < time.Minute || e.Batch > time.Hour {
+		return fmt.Errorf("watch.email.batch must be between 1m and 1h")
+	}
+	return nil
+}
+
+func bareAddress(value string) bool {
+	a, err := mail.ParseAddress(value)
+	return err == nil && a.Name == "" && a.Address == value && !strings.ContainsAny(value, "\r\n")
+}
+
 func (w Watch) validate(k Kubernetes) error {
+	if err := w.Email.validate(); err != nil {
+		return err
+	}
 	if w.WebhookURL != "" {
 		u, err := url.Parse(w.WebhookURL)
 		if err != nil || len(w.WebhookURL) > 4096 || u.Hostname() == "" || u.User != nil || u.Opaque != "" || strings.Contains(w.WebhookURL, "#") ||
@@ -82,8 +145,8 @@ func (c Config) ValidateWatch() error {
 	if !c.Providers.Kubernetes.Enabled {
 		return fmt.Errorf("opsgate watch requires providers.kubernetes.enabled")
 	}
-	if c.Watch.WebhookURL == "" {
-		return fmt.Errorf("opsgate watch requires watch.webhook_url")
+	if c.Watch.WebhookURL == "" && c.Watch.Email.Host == "" {
+		return fmt.Errorf("opsgate watch requires watch.webhook_url or watch.email.host")
 	}
 	return nil
 }

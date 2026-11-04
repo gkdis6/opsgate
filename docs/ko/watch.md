@@ -2,7 +2,7 @@
 
 [English](../watch.md)
 
-`opsgate watch`는 MCP 서버와 따로 계속 실행되는 프로세스입니다. Kubernetes를 watch로 지켜보다가 문제나 변경이 생기면 webhook으로 알림을 보냅니다. 예를 들어 n8n 워크플로우로 받아 채팅으로 전달할 수 있습니다. MCP 클라이언트를 받지 않고 도구도 없습니다. 사람이 알림을 보고 나면 AI 클라이언트가 기존 조회 도구로 원인을 살핍니다. MCP 서버와 분리되어 있어 stdio 사용자도 쓸 수 있고, 별도 계정과 kubeconfig로 실행할 수 있습니다.
+`opsgate watch`는 MCP 서버와 따로 계속 실행되는 프로세스입니다. Kubernetes를 watch로 지켜보다가 문제나 변경이 생기면 webhook이나 SMTP 이메일로 알림을 보냅니다. 두 채널을 함께 쓸 수도 있습니다. 예를 들어 webhook은 n8n 워크플로우로 받아 채팅으로 전달할 수 있습니다. MCP 클라이언트를 받지 않고 도구도 없습니다. 사람이 알림을 보고 나면 AI 클라이언트가 기존 조회 도구로 원인을 살핍니다. MCP 서버와 분리되어 있어 stdio 사용자도 쓸 수 있고, 별도 계정과 kubeconfig로 실행할 수 있습니다.
 
 ```sh
 opsgate watch -config /etc/opsgate/opsgate.yaml
@@ -12,7 +12,16 @@ opsgate watch -config /etc/opsgate/opsgate.yaml
 
 ```yaml
 watch:
-  webhook_url: https://n8n.example.com/webhook/opsgate-watch
+  webhook_url: https://n8n.example.com/webhook/opsgate-watch  # 선택
+  email:                           # 선택. host를 설정하면 활성화됩니다
+    host: smtp.example.com
+    port: 587                      # 기본값. 465는 연결 즉시 TLS를 사용합니다
+    username: alerts@example.com   # 선택. password_file과 함께 설정합니다
+    password_file: /etc/opsgate/smtp-password
+    from: alerts@example.com
+    to: [me@example.com]
+    batch: 5m                      # 기본값. 1m–1h
+    problems_only: false           # true면 이메일로는 경고만 보냅니다
   allow_private_http: false  # true면 사설 네트워크로 가는 http도 허용합니다
   secret_file: /etc/opsgate/watch-secret   # 선택. HMAC 키, 16바이트 이상
   clusters: []          # 기본값: 설정된 모든 클러스터
@@ -23,6 +32,26 @@ watch:
 ```
 
 `webhook_url`은 https이거나 루프백 주소로 가는 http여야 하고, 자격 증명이나 프래그먼트를 넣을 수 없습니다. `allow_private_http: true`로 두면 Service 이름(`http://n8n.n8n.svc.cluster.local:5678/...`)이나 사설 IP 주소처럼 사설 네트워크로 가는 http도 허용합니다. 이때 모든 연결은 DNS 조회 후 사설 주소나 루프백 주소에 닿아야 하고, 검사한 주소가 실제 수신 측 주소가 되도록 프록시 설정은 무시합니다. 공인 IP를 직접 적으면 여전히 거부합니다. 알림은 그 네트워크를 암호화 없이 지나갑니다. URL 쿼리에 비밀 키를 넣어도 로그에는 남지 않습니다.
+
+## 이메일 전송
+
+Webhook과 이메일은 독립된 채널입니다. 둘 중 하나만 설정하거나 둘 다 설정할 수 있습니다. 각 채널이 알림 묶음, 쿨다운 상태, 재시도를 따로 관리하므로 한쪽이 느리거나 실패해도 다른 쪽 전송은 지연되지 않습니다. 두 채널 모두 `watch.cooldown`과 `watch.max_alerts`를 사용합니다. Webhook 전송 간격은 `watch.batch`, 이메일 전송 간격은 `watch.email.batch`로 정합니다. 이메일의 기본값은 `5m`이며 `1m`부터 `1h`까지 허용합니다.
+
+`watch.email.problems_only: true`는 이메일에서만 정보 알림을 제외합니다. 반면 `watch.problems_only: true`는 watcher가 정보 알림을 만들지 않게 하므로 모든 채널에 적용됩니다.
+
+TLS는 필수이며, `email.host`를 기준으로 서버 인증서를 검증합니다. TLS 1.2 이상만 사용합니다. 포트 `465`에서는 연결 즉시 TLS를 사용하고, 그 밖의 모든 포트에서는 STARTTLS가 필요합니다. 서버가 STARTTLS를 지원하지 않거나 거부하면 전송을 중단합니다. TLS 연결이 성립하기 전에는 자격 증명이나 메시지 내용을 보내지 않습니다. TLS나 인증서 검증을 끄는 옵션은 없습니다.
+
+인증이 필요하면 `username`과 `password_file`을 함께 설정하세요. 인증 없는 릴레이에서는 둘 다 생략합니다. 비밀번호 파일은 시작할 때 읽고 앞뒤 공백을 제거합니다. 파일을 읽을 수 없거나 내용이 비어 있으면 시작하지 않습니다. 앱 비밀번호처럼 별도로 폐기할 수 있는 전용 자격 증명을 사용하세요. Kubernetes에서는 Secret으로 마운트할 수 있습니다. `deploy/kubernetes/opsgate-watch.yaml`의 주석 처리된 예제를 참고하세요.
+
+`host`에는 공백, 스킴, 포트, 슬래시 없이 호스트 이름만 적습니다. `port`의 기본값은 `587`이며 1–65535 범위를 허용합니다. `from`과 `to`에는 표시 이름이나 줄바꿈 없이 이메일 주소만 적어야 합니다. 수신자는 1–20명까지 지정할 수 있습니다. 다른 이메일 항목을 설정하려면 `host`가 필요합니다.
+
+이메일은 일반 텍스트이며 본문은 quoted-printable로 인코딩합니다. Webhook의 `text`와 같은 내용과 누락된 알림 수를 담습니다. 알림이 하나면 그 내용을 제목으로 사용하고, 여러 개면 경고 수, 변경 수, 정렬된 클러스터 이름을 제목에 넣습니다. 제목에서는 제어 문자를 제거하고 유니코드 문자 120자에서 자른 뒤 MIME 인코딩을 적용합니다. HTML이나 첨부 파일은 보내지 않습니다.
+
+네트워크 오류, TLS 핸드셰이크 오류, SMTP 4xx 응답은 1초와 4초 뒤 두 번 재시도합니다. 비밀번호 거부를 포함한 SMTP 5xx 응답과 STARTTLS 거부는 재시도하지 않습니다. 한 번의 전송에는 최대 30초를 허용하며, 컨텍스트 기한이 더 짧으면 그 기한을 따릅니다. 알림은 저장하지 않습니다. Webhook과 마찬가지로 재시도 후에도 전송하지 못한 알림은 유실되며 로그에 남깁니다. 종료할 때는 각 채널의 종료 제한 시간 안에서 대기 중인 알림을 보냅니다.
+
+네임스페이스·파드·컨테이너 이름과 민감 정보를 마스킹한 요약이 클러스터 외부의 메일 제공업체를 거칩니다. 이메일을 활성화하기 전에 해당 클러스터의 정보 처리 정책에 맞는지 확인하세요.
+
+최대 발송량은 묶음 간격마다 메시지 한 통입니다. `5m`이면 하루 최대 288통, `15m`이면 최대 96통을 보낼 수 있습니다. 특히 다른 서비스와 계정을 함께 쓰는 경우 계정의 발송 한도를 확인하세요.
 
 ## 알리는 내용
 

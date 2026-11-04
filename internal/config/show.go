@@ -14,6 +14,9 @@ import (
 // Effective renders every setting, defaults included, as YAML that Load
 // accepts. A mode hides values the file does not spell out; this shows them.
 func (c Config) Effective() ([]byte, error) {
+	if c.Watch.Email.Host == "" {
+		c.Watch.Email = WatchEmail{}
+	}
 	n, err := node(reflect.ValueOf(c))
 	if err != nil {
 		return nil, err

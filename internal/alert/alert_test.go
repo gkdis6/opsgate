@@ -122,7 +122,7 @@ func TestPostSignsAndDoesNotFollowRedirects(t *testing.T) {
 		t.Fatal("internal key serialized")
 	}
 
-	d.opts.URL = srv.URL + "/redirect"
+	d.opts.Sender.(*webhookSender).opts.URL = srv.URL + "/redirect"
 	if err := d.post(context.Background(), b); err == nil || redirected {
 		t.Fatalf("redirect followed: err=%v redirected=%v", err, redirected)
 	}
@@ -150,7 +150,7 @@ func TestPostRetriesServerErrorsOnly(t *testing.T) {
 
 func TestPostErrorHidesURL(t *testing.T) {
 	d, _ := newTest(t, Options{URL: "https://127.0.0.1:1/hook?key=s3cret"})
-	_, err := d.send(context.Background(), []byte("{}"))
+	_, err := d.opts.Sender.Send(context.Background(), &Batch{})
 	if err == nil || strings.Contains(err.Error(), "s3cret") {
 		t.Fatalf("err = %v", err)
 	}
@@ -188,11 +188,11 @@ func TestPrivateOnlyRefusesPublicAddresses(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer srv.Close()
 	d, _ := newTest(t, Options{URL: srv.URL, PrivateOnly: true})
-	if _, err := d.send(context.Background(), []byte("{}")); err != nil {
+	if _, err := d.opts.Sender.Send(context.Background(), &Batch{}); err != nil {
 		t.Fatalf("loopback refused: %v", err)
 	}
-	d.opts.URL = "http://192.0.2.1:9/hook"
-	if _, err := d.send(context.Background(), []byte("{}")); err == nil || !strings.Contains(err.Error(), "not private") {
+	d.opts.Sender.(*webhookSender).opts.URL = "http://192.0.2.1:9/hook"
+	if _, err := d.opts.Sender.Send(context.Background(), &Batch{}); err == nil || !strings.Contains(err.Error(), "not private") {
 		t.Fatalf("public address allowed: %v", err)
 	}
 }

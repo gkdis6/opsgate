@@ -137,8 +137,24 @@ providers:
 # Keep it off for coding task starts.
 
 # ---- KUBERNETES WATCH ALERTS (read only by `opsgate watch`) ----
+# Configure webhook, email, or both; each batches, cools down and retries independently.
+# Email requires verified TLS: port 465 implicit TLS, every other port STARTTLS.
+# Use a dedicated credential (e.g. app password) that can be revoked separately.
+# Names and redacted summaries pass through the mail provider outside the cluster.
+# No alert storage; failed batches are lost after retries. Check account sending limits:
+# one message per batch interval, up to 288/day at 5m or 96/day at 15m,
+# especially if other services share the account.
 # watch:
-#   webhook_url: https://n8n.example.com/webhook/opsgate-watch
+#   webhook_url: https://n8n.example.com/webhook/opsgate-watch  # optional
+#   email:                           # optional; enabled by host
+#     host: smtp.example.com
+#     port: 587                      # default; 465 uses implicit TLS
+#     username: alerts@example.com   # optional; pair with password_file
+#     password_file: /etc/opsgate/smtp-password
+#     from: alerts@example.com
+#     to: [me@example.com]
+#     batch: 5m                      # default; 1m–1h
+#     problems_only: false           # warnings only for email when true
 #   secret_file: /etc/opsgate/watch-secret  # optional HMAC key
 #   problems_only: false
 #   batch: 30s

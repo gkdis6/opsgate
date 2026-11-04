@@ -40,7 +40,7 @@ func cli(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 func (c *application) commands() []command {
 	return []command{
 		{name: "dev-runner", summary: "Run configured coding agents", run: c.runDevRunner},
-		{name: "watch", summary: "Watch Kubernetes and post alerts", run: c.runWatch},
+		{name: "watch", summary: "Watch Kubernetes and send webhook or email alerts", run: c.runWatch},
 		{name: "init", summary: "Write a configuration interactively or with flags", run: c.runInit},
 		{name: "config", summary: "Inspect configuration", children: []command{
 			{name: "show", summary: "Print the effective configuration", run: c.runConfigShow},

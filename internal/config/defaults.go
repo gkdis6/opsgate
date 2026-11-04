@@ -49,6 +49,7 @@ func Default() Config {
 			},
 		},
 		Watch: Watch{
+			Email:     WatchEmail{Port: 587, Batch: 5 * time.Minute},
 			Batch:     30 * time.Second,
 			Cooldown:  15 * time.Minute,
 			MaxAlerts: 50,

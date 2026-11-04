@@ -3,9 +3,10 @@
 [한국어](ko/watch.md)
 
 `opsgate watch` is a separate long-running process that watches Kubernetes
-and posts alerts to a webhook, for example an n8n workflow that forwards them
-to chat. It serves no MCP clients and has no tools: an AI client still
-investigates through the usual read tools after a person sees the alert.
+and sends alerts by webhook, SMTP email, or both. A webhook can be, for example,
+an n8n workflow that forwards them to chat. It serves no MCP clients and has no
+tools: an AI client still investigates through the usual read tools after a
+person sees the alert.
 Running it apart from the MCP server means stdio users can use it too, and it
 can run under its own account and kubeconfig.
 
@@ -18,25 +19,81 @@ It reads `providers.kubernetes` for clusters and namespace policy and
 
 ```yaml
 watch:
-  webhook_url: https://n8n.example.com/webhook/opsgate-watch
+  webhook_url: https://n8n.example.com/webhook/opsgate-watch  # optional
+  email:                           # optional; enabled by host
+    host: smtp.example.com
+    port: 587                      # default; 465 uses implicit TLS
+    username: alerts@example.com   # optional; pair with password_file
+    password_file: /etc/opsgate/smtp-password
+    from: alerts@example.com
+    to: [me@example.com]
+    batch: 5m                      # default; 1m–1h
+    problems_only: false           # warnings only for email when true
   allow_private_http: false  # true also allows http to private receivers
   secret_file: /etc/opsgate/watch-secret   # optional HMAC key, >= 16 bytes
   clusters: []          # default: every configured cluster
   problems_only: false  # true sends warnings only
   batch: 30s            # gather alerts into one POST (1s–10m)
   cooldown: 15m         # repeat warnings for one object are counted, not sent (0–24h)
-  max_alerts: 50        # alerts per POST (1–500); the rest count as dropped
+  max_alerts: 50        # alerts per channel batch (1–500); the rest count as dropped
 ```
 
 `webhook_url` must use https, or http to a loopback address, and must not
 contain credentials or a fragment. With `allow_private_http: true`, plain http to a private
 network is also accepted, such as a Service name
-(`http://n8n.n8n.svc.cluster.local:5678/...`) or a private IP address. Every
-connection must then reach a private or loopback address after DNS
+(`http://n8n.n8n.svc.cluster.local:5678/...`) or a
+private IP address. Every connection must then reach a private or loopback address after DNS
 resolution, and proxy settings are ignored so the checked address is the
 receiver's. A public IP literal is still refused. Alerts cross that network
 unencrypted. A secret query key in
 the URL is never logged.
+
+## Email delivery
+
+Webhook and email are independent: configure either or both. Each channel has
+its own batching, cooldown state and retries; a slow or failing channel does
+not delay the other. Both use `watch.cooldown` and `watch.max_alerts`.
+`watch.batch` controls webhook batching; `watch.email.batch` defaults to `5m`
+and accepts `1m` through `1h`. `watch.email.problems_only` filters email only.
+`watch.problems_only` prevents info alerts from being produced for every channel.
+
+TLS is mandatory and certificates are verified against `email.host`, with TLS
+1.2 or newer. Port `465` uses implicit TLS; every other port requires STARTTLS.
+Delivery stops if STARTTLS is unavailable or refused. Credentials and message
+content are sent only after TLS is established. There is no insecure mode.
+
+Set `username` and `password_file` together, or omit both for a relay that
+requires no authentication. The password file is read at startup, with surrounding
+whitespace trimmed; unreadable or empty files stop startup. Use a dedicated
+credential, such as an app password, so it can be revoked on its own. Mount it
+from a Secret when running in Kubernetes; see the commented example in
+`deploy/kubernetes/opsgate-watch.yaml`.
+
+`host` takes a host name without whitespace, a scheme, port or slash. `port`
+accepts 1–65535 and defaults to `587`. `from` and each `to` entry must be bare
+email addresses, without display names or line breaks; `to` accepts 1–20
+addresses. Other email fields require `host`.
+
+Email is plain text, with a quoted-printable body containing the same `text`
+and dropped count as the webhook. A single alert uses its text as the subject;
+multiple alerts list warning and change counts, then sorted cluster names.
+Subjects have control characters removed, are capped at 120 Unicode characters
+and use MIME encoding. Email contains no HTML or attachments.
+
+Network and TLS handshake errors and SMTP 4xx replies are retried twice,
+after 1s and 4s. SMTP 5xx replies, including rejected credentials, and refused
+STARTTLS are not retried. Each exchange is bounded to 30 seconds or the
+remaining context deadline. Alerts are not stored: after retries are exhausted,
+they are logged as lost, just as with webhook delivery. Shutdown flushes pending
+alerts within each channel's shutdown deadline.
+
+Namespace, pod and container names and redacted summaries pass through the
+mail provider, which is outside the cluster. Check whether that is appropriate
+for the cluster before enabling email.
+
+Worst-case volume is one message per batch interval: a `5m` batch can send up
+to 288 messages a day and a `15m` batch up to 96. Check the account's sending
+limit, especially if other services share it.
 
 ## What is reported
 
@@ -99,8 +156,7 @@ X-Opsgate-Signature: sha256=<hex HMAC-SHA256(secret, raw body)>
 ```
 
 Verify the signature against the raw body, then reject batches whose signed
-`sent_at` is old to limit replays. Receivers such as n8n can check this with
-their built-in HMAC node and no custom code. Redirects
+`sent_at` is old to limit replays. Receivers such as n8n can check this with their built-in HMAC node and no custom code. Redirects
 are not followed. Network errors and 5xx responses are retried twice, after 1s
 and 4s; after that the batch is logged as lost. When the internal queue (1000
 alerts) is full, new alerts are counted in `dropped` of the next POST.

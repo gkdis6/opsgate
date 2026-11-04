@@ -1,25 +1,19 @@
-// Package alert batches watch alerts and delivers them to a webhook.
+// Package alert batches and delivers watch alerts.
 //
-// Delivery is best effort: a slow or failing webhook never blocks the
+// Delivery is best effort: a slow or failing channel never blocks the
 // watchers, and alerts that do not fit are counted as dropped.
 package alert
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -46,7 +40,7 @@ type Alert struct {
 	Key string `json:"-"`
 }
 
-// Batch is the JSON body of one webhook POST.
+// Batch is one delivery, also the JSON body of a webhook POST.
 type Batch struct {
 	Source string    `json:"source"`
 	SentAt time.Time `json:"sent_at"`
@@ -57,13 +51,23 @@ type Batch struct {
 	Text string `json:"text"`
 }
 
+// Sender delivers one batch.
+type Sender interface {
+	Name() string
+	Send(context.Context, *Batch) (retry bool, err error)
+}
+
 // Options configures a Dispatcher.
 type Options struct {
-	URL       string
-	Secret    []byte
-	Batch     time.Duration
-	Cooldown  time.Duration
-	MaxAlerts int
+	// Sender delivers batches; nil posts them to URL as a webhook.
+	Sender Sender
+	// ProblemsOnly drops every alert that is not a warning.
+	ProblemsOnly bool
+	URL          string
+	Secret       []byte
+	Batch        time.Duration
+	Cooldown     time.Duration
+	MaxAlerts    int
 	// PrivateOnly refuses connections to addresses that are neither
 	// private nor loopback, checked after DNS resolution. Use it for
 	// plain http, where a host name could otherwise lead anywhere.
@@ -73,7 +77,7 @@ type Options struct {
 
 const queueSize = 1000
 
-// Dispatcher gathers alerts and posts them in batches.
+// Dispatcher gathers and delivers alerts in batches.
 type Dispatcher struct {
 	opts  Options
 	queue chan Alert
@@ -91,38 +95,17 @@ type Dispatcher struct {
 
 // New returns a Dispatcher; call Run to deliver.
 func New(opts Options) *Dispatcher {
-	if opts.Client == nil {
-		opts.Client = &http.Client{}
-		if opts.PrivateOnly {
-			opts.Client.Transport = privateTransport()
-		}
+	if opts.Sender == nil {
+		opts.Sender = newWebhook(opts)
 	}
-	client := *opts.Client
-	client.Timeout = 10 * time.Second
-	// A redirect could move signed alerts to an unconfigured host.
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	opts.Client = &client
 	return &Dispatcher{opts: opts, queue: make(chan Alert, queueSize), last: map[string]time.Time{}, suppressed: map[string]int{}, now: time.Now, backoff: []time.Duration{0, time.Second, 4 * time.Second}}
-}
-
-func privateTransport() *http.Transport {
-	t := http.DefaultTransport.(*http.Transport).Clone()
-	// The checked address must be the receiver's, not a proxy's.
-	t.Proxy = nil
-	dialer := &net.Dialer{Timeout: 10 * time.Second, Control: func(_, address string, _ syscall.RawConn) error {
-		host, _, err := net.SplitHostPort(address)
-		ip := net.ParseIP(host)
-		if err != nil || ip == nil || !ip.IsPrivate() && !ip.IsLoopback() {
-			return fmt.Errorf("webhook address %s is not private", host)
-		}
-		return nil
-	}}
-	t.DialContext = dialer.DialContext
-	return t
 }
 
 // Emit queues a without blocking.
 func (d *Dispatcher) Emit(a Alert) {
+	if d.opts.ProblemsOnly && a.Severity != Warning {
+		return
+	}
 	select {
 	case d.queue <- a:
 	default:
@@ -176,7 +159,7 @@ func (d *Dispatcher) flush(ctx context.Context, pending []Alert) []Alert {
 		return pending[:0]
 	}
 	if err := d.post(ctx, batch); err != nil {
-		log.Printf("watch webhook: %v; %d alerts lost", err, len(batch.Alerts))
+		log.Printf("watch %s: %v; %d alerts lost", d.opts.Sender.Name(), err, len(batch.Alerts))
 	}
 	return pending[:0]
 }
@@ -255,12 +238,8 @@ func render(b *Batch) string {
 	return strings.TrimSuffix(s.String(), "\n")
 }
 
-// post sends b, retrying network errors and 5xx responses.
+// post sends b with bounded retries.
 func (d *Dispatcher) post(ctx context.Context, b *Batch) error {
-	body, err := json.Marshal(b)
-	if err != nil {
-		return err
-	}
 	var last error
 	for _, wait := range d.backoff {
 		if wait > 0 {
@@ -270,7 +249,7 @@ func (d *Dispatcher) post(ctx context.Context, b *Batch) error {
 				return ctx.Err()
 			}
 		}
-		retry, err := d.send(ctx, body)
+		retry, err := d.opts.Sender.Send(ctx, b)
 		if err == nil {
 			return nil
 		}
@@ -280,31 +259,6 @@ func (d *Dispatcher) post(ctx context.Context, b *Batch) error {
 		}
 	}
 	return last
-}
-
-func (d *Dispatcher) send(ctx context.Context, body []byte) (retry bool, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.opts.URL, bytes.NewReader(body))
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if len(d.opts.Secret) > 0 {
-		req.Header.Set("X-Opsgate-Signature", Sign(d.opts.Secret, body))
-	}
-	resp, err := d.opts.Client.Do(req)
-	if err != nil {
-		// The URL may carry a secret query key; report only the failure.
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			err = ue.Err
-		}
-		return true, fmt.Errorf("post failed: %w", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return resp.StatusCode >= 500, fmt.Errorf("post returned HTTP %d", resp.StatusCode)
-	}
-	return false, nil
 }
 
 // Sign returns the X-Opsgate-Signature value for a body:

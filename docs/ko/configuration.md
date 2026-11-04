@@ -201,7 +201,7 @@ OAuth GET 경로는 요청 본문을 거부하며, POST 본문 읽기에는 10�
 
 ## Watch 알림
 
-`watch` 섹션은 별도 프로세스인 `opsgate watch`만 읽고, MCP 서버는 무시합니다. `opsgate watch`를 실행하려면 `providers.kubernetes.enabled`와 `watch.webhook_url`이 필요합니다.
+`watch` 섹션은 별도 프로세스인 `opsgate watch`만 읽고, MCP 서버는 무시합니다. `opsgate watch`를 실행하려면 `providers.kubernetes.enabled`를 켜고 `watch.webhook_url`이나 `watch.email.host` 중 하나 이상을 설정해야 합니다.
 
 | 키 | 기본값 | 의미 |
 | --- | --- | --- |
@@ -209,10 +209,22 @@ OAuth GET 경로는 요청 본문을 거부하며, POST 본문 읽기에는 10�
 | `allow_private_http` | `false` | 사설 네트워크(Service 이름, 사설 IP)로 가는 http도 허용합니다. 연결은 사설 주소에 닿아야 합니다 |
 | `secret_file` | 없음 | 선택. `X-Opsgate-Signature` HMAC 키(16바이트 이상) |
 | `clusters` | 전체 | watch할 클러스터 이름 |
-| `problems_only` | `false` | 경고만 보냅니다 |
-| `batch` | `30s` | 알림을 모아 한 번에 보내는 간격 (1s–10m) |
+| `problems_only` | `false` | 모든 채널에 대해 경고만 생성합니다 |
+| `batch` | `30s` | Webhook 알림을 모아 보내는 간격 (1s–10m) |
 | `cooldown` | `15m` | 같은 객체의 같은 경고는 이 시간 동안 다시 보내지 않고 횟수만 셉니다 (0–24h) |
-| `max_alerts` | `50` | 한 번에 보내는 최대 알림 수 (1–500) |
+| `max_alerts` | `50` | 채널별 묶음에 담는 최대 알림 수 (1–500) |
+| `email.host` | 없음 | SMTP 활성화. 공백, 스킴, 포트, 슬래시 없는 호스트 이름 |
+| `email.port` | `587` | 1–65535. 465는 연결 즉시 TLS, 다른 모든 포트는 STARTTLS 필수 |
+| `email.username` | 없음 | 선택. `email.password_file`과 함께 설정 |
+| `email.password_file` | 없음 | 시작 시 읽는 SMTP 비밀번호. 앞뒤 공백을 제거하며, 읽을 수 없거나 비어 있으면 시작 실패 |
+| `email.from` | 없음 | 표시 이름과 CR/LF 없는 발신 주소. 필수 |
+| `email.to` | 없음 | 표시 이름과 CR/LF 없는 수신 주소 1–20개 |
+| `email.batch` | `5m` | 이메일을 모아 보내는 간격 (1m–1h) |
+| `email.problems_only` | `false` | 이메일로는 경고만 전송 |
+
+다른 이메일 항목을 설정하려면 `email.host`가 필요합니다. Webhook과 이메일은 독립적이므로 하나만 쓰거나 둘 다 쓸 수 있습니다. 각 채널은 알림 묶음, 쿨다운 상태, 재시도를 따로 관리하며 `watch.cooldown`과 `watch.max_alerts`를 공통 설정값으로 사용합니다. TLS 1.2 이상과 서버 인증서 검증은 필수입니다. 포트 465에서는 연결 즉시 TLS를 사용하고, 다른 모든 포트에서는 STARTTLS가 필요합니다. 앱 비밀번호처럼 독립적으로 폐기할 수 있는 전용 자격 증명을 사용하세요. 알림은 저장하지 않으며, Webhook과 마찬가지로 재시도 후에도 전송하지 못하면 유실됩니다.
+
+네임스페이스·파드·컨테이너 이름과 민감 정보를 마스킹한 요약이 클러스터 외부의 메일 제공업체를 거칩니다. 최대 발송량은 묶음 간격마다 메시지 한 통으로, `5m`이면 하루 최대 288통, `15m`이면 최대 96통입니다. 특히 다른 서비스와 계정을 공유한다면 계정의 발송 한도를 확인하세요.
 
 알리는 내용과 본문 형식은 [watch 알림](watch.md)을 보세요.
 

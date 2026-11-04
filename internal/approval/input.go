@@ -22,16 +22,17 @@ const (
 )
 
 type inputState struct {
-	Nonce       string            `json:"nonce"`
-	User        string            `json:"user"`
-	Transport   string            `json:"transport"`
-	Tool        string            `json:"tool"`
-	Target      string            `json:"target,omitempty"`
-	NoWindow    bool              `json:"no_window,omitempty"`
-	ArgsHash    [sha256.Size]byte `json:"args_hash"`
-	SummaryHash [sha256.Size]byte `json:"summary_hash"`
-	Expiry      time.Time         `json:"expiry"`
-	Window      time.Duration     `json:"window,omitempty"`
+	Nonce              string            `json:"nonce"`
+	User               string            `json:"user"`
+	Transport          string            `json:"transport"`
+	Tool               string            `json:"tool"`
+	Target             string            `json:"target,omitempty"`
+	NoWindow           bool              `json:"no_window,omitempty"`
+	FullReviewRequired bool              `json:"full_review_required,omitempty"`
+	ArgsHash           [sha256.Size]byte `json:"args_hash"`
+	SummaryHash        [sha256.Size]byte `json:"summary_hash"`
+	Expiry             time.Time         `json:"expiry"`
+	Window             time.Duration     `json:"window,omitempty"`
 }
 
 func (m *Manager) requestInput(r tool.ConfirmRequest, hash [sha256.Size]byte) error {
@@ -65,7 +66,8 @@ func (m *Manager) requestInput(r tool.ConfirmRequest, hash [sha256.Size]byte) er
 	payload, err := json.Marshal(inputState{
 		Nonce: nonce, User: r.Caller.User, Transport: r.Caller.Transport, Tool: r.Tool,
 		Target: r.Target, NoWindow: r.NoWindow,
-		ArgsHash: hash, SummaryHash: sha256.Sum256([]byte(r.Summary)), Expiry: m.now().Add(m.ttl),
+		FullReviewRequired: r.FullReviewRequired,
+		ArgsHash:           hash, SummaryHash: sha256.Sum256([]byte(r.Summary)), Expiry: m.now().Add(m.ttl),
 		Window: window,
 	})
 	if err != nil {
@@ -133,7 +135,8 @@ func (m *Manager) confirmInput(state string, response mcp.InputResponse, r tool.
 	// Never evict a live nonce to make room for another approval.
 	m.used[p.Nonce] = p.Expiry
 	if p.User != r.Caller.User || p.Transport != r.Caller.Transport || p.Tool != r.Tool ||
-		p.Target != r.Target || p.NoWindow != r.NoWindow || p.ArgsHash != hash || p.SummaryHash != sha256.Sum256([]byte(r.Summary)) {
+		p.Target != r.Target || p.NoWindow != r.NoWindow || p.FullReviewRequired != r.FullReviewRequired || r.FullReviewRequired ||
+		p.ArgsHash != hash || p.SummaryHash != sha256.Sum256([]byte(r.Summary)) {
 		return "elicitation", invalid
 	}
 	result, ok := response.(*mcp.ElicitResult)

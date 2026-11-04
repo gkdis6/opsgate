@@ -110,7 +110,7 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 		PageTitle: "Approve: " + p.title, Tool: p.tool, Lines: planLines(p.summary), User: p.user, Transport: p.transport,
 		Target: p.target, NoWindow: p.noWindow,
 		Expires: fmt.Sprintf("Expires in %d min (%s UTC)", int(math.Ceil(p.expires.Sub(m.now()).Minutes())), p.expires.UTC().Format("15:04")),
-		CSRF:    p.csrf, Used: p.used,
+		CSRF:    p.csrf, Used: p.used, FullReview: p.fullReviewRequired,
 	}
 	if m.windowEligible(p.tool, p.noWindow) {
 		view.Window = windowLabel(m.window)
@@ -162,9 +162,11 @@ func unavailablePage(w http.ResponseWriter) {
 
 type approvalView struct {
 	PageTitle, Tool, Args, User, Transport, Expires, CSRF, Status, Window string
-	Target                                                                string
-	Lines                                                                 []planLine
-	Used, NoWindow                                                        bool
+	// FullReview opens the arguments because the summary omits content.
+	FullReview     bool
+	Target         string
+	Lines          []planLine
+	Used, NoWindow bool
 }
 
 type planLine struct{ Text, Class string }
@@ -199,7 +201,7 @@ var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
 <p>Return to your chat — the assistant will continue when you ask it to retry.</p>
 {{else}}
 <dl><dt>Requester</dt><dd>{{.User}} via {{.Transport}}</dd><dt>Expires</dt><dd>{{.Expires}}</dd></dl>
-<details><summary>Arguments</summary><pre>{{.Args}}</pre></details>
+<details{{if .FullReview}} open{{end}}><summary>Arguments</summary><pre>{{.Args}}</pre></details>
 <form method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><div class="actions">
 <button class="secondary" type="submit" name="decision" value="reject">Reject</button>
 <button class="primary" type="submit" name="decision" value="approve">Approve</button>

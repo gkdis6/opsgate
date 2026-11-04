@@ -49,10 +49,13 @@ type Manager struct {
 	grants      map[grantKey]time.Time
 }
 
+const splitWriteMessage = "change is too large to review in the client; split it into smaller writes"
+
 type pending struct {
 	id, csrf, user, transport, tool, title, summary string
 	target                                          string
 	noWindow                                        bool
+	fullReviewRequired                              bool
 	args                                            []byte
 	hash                                            [sha256.Size]byte
 	expires                                         time.Time
@@ -109,6 +112,9 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 		return "", tool.Denied("target cannot be shown unambiguously")
 	}
 	if m.requireWeb && r.Caller.Transport != "http" {
+		if r.FullReviewRequired {
+			return "", tool.Denied(splitWriteMessage)
+		}
 		return "", tool.Denied("browser approval is required")
 	}
 	m.mu.Lock()
@@ -118,9 +124,12 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	if granted {
 		return "window", nil
 	}
+	if r.FullReviewRequired && (r.Caller.Transport != "http" || m.browser == nil) {
+		return "", tool.Denied(splitWriteMessage)
+	}
 	hash := r.ArgsHash
 	if req != nil && req.Params != nil {
-		if m.requireWeb && (req.Params.RequestState != "" || len(req.Params.InputResponses) != 0) {
+		if (m.requireWeb || r.FullReviewRequired) && (req.Params.RequestState != "" || len(req.Params.InputResponses) != 0) {
 			return "elicitation", tool.Denied("browser approval is required")
 		}
 		if response, ok := req.Params.InputResponses[approvalInputID]; ok {
@@ -136,7 +145,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 		defer m.mu.Unlock()
 		p := m.approvals[r.ApprovalID]
 		if p == nil || p.user != r.Caller.User || p.transport != r.Caller.Transport || p.tool != r.Tool || p.hash != hash ||
-			p.summary != r.Summary || p.target != r.Target || p.noWindow != r.NoWindow || p.used {
+			p.summary != r.Summary || p.target != r.Target || p.noWindow != r.NoWindow || p.fullReviewRequired != r.FullReviewRequired || p.used {
 			return "web", tool.Denied("invalid or expired approval")
 		}
 		switch p.decision {
@@ -151,7 +160,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	}
 	m.mu.Unlock()
 
-	if !m.requireWeb && supportsElicitation(req) {
+	if !m.requireWeb && !r.FullReviewRequired && supportsElicitation(req) {
 		return "elicitation", m.requestInput(r, hash)
 	}
 	if err := ctx.Err(); err != nil {
@@ -179,7 +188,8 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 		id: id, csrf: csrf, user: r.Caller.User, transport: r.Caller.Transport,
 		tool: r.Tool, title: displayTitle(r), summary: r.Summary, args: args, hash: hash,
 		target: r.Target, noWindow: r.NoWindow,
-		expires: m.now().Add(m.ttl),
+		fullReviewRequired: r.FullReviewRequired,
+		expires:            m.now().Add(m.ttl),
 	}
 	m.approvals[id] = p
 	return "web", m.pendingError(p)

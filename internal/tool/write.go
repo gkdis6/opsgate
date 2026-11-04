@@ -3,6 +3,7 @@ package tool
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -51,6 +52,10 @@ type Plan struct {
 	// NoWindow requires a fresh human approval for every call, even when the
 	// tool is listed in approval.window_tools.
 	NoWindow bool
+	// FullReviewRequired means the summary omits content that needs review
+	// through the complete arguments, unless an approval window applies.
+	// The arguments must be unmasked even when a window applies.
+	FullReviewRequired bool
 	// Data belongs to this invocation and is never shown or serialized.
 	Data any `json:"-"`
 }
@@ -74,10 +79,11 @@ type ConfirmRequest struct {
 	Args     map[string]any
 	ArgsHash [sha256.Size]byte
 	Summary  string
-	// Target and NoWindow are copied from the tool's Plan.
-	Target     string
-	NoWindow   bool
-	ApprovalID string
+	// Target, NoWindow and FullReviewRequired are copied from the tool's Plan.
+	Target             string
+	NoWindow           bool
+	FullReviewRequired bool
+	ApprovalID         string
 	// MaxArgBytes is the tool's argument limit, defaulting to 16 KiB.
 	MaxArgBytes int
 }
@@ -175,6 +181,13 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 			if ev.Plan != plan.Summary || len(plan.Target) > 256 || redact.String(plan.Target) != plan.Target {
 				return "", Denied("target cannot be shown unambiguously")
 			}
+			if plan.FullReviewRequired {
+				display, err := json.Marshal(args)
+				// Compare with the raw canonical arguments, excluding approval_id.
+				if err != nil || sha256.Sum256(display) != argsHash {
+					return "", Denied("arguments cannot be shown unambiguously; split the change or remove the masked value")
+				}
+			}
 			if env.Confirm == nil {
 				return "", Denied("no human confirmation channel is available")
 			}
@@ -184,6 +197,7 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 			ev.Approval, err = env.Confirm.Confirm(ctx, req, ConfirmRequest{
 				Caller: c, Tool: spec.Name, Title: spec.Title, Args: args, ArgsHash: argsHash, Summary: ev.Plan,
 				Target: plan.Target, NoWindow: plan.NoWindow, ApprovalID: in.approvalID(), MaxArgBytes: maxArgs,
+				FullReviewRequired: plan.FullReviewRequired,
 			})
 			if err != nil {
 				if errors.As(err, &input) && input != nil {

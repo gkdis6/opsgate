@@ -321,6 +321,59 @@ func TestAddWriteRejectsAmbiguousTarget(t *testing.T) {
 	}
 }
 
+func TestAddWriteFullReviewMaskedArgs(t *testing.T) {
+	for _, tc := range []struct {
+		name, target, password string
+		fullReview, denied     bool
+	}{
+		{"hidden assignment", strings.Repeat("innocent runbook text\n", 600) + `password="$(rm -rf /srv/data)"`, redact.Mask, true, true},
+		{"sensitive key", "service", "hidden", true, true},
+		{"complete arguments", strings.Repeat("innocent runbook text\n", 600), redact.Mask, true, false},
+		{"short masked arguments", "service", "hidden", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var confirms, applies atomic.Int32
+			env := &Env{Timeout: time.Second, MaxOutputBytes: 1024,
+				Fallback: &Caller{User: "operator", Transport: "http", Scopes: []string{config.ScopeWrite}},
+				Confirm: confirmFunc(func(_ context.Context, _ *mcp.CallToolRequest, r ConfirmRequest) (string, error) {
+					confirms.Add(1)
+					if r.FullReviewRequired != tc.fullReview {
+						t.Error("full review requirement changed")
+					}
+					return "web", nil
+				}),
+			}
+			cs := connectWrite(t, env, WriteSpec{Name: "change", MaxArgBytes: 64 << 10}, WriteHandler[writeTestInput]{
+				Plan: func(context.Context, Caller, writeTestInput) (Plan, error) {
+					return Plan{Summary: "change service", FullReviewRequired: tc.fullReview}, nil
+				},
+				Apply: func(context.Context, Caller, writeTestInput, Plan) (string, error) {
+					applies.Add(1)
+					return "changed", nil
+				},
+			})
+			result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "change", Arguments: map[string]any{
+				"target": tc.target, "password": tc.password, "approval_id": "glpat-aaaaaaaa",
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := result.Content[0].(*mcp.TextContent).Text
+			if result.IsError != tc.denied {
+				t.Fatalf("result = %+v: %s", result, text)
+			}
+			if tc.denied {
+				if confirms.Load() != 0 || applies.Load() != 0 || !strings.Contains(text, "arguments cannot be shown unambiguously") ||
+					!strings.Contains(text, "split the change") || !strings.Contains(text, "remove the masked value") {
+					t.Fatalf("denial = %q; confirms %d applies %d", text, confirms.Load(), applies.Load())
+				}
+			} else if confirms.Load() != 1 || applies.Load() != 1 {
+				t.Fatalf("confirms %d applies %d", confirms.Load(), applies.Load())
+			}
+		})
+	}
+}
+
 func TestAddWriteRawArgumentLimit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "audit")
 	logger, err := audit.Open(path)

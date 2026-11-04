@@ -35,8 +35,8 @@ until you enable them in configuration.
 ### Changes need a person
 
 Write tools first plan the exact change, then wait
-for human approval in the client or in the browser by default. Optional approval
-windows are explained below.
+for human approval in the browser by default when web approval is available.
+Optional approval windows are explained below.
 
 ### Remote access is authenticated
 
@@ -107,8 +107,12 @@ Details: [architecture](docs/architecture.md) · [approval](docs/approval.md) ·
 ### How approval works
 
 Write tools first prepare a plan showing the target and change. By default,
-a person reviews and approves it in the client or on a web approval page before
-execution. One-call approval binds the exact arguments and plan.
+a person reviews and approves it on a web approval page when web approval is
+available. Explicit `approval.require_web: false` opts in to in-client elicitation;
+a compromised client can then approve its own writes. External/static auth and
+stdio keep elicitation because they have no web channel. An omitted `require_web`
+also allows elicitation with `-transport stdio` for mode-based files; explicit
+`true` denies stdio writes. One-call approval binds the exact arguments and plan.
 
 Optional approval windows let a person approve a particular tool for a limited
 time. During that window, subsequent calls by the same user can skip a new
@@ -196,6 +200,8 @@ effective value.
 opsgate -config /etc/opsgate/opsgate.yaml
 ```
 
+Run `opsgate -h` to list commands and flags, or `opsgate help <command>` for command help. `opsgate version` (also `-version`) prints the build version. Help and successful commands exit 0; invalid commands, flags or extra arguments exit 2 before loading configuration; operational errors exit 1. Help goes to stdout and errors to stderr.
+
 1. On first start, opsgate logs a one-time setup link (valid 24 hours) for each
    user without a passkey. Open it and press **Create passkey**. Later links:
    `sudo -u opsgate opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`.
@@ -219,8 +225,9 @@ release verification are in [deployment](docs/deploy.md).
   such as production operations, personal notes and coding agents.
 - Permission checks stack: scopes, server tool policy, per-user tool lists,
   provider allowlists, then OS permissions and Kubernetes RBAC.
-- A compromised client can accept its own in-client approval prompts. Set
-  `approval.require_web: true` to require browser approval instead.
+- HTTP requires browser approval by default when `approval.web` is enabled.
+  Explicit `approval.require_web: false` opts in to elicitation, allowing a
+  compromised client to approve its own writes; HTTP startup logs a warning.
 
 Full details: [SECURITY.md](SECURITY.md).
 
@@ -246,5 +253,6 @@ Full details: [SECURITY.md](SECURITY.md).
 
 ## Contributing and license
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under [Apache-2.0](LICENSE),
+See [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md)
+and [changelog](CHANGELOG.md). Licensed under [Apache-2.0](LICENSE),
 copyright 2026 The opsgate Authors.

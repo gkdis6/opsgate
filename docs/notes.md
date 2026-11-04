@@ -116,6 +116,8 @@ folders such as `.obsidian` and sync conflict copies are hidden. If a sync tool
 such as Syncthing shares the folder, see the file ownership note in
 [configuration](configuration.md).
 
+Paths whose text changes under secret redaction are treated as missing by all note tools, and writes cannot create them.
+
 ## Limits
 
 - Note text is untrusted data. A note cannot authorize anything; writes still

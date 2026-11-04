@@ -33,7 +33,7 @@ provider, 쓰기 작업, 허용 목록은 설정에서
 ### 변경에는 사람의 승인이 필요합니다
 
 쓰기 도구는 먼저 바꿀 내용을 정확히 계산하고,
-기본적으로 작업마다 클라이언트 안이나 브라우저에서 사람의 승인을 받습니다.
+웹 승인을 사용할 수 있으면 기본적으로 브라우저에서 사람의 승인을 받습니다.
 선택 기능인 승인 시간 창은 아래에서 설명합니다.
 
 ### 원격 접속은 인증을 거칩니다
@@ -103,8 +103,12 @@ opsgate는 신원과 정책을 확인하고, 쓰기 작업을 계획한 뒤 승�
 
 ### 승인 흐름
 
-변경 도구는 먼저 대상과 변경 내용을 확인해 실행 계획을 만듭니다. 기본적으로 사용자가
-클라이언트의 확인 창이나 웹 승인 페이지에서 내용을 확인하고 승인해야 실행합니다.
+변경 도구는 먼저 대상과 변경 내용을 확인해 실행 계획을 만듭니다. 웹 승인을 사용할 수
+있으면 기본적으로 사용자가 웹 승인 페이지에서 내용을 확인하고 승인해야 실행합니다.
+`approval.require_web: false`를 명시하면 클라이언트 내 확인을 허용하며, 침해된 클라이언트가
+자기 쓰기를 스스로 승인할 수 있습니다. external/static 인증과 stdio는 웹 채널이 없어
+클라이언트 내 확인을 유지합니다. 모드 파일도 `require_web`을 생략하면 `-transport stdio`에서
+클라이언트 내 확인을 허용하지만, 명시적 `true`는 stdio 쓰기를 거부합니다.
 일회성 승인은 해당 인자와 계획에만 유효합니다.
 
 선택적으로 승인 시간 창을 설정하면, 사용자가 특정 도구를 일정 시간 동안 승인할 수
@@ -192,6 +196,8 @@ providers:
 opsgate -config /etc/opsgate/opsgate.yaml
 ```
 
+`opsgate -h`는 명령과 플래그 목록을, `opsgate help <명령>`은 해당 명령의 도움말을 보여 줍니다. `opsgate version` 또는 `-version`은 빌드 버전을 출력합니다. 도움말과 명령 성공은 종료 코드 0, 잘못된 명령·플래그나 불필요한 인자는 설정을 읽기 전에 2, 실행 중 오류는 1을 반환합니다. 도움말은 stdout, 오류는 stderr로 출력합니다.
+
 1. 처음 시작하면 패스키가 없는 사용자마다 일회용 등록 링크(24시간 유효)가 로그에
    남습니다. 링크를 열고 **Create passkey**를 누르세요. 링크를 새로 만들려면
    `sudo -u opsgate opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`를 실행하세요.
@@ -215,8 +221,9 @@ opsgate -config /etc/opsgate/opsgate.yaml
   계정을 나누세요.
 - 스코프, 서버 도구 정책, 사용자별 도구 목록, provider 허용 목록을 차례로 검사하고,
   마지막으로 OS 권한과 Kubernetes RBAC가 접근을 제한합니다.
-- 공격자가 장악한 클라이언트는 클라이언트 안에 뜬 승인 요청을 스스로 수락할 수 있습니다.
-  브라우저 승인만 허용하려면 `approval.require_web: true`로 설정하세요.
+- HTTP에서는 `approval.web`이 켜져 있으면 기본적으로 브라우저 승인을 요구합니다.
+  `approval.require_web: false`를 명시하면 클라이언트 내 확인을 허용하며, 침해된 클라이언트가
+  자기 쓰기를 스스로 승인할 수 있습니다. HTTP 시작 시 경고를 남깁니다.
 
 자세한 내용: [보안 정책](docs/ko/security.md)
 
@@ -242,5 +249,6 @@ opsgate -config /etc/opsgate/opsgate.yaml
 
 ## 기여와 라이선스
 
-[CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요. 라이선스는 [Apache-2.0](LICENSE)이며,
+[CONTRIBUTING.md](CONTRIBUTING.md), [행동 강령](CODE_OF_CONDUCT.md),
+[변경 이력](CHANGELOG.md)을 참고하세요. 라이선스는 [Apache-2.0](LICENSE)이며,
 저작권은 2026 The opsgate Authors에 있습니다.

@@ -89,7 +89,7 @@ Tool output and error text over 4 MiB are replaced with an omission message. Oth
 
 Access is constrained by several independent layers: token/local scopes, server tool policy, caller tool restrictions, provider allowlists, and finally OS permissions or Kubernetes RBAC. Provider checks happen inside handlers or plans; approval does not replace them.
 
-Approved writes follow Plan → confirmation → Apply. A one-call confirmation binds the user, transport, tool, unredacted argument hash and plan summary. An optional approval window deliberately grants broader access for one user/tool pair. See [Human approval](approval.md).
+Approved writes follow Plan → confirmation → Apply. A one-call confirmation binds the user, transport, tool, unredacted argument hash and plan summary. An optional approval window deliberately grants broader access for one user, tool and target. See [Human approval](approval.md).
 
 Treat logs, notes, events and agent output as untrusted data. Masking reduces accidental exposure; it does not prevent prompt injection or make that text safe to follow as instructions.
 

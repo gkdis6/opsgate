@@ -16,7 +16,7 @@ The features below are implemented for the first public release. They have not y
 - MCP elicitation across protocol versions and browser approval fallback with same-user upstream login, expiry and single-use argument-bound approvals.
 - GoReleaser releases, cosign keyless signatures, SBOMs, provenance attestations, container image, hardened systemd unit and Kubernetes manifests.
 - Tool registration policy and per-user/token tool restrictions; redirect-host registration policy, pending-client admin review and optional notifications.
-- Optional approval windows, in memory and bound to user/tool; off by default.
+- Optional approval windows, in memory and bound to user, tool and target; off by default.
 - Experimental note provider: bounded Markdown folder (Obsidian-compatible) reads/search/links/tags and approved create/append/replace/trash operations.
 - Experimental dev provider and separate runner: configured projects/agent commands, approved task starts, requester ownership/admin access, logs/diffs, cancellation and retention.
 - Deployment modes (`mode: host`, `mode: kubernetes`) that fill in defaults, `opsgate init` to write a short configuration and `opsgate config show` to print the effective one.

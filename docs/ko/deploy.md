@@ -83,6 +83,8 @@ GET, POST, DELETE와 스트리밍 응답을 지원하도록 설정하고,
 인증 헤더, 쿠키, OAuth 쿼리 문자열, 요청 본문, 승인 URL은 로그에 남기지 마세요.
 신뢰할 수 없는 네트워크에서는 백엔드 포트에 접근할 수 없도록 막으세요.
 
+요청 폭주 시 진행 중인 로그인은 만료 전까지 유지되지만 공유 로그인 제한기가 회복될 때까지 새 웹 승인 및 관리자 로그인이 지연될 수 있으므로(`Retry-After`가 포함된 HTTP 429), 리버스 프록시에서도 요청 빈도를 제한하세요.
+
 opsgate는 MCP SDK의 localhost 검사 대신 자체 Host 검증을 사용합니다.
 공개 요청은 `http.public_url`의 호스트를 사용해야 하며, 명시된 포트가 있으면 포트도 포함해야 합니다.
 대소문자를 구분하지 않고 비교하며, 일치하지 않으면 HTTP 421을 반환합니다.
@@ -142,7 +144,9 @@ sudo install -o root -g root -m 0644 deploy/systemd/opsgate.service /etc/systemd
 서비스는 홈 디렉터리를 숨기므로 `~/.kube`에 의존하지 마세요.
 Kubernetes를 사용하지 않으면 `providers.kubernetes.enabled: false`로 설정하세요.
 네임스페이스 허용 목록은 RBAC을 보완합니다.
-제공된 `rbac-readonly.yaml`은 클러스터 전체에 읽기 권한을 주므로, 가능하면 바인딩 범위를 좁히세요.
+제공된 `rbac-readonly.yaml`의 ClusterRoleBinding은 ServiceAccount가 Kubernetes API 수준에서 허용된 리소스 종류를 모든 네임스페이스에서 읽을 수 있게 합니다. opsgate 정책이 거부한 네임스페이스도 포함됩니다.
+watcher도 이 역할을 공유합니다. 이 바인딩에서는 애플리케이션 정책이 네임스페이스 접근 경계입니다.
+더 엄격하게 제한하려면 ClusterRoleBinding을 네임스페이스별 RoleBinding으로 교체하세요.
 쓰기는 선택 사항이며, 이 권한만으로는 허용하지 않습니다.
 쓰기가 필요하면 필요한 네임스페이스 스코프 권한만 추가하세요.
 
@@ -235,6 +239,8 @@ Service/파드 IP에 직접 보내는 상태 확인 요청에도 같은 요구�
 활성화하려면 허용할 작업을 정확히 명시한 허용 목록을 추가하고, 선택한 사용자에게 `ops:write`를 주세요.
 대상 네임스페이스에는 그 작업에 필요한 리소스와 동사만 허용하는 Role/RoleBinding을 추가하세요.
 클러스터 전체에 쓰기 권한을 주지 마세요.
+제공된 `rbac-operator.yaml`의 Role은 네임스페이스 범위이지만, 워크로드 `patch` 권한은 재시작 도구가 바꾸는 필드보다 더 많은 필드를 변경할 수 있게 합니다.
+RBAC은 이 권한을 재시작 annotation으로만 제한하지 않습니다.
 subPath 마운트는 변경 사항을 자동으로 다시 로드하지 않으므로, ConfigMap을 변경한 뒤에는 재시작하세요.
 
 ```sh

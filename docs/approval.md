@@ -26,7 +26,11 @@ Plan is side-effect-free. Its summary must identify the target and effect. If ma
 
 ## Confirmation channels
 
-The manager first validates the request and `require_web` restrictions, then checks for an active approval window. Without a window, it processes supplied client input or `approval_id`; a fresh request prefers elicitation when supported and otherwise uses web approval. No available channel means denial.
+The manager first validates the request and `require_web` restrictions, then checks for an active approval window. Without a window, it processes supplied client input or `approval_id`; a fresh HTTP request uses web approval by default when `approval.web` is enabled. Explicit `approval.require_web: false` opts in to elicitation when supported, with web approval as fallback. No available channel means denial.
+
+Plans with truncated previews require web approval showing the complete masked arguments; without a browser channel, split the change into smaller writes. This full-review requirement is bound to signed client state and web approval records, while existing eligible approval windows continue to apply.
+
+When full review is required, any redaction change to the arguments (excluding `approval_id`) denies the write before confirmation or approval-window reuse; split the change or remove the masked value.
 
 When a server reaches several systems, such as multiple Kubernetes clusters, approval screens show the target above the summary. Targets marked protected require human approval for every call, even when the tool is eligible for a window.
 
@@ -49,13 +53,15 @@ approval:
 
 ### In-client elicitation
 
-When the client advertises elicitation and web-only approval is not required, opsgate returns MCP multi round-trip `InputRequests` with an `opsgate_approval` form. It shows the target when present, summary, requester and transport. The human must accept with `approve: true`. Eligible tools also offer `allow_window`.
+On HTTP with web approval enabled, set `approval.require_web: false` explicitly to opt in to elicitation. Without a web channel, including external/static auth and stdio, elicitation remains the default.
+
+When `require_web` is false and the client advertises elicitation, opsgate returns MCP multi round-trip `InputRequests` with an `opsgate_approval` form. It shows the target when present, summary, requester and transport. The human must accept with `approve: true`. Eligible tools also offer `allow_window`.
 
 The server gives the client HMAC-SHA256 signed request state containing user, transport, tool, target, per-call approval requirement, argument hash, summary hash, expiry, nonce and any offered window duration. The signing key is random for each process start.
 
 On continuation, the server checks the signature and expiry, rejects a reused nonce, then consumes the authenticated nonce **before** checking bindings and the response. A bad binding or response therefore cannot reuse that state. Only `approve` and `allow_window` content keys are accepted. `allow_window` must be a boolean and must correspond to the offered, still-eligible window.
 
-A compromised client can accept its own elicitation. Use web-only approval when the decision must happen in the authenticated browser instead.
+This opt-in lets a compromised client approve its own writes: the server cannot tell whether a human or client software answered. HTTP startup warns when elicitation is allowed. Keep web-only approval when the decision must happen in the authenticated browser.
 
 ### Web approval
 
@@ -79,7 +85,7 @@ The page displays the plan line by line, highlights diff lines, and includes mas
 
 The retry must match user, transport, tool, target, per-call approval requirement, canonical unredacted argument hash (excluding `approval_id`) and the newly calculated summary. A one-call approval is marked used before Apply, so an Apply failure requires a new approval. An active window is checked earlier and deliberately does not impose this one-call binding.
 
-For browser-only decisions, merge this fragment into a working built-in HTTP configuration:
+Web-only decisions are the default when `approval.web` is enabled, either explicitly or by a mode with builtin auth. This fragment makes that choice explicit in a working built-in HTTP configuration:
 
 ```yaml
 approval:
@@ -88,7 +94,7 @@ approval:
   require_web: true
 ```
 
-`require_web` disables in-client elicitation and denies stdio writes through the approval wrapper. Existing eligible windows still work for HTTP calls. HTTP startup rejects `require_web: true` without `web: true`, and rejects web approval unless authentication is built-in.
+`require_web: true` disables in-client elicitation. An explicit `true` also denies stdio writes through the approval wrapper. When the file omits `require_web`, `-transport stdio` keeps elicitation allowed, including with a mode-based file, because the user starts the process locally and stdio has no web channel. `config show` prints the HTTP default as explicit `true`; running that output on stdio denies writes until the key is removed or set to `false`. Existing eligible windows still work for HTTP calls. HTTP startup rejects `require_web: true` without `web: true`, and rejects web approval unless authentication is built-in.
 
 ## Replay protection, limits and state
 

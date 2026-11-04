@@ -80,6 +80,8 @@ disable buffering and caching, and allow long-lived MCP connections. Do not log
 authorization headers, cookies, OAuth query strings, request bodies or approval
 URLs. Keep the backend port inaccessible from untrusted networks.
 
+A flood can delay new browser approval and admin sign-ins until the shared login limiter recovers (HTTP 429 with `Retry-After`), while existing sign-ins remain valid until expiry; apply a rate limit at the reverse proxy.
+
 opsgate replaces the MCP SDK's localhost check with its own Host validation.
 Public requests must use the host from `http.public_url`, including any explicit
 port (comparison is case-insensitive); mismatches receive HTTP 421. Binding to
@@ -136,10 +138,13 @@ The host example also enables Kubernetes: provision `/etc/opsgate/kubeconfig`
 (mode `0640`, `root:opsgate`) with context `opsgate` and appropriately restricted
 credentials. The service hides home directories, so do not rely on `~/.kube`.
 Set `providers.kubernetes.enabled: false` if Kubernetes is unused. Namespace
-allowlists supplement RBAC; the provided `rbac-readonly.yaml` grants cluster-wide
-reads. Narrow its bindings where possible. Its permissions do not authorize optional
-write actions; add only the required namespace-scoped permissions if
-writes are needed.
+allowlists supplement RBAC. The ClusterRoleBinding in `rbac-readonly.yaml` lets
+the ServiceAccount read allowed resource kinds across all namespaces at the
+Kubernetes API level, including namespaces denied by opsgate policy. The watcher
+shares this role. Application policy is the namespace boundary with this binding;
+replace it with per-namespace RoleBindings for a stricter setup. Its permissions
+do not authorize optional write actions; add only the required namespace-scoped
+permissions if writes are needed.
 
 ```sh
 sudo systemctl daemon-reload
@@ -227,6 +232,9 @@ The read-only root filesystem needs no other writable mount.
 Write actions remain disabled. To enable them, add an exact action allowlist and
 `ops:write` for selected users, plus a narrow Role/RoleBinding for that action's
 resources and verbs in the target namespace. Avoid cluster-wide write grants.
+The supplied `rbac-operator.yaml` Role is namespace-scoped, but its workload
+`patch` permission allows changes to more fields than the restart tool changes;
+RBAC does not restrict that permission to the restart annotation.
 Restart after changing the ConfigMap (the subPath mount does not hot reload):
 
 ```sh

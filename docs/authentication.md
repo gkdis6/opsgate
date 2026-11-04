@@ -27,6 +27,8 @@ stdio: client -> local opsgate process -> configured stdio identity/scopes
 
 All HTTP modes require `ops:read` at `/mcp`. Additional scopes authorize tools: normally `ops:write` for writes and `dev:run` for coding tools. Scopes do not enable providers or bypass human approval. Optional user/token `tools` globs add restrictions on top of server policy.
 
+With `approval.web: true`, HTTP defaults to web-only approval (`approval.require_web: true`); modes with builtin auth enable web approval automatically. Explicit `approval.require_web: false` opts in to in-client elicitation. A compromised client can then approve its own writes. External/static auth has no web channel and keeps `require_web` false by default; HTTP startup warns when elicitation is allowed.
+
 ## Built-in OAuth
 
 opsgate handles client registration (DCR), S256 PKCE, a consent screen, access tokens, rotating refresh tokens and revocation. Users must be listed in `auth.builtin.users`. One `upstream.provider` is active at a time; passkey, GitHub and OIDC cannot be offered together by one process.
@@ -58,7 +60,7 @@ Serve public HTTPS through a reverse proxy. The MCP URL is `https://example.com/
 
 ### Passkey
 
-Passkey sign-in needs no external application, client ID or secret. Use a configured subject such as `passkey:alice`. At startup, users without a registered passkey receive a setup invite in the process log, valid for 24 hours. Treat the invite link as a credential.
+Passkey sign-in needs no external application, client ID or secret. Use a configured subject such as `passkey:alice`. At startup, users without a registered passkey receive a setup invite in the process log, valid for 24 hours. Treat the invite link as a credential. Keep opsgate's own logs out of tool access, because the link grants passkey registration for that identity.
 
 To add a passkey, run this as the server's OS account:
 
@@ -146,7 +148,7 @@ auth:
         scopes: [ops:read, ops:write]
 approval:
   web: false
-  require_web: false
+  require_web: false # No web channel; elicitation remains allowed.
 ```
 
 opsgate discovers the issuer's metadata and JWKS and verifies JWT signature, issuer, audience and expiry. Issuer and JWKS endpoints require HTTPS, except loopback HTTP. The external server owns client registration, login, consent and token issuance; it must provide a flow compatible with the client. Opaque access tokens are not supported by this verifier. JWKS fetch attempts are shared across requests and limited to one per minute, including failed fetches. Cached valid keys continue to work; a new signing key may be rejected until the cooldown expires.
@@ -174,7 +176,7 @@ auth:
       scopes: [ops:read]
 approval:
   web: false
-  require_web: false
+  require_web: false # No web channel; elicitation remains allowed.
 ```
 
 Retain the HTTP settings. Send `Authorization: Bearer <raw token>` to `/mcp`. The identity is `static:alice`. Static tokens never expire. To revoke one, remove or replace its digest and restart. Web approval is unavailable, so approved writes need elicitation.
@@ -191,14 +193,14 @@ stdio:
 opsgate -config opsgate.yaml -transport stdio
 ```
 
-This fragment loads without HTTP/authentication settings. The transport defaults to stdio, the identity label defaults to `local`, and scopes default to `[ops:read]`. `stdio.user` is a label, not an OS impersonation setting. The launching OS account controls actual resource access. Approved writes need client elicitation; `approval.require_web` denies them on stdio.
+This fragment loads without HTTP/authentication settings. The transport defaults to stdio, the identity label defaults to `local`, and scopes default to `[ops:read]`. `stdio.user` is a label, not an OS impersonation setting. The launching OS account controls actual resource access. Approved writes need client elicitation. When `require_web` is omitted, `-transport stdio` allows elicitation even for mode-based files because the user starts the process locally. Explicit `approval.require_web: true` still denies stdio writes. `config show` makes the HTTP web-only default explicit; remove that key or set it to `false` before using its output for stdio writes.
 
 ## Switch methods
 
 1. Prepare the destination identity provider or token. Retain the HTTP origin where possible. Back up the state file if using built-in persistence.
 2. Update `auth.mode` for HTTP, or use `-transport stdio`. For built-in sign-in, set exactly one `auth.builtin.upstream.provider` and its required settings. Configuration is read at startup; restart to apply it.
 3. Update subjects and grants in `users`, `admins` and any runner administrator list. Examples are `passkey:alice`, `github:alice`, `email:alice@example.com`, exact `oidc:<sub>`, external configuration `claim:alice` (caller `alice`), and `static:alice`.
-4. Set `approval.web: false` and `approval.require_web: false` when leaving built-in HTTP. Choose elicitation-capable clients for approved writes. For stdio, web approval is unavailable regardless of that flag.
+4. Set `approval.web: false` and remove `approval.require_web` or set it to `false` when leaving built-in HTTP. Choose elicitation-capable clients for approved writes; a compromised client can approve its own writes through this channel. Stdio has no web channel and allows elicitation when `require_web` is omitted. When returning to built-in HTTP, remove an explicit `require_web: false` to restore the web-only default.
 5. Restart and reconnect or reauthorize clients for the new method. Verify identity, scopes and provider/tool policy with a read operation before requesting writes.
 
 Changing provider does not automatically revoke all saved built-in tokens. Existing tokens are checked against the current allowed users and scopes; explicitly remove old subjects/grants if they must stop working. External/static modes do not load the built-in state file. Keeping that file lets registered passkeys be reused when returning to passkey sign-in with the same compatible origin, subject and credentials. Do not delete it merely to change upstreams. Changing the public issuer/resource requires compatible new state and reconnecting clients.

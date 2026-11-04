@@ -41,6 +41,8 @@
 | `dev_task_list` | 보존된 작업을 최신순으로 표시(`dev:run`) | `limit=20`, 범위 1..100; 최종 메시지 제외 |
 | `dev_task_cancel` | 새 승인 없이 본인 작업 취소(runner 관리자는 모든 작업 취소 가능)(`dev:run`) | 필수 `id`; 상태 변경 및 실행 중인 프로세스 그룹 종료 |
 
+노트 검색, 태그 및 링크 도구는 마스킹된 텍스트를 대상으로 동작합니다.
+
 노트 경로는 슬래시로 구분한 볼트 기준 상대 경로이며, Unicode 바이트를 그대로 유지합니다. 경로 길이는 최대 1024바이트이고, 제외된 경로는 없는 경로처럼 처리합니다. 노트 텍스트는 신뢰할 수 없는 데이터로 취급합니다. 노트 도구는 문서에 명시한 범위를 벗어난 숫자 입력을 거부합니다. 볼트 내부의 안전한 심볼릭 링크를 지원하되 순환 참조를 방지합니다. 검색 범위는 항목 100000개와 디렉터리 깊이 128단계로 제한하며, 링크와 백링크는 각각 최대 1000개를 반환합니다.
 
 쓰기 미리보기에는 diff(생성 시 새 내용), 현재 해시, 결과 해시가 들어갑니다. 약 8 KiB에서 출력을 자르고 잘렸음을 표시합니다. 실행(Apply) 단계에서는 승인 당시의 해시, 크기, 수정 시간을 다시 검사합니다. 새 노트는 원자적으로 생성하며, 동시에 다른 작업이 생성한 파일을 덮어쓰지 않습니다. 노트를 갱신할 때는 임시 파일을 동기화한 뒤 rename으로 교체합니다.
@@ -73,13 +75,17 @@ kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하
 
 ## 마스킹과 객체 정리
 
-공유 `internal/redact` 계층은 PEM 개인 키, Authorization/Proxy-Authorization 헤더, Basic/Bearer 자격 증명, JWT 형태의 토큰, URL 비밀번호를 마스킹합니다. AWS 액세스 키 ID, GitHub, GitLab, Slack, Stripe live 키, OpenAI/Anthropic 형식 키, Google API 키, Telegram 봇의 알려진 토큰 패턴도 마스킹합니다.
+`host_logs`와 `k8s_logs`의 grep은 마스킹된 텍스트를 검색합니다.
 
-`:`/`=`로 값을 지정하거나 구조화된 인자로 값을 전달할 때는 password/passwd/pwd, secret/client_secret, token/access_token/refresh_token, api_key/apikey/access_key/secret_key/private_key, credential/credentials, auth_token, session_id, cookie, set-cookie를 민감한 키로 취급합니다. `db_password`처럼 밑줄로 연결한 접두사가 붙은 키도 포함하며, 대소문자는 구분하지 않습니다. 구조화된 인자 맵과 슬라이스는 재귀적으로 순회해 검사합니다. 성공 응답의 텍스트, 오류, 감사 로그 인자를 마스킹하지만, **모든 비밀값을 가린다고 보장하지는 않습니다**. 알려지지 않은 형식이나 임의의 데이터 속에 들어 있는 비밀값은 마스킹을 놓칠 수 있습니다.
+공유 `internal/redact` 계층은 PEM 개인 키, Authorization/Proxy-Authorization 헤더, Basic/Bearer 자격 증명, JWT 형태의 토큰, URL 비밀번호를 마스킹합니다. AWS 액세스 키 ID, GitHub, GitLab, Slack, Stripe live 키, OpenAI/Anthropic 형식 키, Google API 키, Telegram 봇, opsgate의 `og_at_`, `og_rt_`, `og_st_` 토큰(접두사 뒤 base64url 문자 43개)의 알려진 패턴도 마스킹합니다.
+
+`:`/`=`로 값을 지정하거나 구조화된 인자로 값을 전달할 때는 password/passwd/pwd, secret/client_secret, token/access_token/refresh_token, api_key/apikey/access_key/secret_key/private_key, credential/credentials, auth_token, session_id, cookie, set-cookie, invite를 민감한 키로 취급합니다. `db_password`처럼 밑줄로 연결한 접두사가 붙은 키도 포함하며, 대소문자는 구분하지 않습니다. 구조화된 인자 맵과 슬라이스는 재귀적으로 순회해 검사합니다. 성공 응답의 텍스트, 오류, 감사 로그 인자를 마스킹하지만, **모든 비밀값을 가린다고 보장하지는 않습니다**. 알려지지 않은 형식이나 임의의 데이터 속에 들어 있는 비밀값은 마스킹을 놓칠 수 있습니다.
 
 `k8s_get`은 템플릿을 포함한 메타데이터에서 `managedFields`와 `kubectl.kubernetes.io/last-applied-configuration`도 제거합니다. ConfigMap의 `data`와 `binaryData`는 키를 유지하되, `show_configmap_data=true`가 아니면 값 대신 바이트 수를 표시합니다. 환경 변수 이름에 pass, secret, token, key, credential, auth, dsn, private, cert, database_url이 포함되면 리터럴 `value` 필드를 `[REDACTED]`로 바꾸며, 대소문자는 구분하지 않습니다. 파드와 지원하는 워크로드 템플릿(CronJobs 포함)의 일반/init/ephemeral 컨테이너에 이 규칙을 적용합니다. 다른 리터럴 값은 공통 마스킹 규칙에 일치하지 않으면 그대로 보입니다. `valueFrom` 참조도 그대로 보여 주며, 참조하는 값을 조회하지는 않습니다.
 
 `k8s_env`는 같은 네임스페이스의 ConfigMap을 호출당 한 번씩 조회하고, 환경 변수 덮어쓰기 순서와 `$(VAR)` 치환 결과를 표시합니다. 치환한 값을 다시 치환하지 않으며, 마운트에 지정한 항목과 `subPath` 파일만 보여 줍니다. 민감한 환경 변수·키 이름에 해당하는 값과 Secret 값은 숨깁니다. Secret API를 호출하지 않으므로 Secret `envFrom`의 키 목록은 알 수 없으며, 기존 변수와 이름이 겹칠 가능성을 표시합니다. 파드의 downward 필드는 실제 값으로 표시하지만, 워크로드의 필드와 리소스 참조는 자리표시자로 남깁니다. 바이너리 파일은 크기만 표시하고 `subPathExpr`는 해석하지 않습니다. 이미지에 포함된 파일은 확인할 수 없습니다.
+
+`k8s_env`는 `k8s_get`의 민감한 키 규칙에 해당하는 downward API 레이블·어노테이션 값을 조회하거나 치환하기 전에 마스킹하고, `k8s_list`는 같은 규칙에 해당하는 키를 사용하는 레이블 선택자를 거부합니다.
 
 <a id="shared-limits"></a>
 

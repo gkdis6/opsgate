@@ -7,6 +7,10 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Changed
+
+- Require web approval by default wherever available on HTTP; explicit `approval.require_web: false` opts in to elicitation, which lets a compromised client approve its own writes. Stdio keeps elicitation unless `require_web: true` is explicit.
+
 ### Added
 
 - MCP over stdio and authenticated Streamable HTTP, including the sessionless `2026-07-28` protocol, with bounded output, redaction and JSONL auditing.

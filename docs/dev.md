@@ -131,9 +131,8 @@ Git configuration must remain trusted, including any configured filters.
 Prompts contain 1 byte to 32 KiB; requester identities are at most 256 bytes. dev_task_start
 accepts up to 48 KiB of MCP arguments and approval summaries up to 64 KiB, but JSON
 escaping counts toward the wire limit, so heavily escaped prompts may fit less.
-Logs cap at 20 MiB per task, with excess output drained and discarded. Log pages and diffs cap at 256 KiB before JSON encoding/redaction;
-MCP applies its own output cap afterwards. Final output files are read up to
-256 KiB; without a readable regular output file, the last 8 KiB of log is used.
+Logs cap at 20 MiB per task, with excess output drained and discarded. Log pages and diffs detect secret ranges over the complete source before selecting up to 256 KiB of raw text to redact; the redacted response also caps at 256 KiB before JSON encoding. Sources over 20 MiB are unavailable rather than partially scanned.
+MCP applies its own output cap afterwards. Final messages use the first 256 KiB of a readable regular output file or otherwise the last 8 KiB of log, with secret ranges detected over the complete source before selecting the fragment; sources over 20 MiB produce an omission note instead.
 
 The default timeout is one hour, concurrency one (maximum eight), and retained
 task count 100. At capacity, the oldest finished record, logs and worktree are

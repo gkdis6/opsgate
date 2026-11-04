@@ -2,8 +2,11 @@
 # API URL, CA certificate, and a short-lived token from:
 # kubectl -n opsgate create token opsgate
 # Set its user token and context namespace to opsgate; protect the file as 0600.
-# DenyNamespaces in opsgate is defense-in-depth on top of RBAC. This role grants
-# cluster-wide reads; use namespace RoleBindings instead for narrower access.
+# This ClusterRoleBinding grants API reads even in namespaces denied by opsgate.
+# The watcher shares this role; application policy is the namespace boundary.
+# Use per-namespace RoleBindings instead for stricter access. The separate
+# operator Role is namespace-scoped, but workload patch allows more fields than
+# the restart tool changes.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

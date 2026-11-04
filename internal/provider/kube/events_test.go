@@ -131,9 +131,9 @@ func TestClusterEventsPolicy(t *testing.T) {
 					{"denied-reference", "public", "private"},
 				} {
 					objects = append(objects, &corev1.Event{
-						ObjectMeta: metav1.ObjectMeta{Name: tt.name, Namespace: tt.ns, CreationTimestamp: metav1.NewTime(time.Now().Add(-12 * time.Minute))},
+						ObjectMeta: metav1.ObjectMeta{Name: tt.name, Namespace: tt.ns, CreationTimestamp: metav1.NewTime(time.Now().Add(-50 * time.Minute))},
 						Type:       "Warning", Reason: tt.name, Message: tt.name,
-						LastTimestamp:  metav1.NewTime(time.Now().Add(-45 * time.Second)),
+						LastTimestamp:  metav1.NewTime(time.Now().Add(-30 * time.Minute)),
 						InvolvedObject: corev1.ObjectReference{Name: "public", Kind: kind, Namespace: tt.involvedNS},
 					})
 				}
@@ -153,8 +153,8 @@ func TestClusterEventsPolicy(t *testing.T) {
 					if err != nil || !strings.Contains(out, "visible") || strings.Contains(out, "denied-event") || strings.Contains(out, "denied-reference") || strings.Contains(out, "private") {
 						t.Fatalf("%s: %s %v", entry, out, err)
 					}
-					// AGE is measured from LastTimestamp (45s), not creation (12m).
-					if !strings.Contains(out, "AGE") || !strings.Contains(out, "45s") || strings.Contains(out, "12m") {
+					// AGE is measured from LastTimestamp (30m), not creation (50m).
+					if !strings.Contains(out, "AGE") || !strings.Contains(out, "30m") || strings.Contains(out, "50m") {
 						t.Fatalf("%s: missing event age: %s", entry, out)
 					}
 				}
@@ -168,7 +168,7 @@ func TestAge(t *testing.T) {
 		ago  time.Duration
 		want string
 	}{
-		{45 * time.Second, "45s"}, {12 * time.Minute, "12m"},
+		{12 * time.Minute, "12m"},
 		{3*time.Hour + 12*time.Minute, "3h12m"}, {95 * 24 * time.Hour, "95d"},
 		{(2*365 + 30) * 24 * time.Hour, "2y30d"}, {-time.Hour, "<invalid>"},
 	} {

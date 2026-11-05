@@ -278,3 +278,18 @@ runner는 별도 YAML 파일을 사용하며, `providers` 아래에 중첩하지
 
 [한글 사용 예시와 제한](watch.md#discord-직접-전송과-커스텀-웹훅),
 [전체 설정 표](../configuration.md#direct-webhook-destinations)를 참고하세요.
+
+## 분석기 설정
+
+`opsgate-analyzer`는 MCP 서버 설정의 하위 섹션이 아닌 별도 YAML 파일을 사용합니다.
+[자동 분석 문서](analyzer.md)와 [설정 예시](../../analyzer.example.yaml)를 참고하세요.
+
+Discord 출력은 `watch.outputs[].language: ko|en`(기본 en), 분석 보고서는 별도 설정의
+`report.language: ko|en`(기본 ko)로 언어를 정합니다. `report.suggest_actions`는
+기본 true이며 실행 없는 권장 조치를 제안합니다. [자세한 설명](analyzer.md#알림-언어와-권장-조치)을 참고하세요.
+
+`watch.language: ko|en`은 모든 webhook·Discord 출력의 기본 표시 언어입니다.
+원본 `reason`·`summary`는 보존하고 webhook의 `display`에 번역된 설명을 추가합니다.
+Kubernetes `restore_image: ["namespace/deployment"]`와
+`action_approval_url: https://mcp.example.com`을 설정하면 검증된 이전 이미지 복원 승인을
+활성화합니다. 기본 비활성이며 [분석기 문서](analyzer.md)를 참고하세요.

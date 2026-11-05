@@ -10,7 +10,7 @@ make test
 make check
 ```
 
-Unit tests must run without root, systemd, a cluster or network access. `make build VERSION=dev` writes `bin/opsgate`; `make clean` removes build output and the local Go cache. Do not commit generated binaries or caches.
+Unit tests must run without root, systemd, a cluster or network access. `make build VERSION=dev` writes `bin/opsgate` and `bin/opsgate-analyzer`; `make clean` removes build output and the local Go cache. Do not commit generated binaries or caches.
 
 ## Running checks
 

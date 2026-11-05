@@ -224,6 +224,7 @@ before fan-out; an output can additionally select warnings only.
 | --- | --- | --- |
 | `name` | required | Unique 1–64 ASCII letters, digits, `_` or `-`; identifies delivery errors |
 | `type` | `webhook` | `webhook` for native/custom JSON; `discord` for Discord embeds |
+| `language` | `en` | `ko` or `en`; inherits `watch.language`; adds webhook `display` fields while preserving raw reason/summary |
 | `url` | empty | Receiver URL, with the same scheme restrictions as `webhook_url` |
 | `url_file` | empty | Read and trim the receiver URL at startup; set exactly one of `url` and `url_file` |
 | `headers` | empty | Static HTTP headers; prefer files for credentials |
@@ -321,3 +322,13 @@ The shared wrapper writes one JSON object per handled tool call, appended to `se
 Fields of `audit.Event`: `time` (RFC3339 timestamp with optional fractional seconds), `user`, `transport`, `tool`, optional redacted `args`, `outcome` (`ok`, `error`, `denied`, `pending`), optional redacted `error`, `duration_ms`, and `output_bytes` (returned success text size; zero on error). Write events additionally include optional redacted `plan` (the summary shown to the human) and `approval` (the confirmation method, `elicitation`, `web` or `window`; may also be present on a refusal or pending call). `pending` means human input is outstanding. Browser retry instructions count in `output_bytes`; elicitation input requests do not return text output. Planning and applying each receive a separate tool timeout; human confirmation may take longer. Web decisions emit separate audit events with `outcome` `approved` or `rejected`, user, tool and only an eight-character `args.approval_id_prefix`. Denied multi round-trip approval verifications emit `denied` events without request state. Tool output bodies are not stored. Audit write failures are reported to stderr without failing the tool call; audit is not tamper-proof. Protect and rotate logs, which may still contain sensitive information.
 
 Window creation emits `window_granted` with the source approval method and `args.window`/`args.expires_at`; later calls using the grant record `approval: window`.
+
+## Analyzer configuration
+
+`opsgate-analyzer` uses a separate YAML file, not a section in the MCP server
+configuration. See the [analyzer settings table](analyzer.md#queue-limits-and-reports)
+and [example](../analyzer.example.yaml).
+
+`watch.language: ko|en` selects the default display language for all webhook/Discord outputs.
+Kubernetes `restore_image: ["namespace/deployment"]` and `action_approval_url: https://mcp.example.com`
+opt in to verified image restoration approvals. Both default to disabled; see [analyzer](analyzer.md).

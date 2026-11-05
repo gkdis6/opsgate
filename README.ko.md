@@ -222,6 +222,44 @@ MCP 서버와 함께 `opsgate watch`를 실행하면 Kubernetes의 문제와 변
 SMTP 이메일로 직접 전송하므로 n8n은 선택 사항입니다. 받은 알림을 MCP
 클라이언트에 붙여넣으면 opsgate 조회 도구로 해당 리소스의 원인을 조사할 수 있습니다.
 
+### 알림에서 원인 분석으로
+
+받은 알림과 함께 다음처럼 요청할 수 있습니다.
+
+> 이 알림을 opsgate MCP로 조사해줘. 관련 운영 기록, 리소스 상태와 이벤트,
+> 현재·직전 컨테이너 로그를 확인하고, 확인된 원인과 추정 원인,
+> 추가 확인 사항을 구분해서 알려줘.
+
+조사 흐름의 예시는 다음과 같습니다.
+
+1. Notes provider가 켜져 있으면 서비스·증상·오류 내용으로 운영 노트와 과거 장애 기록을 검색합니다.
+2. 알림의 클러스터·namespace·리소스와 발생 시각을 기준으로 Pod·워크로드 상태와 Kubernetes 이벤트를 확인합니다.
+3. 로그 조회가 허용된 경우 현재 로그와 `previous: true`로 읽은 직전 컨테이너 로그를 비교해 장애 시점을 추적합니다.
+4. 로그·이벤트 등 근거와 함께 확인된 원인, 추정 원인, 추가로 필요한 확인을 구분해 설명합니다.
+
+분석은 MCP 클라이언트의 AI가 조회 도구를 호출해 수행하며, watch는 알림을
+전달합니다. 조사 범위는 활성화된 provider와 접근 정책에 따라 달라집니다.
+현재 Kubernetes 모드의 도구 범위에는 호스트 자원·systemd 로그 조회가 포함되지
+않습니다. Pod 삭제나 로그·이벤트 만료로 근거가 남아 있지 않으면 근본 원인까지
+확정하지 못할 수 있습니다. 재시작 등 변경은 별도 승인 절차를 따릅니다.
+
+### 자동 분석 연결 (선택)
+
+별도 `opsgate-analyzer` 프로세스가 서명된 watch 알림을 받아, 모델이 조회 전용
+MCP 도구로 조사하게 한 뒤 Discord에 분석 결과를 보낼 수 있습니다. 반복 알림을
+묶고 조사 한도를 적용하며 쓰기 도구는 호출하지 않습니다. 모델과 자격 증명 파일은
+직접 지정합니다. 일반 watch 알림과 대화형 MCP 사용에는 모델이 필요하지 않습니다.
+`model.backend`로 OpenAI 호환 Chat Completions 또는 설치된 Claude Code(`claude -p`)·Codex(`codex exec`) CLI를 선택하는 실험 기능입니다. CLI 방식은 실행 계정의 CLI 인증을
+사용하므로 별도 모델 API 키 파일이 필요하지 않습니다.
+[자동 분석 문서](docs/ko/analyzer.md)를 참고하세요.
+
+즉시 Discord 알림의 원인 설명은 출력별 `language: ko` 또는 `en`으로 선택합니다.
+분석 보고서는 `report.language`와 `report.suggest_actions`로 언어와 권장 조치를
+설정합니다. 조치는 제안만 하며 자동 실행하지 않습니다. 오류 코드와 원문 근거는
+그대로 유지합니다. [언어·조치 설정](docs/ko/analyzer.md#알림-언어와-권장-조치)을 참고하세요.
+
+### 전송 설정
+
 Kubernetes provider가 켜진 설정에 다음 내용을 추가하세요.
 
 ```yaml
@@ -229,6 +267,7 @@ watch:
   outputs:
     - name: discord
       type: discord
+      language: ko # ko or en
       url_file: /etc/opsgate/discord-webhook-url
     - name: custom
       type: webhook
@@ -286,6 +325,7 @@ opsgate watch -config opsgate.yaml
 | [배포](docs/ko/deploy.md) | 릴리스 검증, Kubernetes, 리버스 프록시 |
 | [Dev provider](docs/ko/dev.md) | 별도 runner로 코딩 에이전트 실행 |
 | [Watch 알림](docs/ko/watch.md) | 별도 `opsgate watch` 프로세스로 Kubernetes 알림을 Discord·커스텀 JSON 웹훅·이메일로 전송 |
+| [자동 분석](docs/ko/analyzer.md) | 선택적 모델 worker, 조회 전용 MCP 인증과 조사 한도 |
 | [로드맵](docs/ko/roadmap.md) | 완료한 기능과 앞으로의 계획 |
 
 
@@ -295,3 +335,5 @@ opsgate watch -config opsgate.yaml
 [CONTRIBUTING.md](CONTRIBUTING.md), [행동 강령](CODE_OF_CONDUCT.md),
 [변경 이력](CHANGELOG.md)을 참고하세요. 라이선스는 [Apache-2.0](LICENSE)이며,
 저작권은 2026 The opsgate Authors에 있습니다.
+
+장애 알림은 먼저 전송하고, 선택적 분석기가 원인·근거·권장 조치를 별도 메시지로 보냅니다. 분석 지연은 최초 알림을 막지 않습니다.

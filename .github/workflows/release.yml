@@ -56,6 +56,8 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Without this, a commit tagged both v1.2.3-rc.1 and v1.2.3 can be released as the rc.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
       - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: |

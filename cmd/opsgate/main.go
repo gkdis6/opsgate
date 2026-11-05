@@ -239,6 +239,13 @@ func watchDispatchers(w config.Watch, secret []byte) ([]*alert.Dispatcher, error
 		privateOnly := strings.HasPrefix(strings.ToLower(w.WebhookURL), "http:")
 		result = append(result, alert.New(alert.Options{URL: w.WebhookURL, Secret: secret, Batch: w.Batch, Cooldown: w.Cooldown, MaxAlerts: w.MaxAlerts, PrivateOnly: privateOnly}))
 	}
+	for _, o := range w.Outputs {
+		sender, err := watchOutputSender(o)
+		if err != nil {
+			return nil, fmt.Errorf("watch.outputs %s: %w", o.Name, err)
+		}
+		result = append(result, alert.New(alert.Options{Sender: sender, Batch: w.Batch, ProblemsOnly: o.ProblemsOnly, Cooldown: w.Cooldown, MaxAlerts: w.MaxAlerts}))
+	}
 	if e := w.Email; e.Host != "" {
 		var password string
 		if e.PasswordFile != "" {

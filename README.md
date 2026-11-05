@@ -251,6 +251,10 @@ Full details: [SECURITY.md](SECURITY.md).
 
 
 
+Watch supports direct Discord delivery and custom JSON webhook templates through
+`watch.outputs`, with independent queues and retries; n8n is optional. See
+[watch alerts](docs/watch.md#direct-discord-and-custom-webhooks).
+
 ## Contributing and license
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md)

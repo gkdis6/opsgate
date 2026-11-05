@@ -204,7 +204,7 @@ providers:
 링크와 파드의 ServiceAccount를 사용합니다. 적용되는 값 전체는
 `opsgate config show -config opsgate.yaml`로 볼 수 있습니다.
 
-설정 파일을 `deploy/kubernetes/opsgate-deployment.yaml`의 `opsgate` ConfigMap에 넣고 적용하세요. 매니페스트의 기본 예제는 Google 로그인이며, 패스키 설정으로 바꿔도 현재 매니페스트의 필수 `opsgate-upstream` Secret 마운트는 남아 있습니다. Secret 준비, 이미지 검증, RBAC과 probe 설정은 [배포](docs/ko/deploy.md)를 따르세요.
+설정 파일을 `deploy/kubernetes/opsgate-deployment.yaml`의 `opsgate` ConfigMap에 넣고 적용하세요. 매니페스트의 기본 예제는 Google 로그인이며, 패스키에는 선택 항목인 `opsgate-upstream` Secret이 필요 없습니다. Secret 준비, 이미지 검증, RBAC과 probe 설정은 [배포](docs/ko/deploy.md)를 따르세요.
 
 ```sh
 kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml

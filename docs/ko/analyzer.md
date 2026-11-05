@@ -177,7 +177,8 @@ watch:
 서명이 유효해도 알림·로그·노트 내용은 지시가 아닌 신뢰할 수 없는 데이터입니다.
 
 [Kubernetes 배포 예시](../../deploy/kubernetes/opsgate-analyzer.yaml)는 자격 증명
-설정 전 기동되지 않도록 replicas 0에서 시작합니다. `opsgate-analyzer` ConfigMap에
+설정 전 기동되지 않도록 replicas 0에서 시작합니다. Service와 readiness probe가 파드 주소로
+접속하므로 `analyzer.yaml`에 `listen: 0.0.0.0:8080`을 설정하세요. `opsgate-analyzer` ConfigMap에
 `analyzer.yaml`과 `reader.yaml`, 같은 이름의 Secret에 `hmac`, `mcp-token`,
 `model-api-key`, `opsgate-watch-discord` Secret에 `url`을 준비하세요. 분석기 설정의
 경로는 매니페스트에 맞게 `/etc/analyzer-credentials/*`, `/etc/analyzer-discord/url`을

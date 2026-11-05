@@ -208,7 +208,7 @@ builtin passkey sign-in, state in `/var/lib/opsgate`, browser approval links and
 the pod’s ServiceAccount. `opsgate config show -config opsgate.yaml` prints every
 effective value.
 
-Put this file in the `opsgate` ConfigMap of `deploy/kubernetes/opsgate-deployment.yaml` and apply it. The manifest’s sample uses Google sign-in; replacing its config with passkeys still leaves the required `opsgate-upstream` Secret mount. Follow [deployment](docs/deploy.md) for Secret provisioning, image verification, RBAC and probe configuration.
+Put this file in the `opsgate` ConfigMap of `deploy/kubernetes/opsgate-deployment.yaml` and apply it. The manifest’s sample uses Google sign-in; passkeys do not need its optional `opsgate-upstream` Secret. Follow [deployment](docs/deploy.md) for Secret provisioning, image verification, RBAC and probe configuration.
 
 ```sh
 kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml

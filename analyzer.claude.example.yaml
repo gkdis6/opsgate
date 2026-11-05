@@ -1,0 +1,39 @@
+# Separate process: opsgate-analyzer -config analyzer.yaml
+# Uses the installed Claude Code CLI and the execution account's login.
+# Run claude auth status as that same account before enabling the worker.
+listen: 127.0.0.1:8080
+secret_file: /etc/opsgate-analyzer/hmac
+mcp:
+  endpoint: http://127.0.0.1:8788/mcp
+  token_file: /etc/opsgate-analyzer/mcp-token
+model:
+  backend: claude_cli
+  name: sonnet
+  claude:
+    # binary: /absolute/path/to/claude  # omitted: resolve claude on PATH at startup
+    # config_dir: /absolute/path/to/.claude # omitted: use CLI runtime defaults
+    max_turns: 3              # internal CLI turns per model invocation
+    max_budget_usd: 0.5       # estimated per CLI invocation; not a billing guarantee
+discord_url_file: /etc/opsgate-analyzer/discord-url
+report:
+  language: ko           # ko or en; includes cause explanations and report labels
+  # Optional: enables verified image-restore approval links; server must opt in.
+  # approval_url: https://mcp.example.com
+  suggest_actions: true  # proposals only; no automatic changes
+warnings_only: true
+batch_window: 10s
+cooldown: 15m
+timeout: 2m
+queue_size: 64
+max_tool_calls: 12
+max_rounds: 8
+max_completion_tokens: 1500
+max_total_tokens: 100000
+max_context_bytes: 131072
+tool_output_bytes: 16384
+
+# Optional signed analysis webhook, separate from the immediate watch notification.
+# forward:
+#   url: https://automation.example.com/webhook/opsgate-analysis
+#   secret_file: /etc/opsgate-analyzer/forward-hmac
+#   allow_private_http: false

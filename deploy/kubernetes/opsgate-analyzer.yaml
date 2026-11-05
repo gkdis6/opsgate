@@ -1,0 +1,124 @@
+# Reference deployment. Supply the image containing /opsgate-analyzer and
+# /opsgate, configs and Secrets described in docs/analyzer.md before scaling up.
+# No public ingress or Service for the loopback MCP port.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: opsgate-analyzer
+  namespace: opsgate
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: opsgate-analyzer-readonly
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: opsgate-readonly
+subjects:
+  - kind: ServiceAccount
+    name: opsgate-analyzer
+    namespace: opsgate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opsgate-analyzer
+  namespace: opsgate
+spec:
+  selector:
+    app: opsgate-analyzer
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opsgate-analyzer
+  namespace: opsgate
+spec:
+  replicas: 0 # Set to 1 after supplying credentials, model and reader config.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: opsgate-analyzer
+  template:
+    metadata:
+      labels:
+        app: opsgate-analyzer
+    spec:
+      serviceAccountName: opsgate-analyzer
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: analyzer
+          image: ghcr.io/gkdis6/opsgate:latest # Pin a release with analyzer support.
+          command: [/opsgate-analyzer, -config, /etc/analyzer/analyzer.yaml]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/analyzer
+              readOnly: true
+            - name: credentials
+              mountPath: /etc/analyzer-credentials
+              readOnly: true
+            - name: discord
+              mountPath: /etc/analyzer-discord
+              readOnly: true
+        - name: reader
+          image: ghcr.io/gkdis6/opsgate:latest # Same pinned release as analyzer.
+          command: [/opsgate, -transport, http, -config, /etc/reader/reader.yaml]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/reader
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: opsgate-analyzer
+            defaultMode: 0444
+        - name: credentials
+          secret:
+            secretName: opsgate-analyzer
+            defaultMode: 0440
+        - name: discord
+          secret:
+            secretName: opsgate-watch-discord
+            defaultMode: 0440

@@ -1,0 +1,37 @@
+# Separate process: opsgate-analyzer -config analyzer.yaml
+# Uses the installed Codex CLI and the execution account's login.
+# Run codex login status as that same account before enabling the worker.
+listen: 127.0.0.1:8080
+secret_file: /etc/opsgate-analyzer/hmac
+mcp:
+  endpoint: http://127.0.0.1:8788/mcp
+  token_file: /etc/opsgate-analyzer/mcp-token
+model:
+  backend: codex_cli
+  name: YOUR_CODEX_MODEL
+  codex:
+    # binary: /absolute/path/to/codex  # omitted: resolve codex on PATH at startup
+    # config_dir: /absolute/path/to/.codex # omitted: use existing CLI auth directory
+discord_url_file: /etc/opsgate-analyzer/discord-url
+report:
+  language: ko           # ko or en; includes cause explanations and report labels
+  # Optional: enables verified image-restore approval links; server must opt in.
+  # approval_url: https://mcp.example.com
+  suggest_actions: true  # proposals only; no automatic changes
+warnings_only: true
+batch_window: 10s
+cooldown: 15m
+timeout: 2m
+queue_size: 64
+max_tool_calls: 12
+max_rounds: 8
+max_completion_tokens: 1500
+max_total_tokens: 100000
+max_context_bytes: 131072
+tool_output_bytes: 16384
+
+# Optional signed analysis webhook, separate from the immediate watch notification.
+# forward:
+#   url: https://automation.example.com/webhook/opsgate-analysis
+#   secret_file: /etc/opsgate-analyzer/forward-hmac
+#   allow_private_http: false

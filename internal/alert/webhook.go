@@ -3,17 +3,22 @@ package alert
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"syscall"
+	"text/template"
 	"time"
 )
 
-type webhookSender struct{ opts Options }
+type webhookSender struct {
+	opts         Options
+	name, format string
+	headers      map[string]string
+	template     *template.Template
+}
 
 func newWebhook(opts Options) Sender {
 	if opts.Client == nil {
@@ -46,10 +51,15 @@ func privateTransport() *http.Transport {
 	return t
 }
 
-func (s *webhookSender) Name() string { return "webhook" }
+func (s *webhookSender) Name() string {
+	if s.name != "" {
+		return s.name
+	}
+	return "webhook"
+}
 
 func (s *webhookSender) Send(ctx context.Context, b *Batch) (retry bool, err error) {
-	body, err := json.Marshal(b)
+	body, err := s.body(b)
 	if err != nil {
 		return false, err
 	}
@@ -58,6 +68,9 @@ func (s *webhookSender) Send(ctx context.Context, b *Batch) (retry bool, err err
 		return false, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range s.headers {
+		req.Header.Set(k, v)
+	}
 	if len(s.opts.Secret) > 0 {
 		req.Header.Set("X-Opsgate-Signature", Sign(s.opts.Secret, body))
 	}
@@ -72,7 +85,7 @@ func (s *webhookSender) Send(ctx context.Context, b *Batch) (retry bool, err err
 	}
 	resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return resp.StatusCode >= 500, fmt.Errorf("post returned HTTP %d", resp.StatusCode)
+		return resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500, fmt.Errorf("post returned HTTP %d", resp.StatusCode)
 	}
 	return false, nil
 }

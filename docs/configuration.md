@@ -332,3 +332,7 @@ and [example](../analyzer.example.yaml).
 `watch.language: ko|en` selects the default display language for all webhook/Discord outputs.
 Kubernetes `restore_image: ["namespace/deployment"]` and `action_approval_url: https://mcp.example.com`
 opt in to verified image restoration approvals. Both default to disabled; see [analyzer](analyzer.md).
+
+## Command line
+
+Run `opsgate -h` to list commands and flags, or `opsgate help <command>` for command help. `opsgate version` (also `-version`) prints the build version. Help and successful commands exit 0; invalid commands, flags or extra arguments exit 2 before loading configuration; operational errors exit 1. Help goes to stdout and errors to stderr.

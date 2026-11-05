@@ -1,0 +1,35 @@
+# Separate process: opsgate-analyzer -config analyzer.yaml
+# Choose a model that supports Chat Completions function tools and usage reporting.
+listen: 127.0.0.1:8080
+secret_file: /etc/opsgate-analyzer/hmac
+mcp:
+  endpoint: http://127.0.0.1:8788/mcp
+  token_file: /etc/opsgate-analyzer/mcp-token
+model:
+  backend: openai_compatible # or claude_cli / codex_cli; see the CLI examples
+  endpoint: https://api.openai.com/v1/chat/completions
+  name: YOUR_FUNCTION_CALLING_MODEL
+  api_key_file: /etc/opsgate-analyzer/model-api-key
+discord_url_file: /etc/opsgate-analyzer/discord-url
+report:
+  language: ko           # ko or en; includes cause explanations and report labels
+  # Optional: enables verified image-restore approval links; server must opt in.
+  # approval_url: https://mcp.example.com
+  suggest_actions: true  # proposals only; no automatic changes
+warnings_only: true
+batch_window: 10s
+cooldown: 15m
+timeout: 2m
+queue_size: 64
+max_tool_calls: 12
+max_rounds: 8
+max_completion_tokens: 1500
+max_total_tokens: 100000
+max_context_bytes: 131072
+tool_output_bytes: 16384
+
+# Optional signed analysis webhook, separate from the immediate watch notification.
+# forward:
+#   url: https://automation.example.com/webhook/opsgate-analysis
+#   secret_file: /etc/opsgate-analyzer/forward-hmac
+#   allow_private_http: false

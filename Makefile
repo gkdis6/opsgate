@@ -5,6 +5,7 @@ BIN := bin/opsgate
 
 .PHONY: build test vet lint vuln clean licenses fmt fmt-check tidy-check check help
 build:
+	CGO_ENABLED=0 $(GO) build -trimpath -o bin/opsgate-analyzer ./cmd/opsgate-analyzer
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "-X github.com/gkdis6/opsgate/internal/buildinfo.version=$(VERSION)" -o $(BIN) ./cmd/opsgate
 
 fmt:
@@ -54,7 +55,7 @@ docker:
 	docker build --build-arg VERSION=$(VERSION) -t opsgate:$(VERSION) .
 
 help:
-	@printf '%s\n' 'build       Build bin/opsgate (VERSION=dev by default)' \
+	@printf '%s\n' 'build       Build bin/opsgate and bin/opsgate-analyzer (VERSION=dev by default)' \
 		'test        Check pins and run tests with the race detector' \
 		'vet         Run go vet' \
 		'lint        Check pins and run golangci-lint (LINT_OPTIONAL=1 permits a missing linter)' \

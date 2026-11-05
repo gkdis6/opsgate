@@ -17,6 +17,16 @@ builds:
     ldflags:
       - -s -w -X github.com/gkdis6/opsgate/internal/buildinfo.version={{.Version}}
     mod_timestamp: '{{ .CommitTimestamp }}'
+  - id: opsgate-analyzer
+    main: ./cmd/opsgate-analyzer
+    binary: opsgate-analyzer
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: [-s -w]
+    mod_timestamp: '{{ .CommitTimestamp }}'
 archives:
   - id: opsgate
     formats: [tar.gz]
@@ -26,6 +36,9 @@ archives:
       - README*
       - SECURITY.md
       - opsgate.example.yaml
+      - analyzer.example.yaml
+      - analyzer.claude.example.yaml
+      - analyzer.codex.example.yaml
       - src: dist/third_party/**
         dst: third_party
 checksum:
@@ -40,7 +53,7 @@ signs:
     args: [sign-blob, '--yes', '--bundle=${signature}', '${artifact}']
 dockers_v2:
   - id: opsgate
-    ids: [opsgate]
+    ids: [opsgate, opsgate-analyzer]
     dockerfile: Dockerfile
     extra_files:
       - dist/third_party

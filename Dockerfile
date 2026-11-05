@@ -12,12 +12,14 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
     -ldflags "-s -w -X github.com/gkdis6/opsgate/internal/buildinfo.version=$VERSION" \
     -o /out/opsgate ./cmd/opsgate
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -o /out/opsgate-analyzer ./cmd/opsgate-analyzer
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH sh scripts/third-party-licenses.sh
 
 # GoReleaser supplies platform-specific binaries in its temporary context.
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab AS release
 ARG TARGETPLATFORM
 COPY --chmod=0555 ${TARGETPLATFORM}/opsgate /opsgate
+COPY --chmod=0555 ${TARGETPLATFORM}/opsgate-analyzer /opsgate-analyzer
 COPY dist/third_party/ /licenses/
 USER nonroot
 ENTRYPOINT ["/opsgate"]
@@ -25,6 +27,7 @@ ENTRYPOINT ["/opsgate"]
 # The default target builds from source for local use.
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab AS local
 COPY --from=builder --chmod=0555 /out/opsgate /opsgate
+COPY --from=builder --chmod=0555 /out/opsgate-analyzer /opsgate-analyzer
 COPY --from=builder /src/dist/third_party/ /licenses/
 USER nonroot
 ENTRYPOINT ["/opsgate"]

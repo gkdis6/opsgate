@@ -2,7 +2,9 @@ package oauth
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -94,6 +96,32 @@ func TestUnchangedRequestsDoNotWriteState(t *testing.T) {
 				t.Fatal("unchanged request replaced state file")
 			}
 		})
+	}
+}
+
+// Regression: a PersistentVolume root owned by root must not stop state writes.
+func TestStateSavesWhenDirectoryIsNotOwned(t *testing.T) {
+	f := newFixture(t, false, true, true, "octo")
+	f.s.cfg.StateFile = filepath.Join(t.TempDir(), "oauth.json")
+	dirChmod := chmodStateDir
+	t.Cleanup(func() { chmodStateDir = dirChmod })
+	chmodStateDir = func(string, os.FileMode) error { return fmt.Errorf("chmod: %w", fs.ErrPermission) }
+	f.s.mu.Lock()
+	defer f.s.mu.Unlock()
+	f.s.storageErr = nil
+	if err := f.s.save(); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(f.s.cfg.StateFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Fatalf("state file mode=%v", info.Mode().Perm())
+	}
+	chmodStateDir = func(string, os.FileMode) error { return errors.New("disk failure") }
+	if err := f.s.writeState(); err == nil {
+		t.Fatal("other chmod errors must still fail")
 	}
 }
 

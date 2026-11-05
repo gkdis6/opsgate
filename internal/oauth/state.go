@@ -2,8 +2,10 @@ package oauth
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -137,6 +139,9 @@ func (s *Server) load() error {
 }
 
 // Callers hold mu. A failed durable write makes the running instance fail closed.
+// chmodStateDir is replaced in tests, which cannot create a directory they do not own.
+var chmodStateDir = os.Chmod
+
 func (s *Server) save() error {
 	if s.storageErr != nil {
 		return s.storageErr
@@ -157,7 +162,9 @@ func (s *Server) writeState() error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	if err := os.Chmod(dir, 0700); err != nil {
+	// A volume root is often owned by root and shared through fsGroup, so only its
+	// owner can tighten it. The state file itself is always 0600.
+	if err := chmodStateDir(dir, 0700); err != nil && !errors.Is(err, fs.ErrPermission) {
 		return err
 	}
 	f, err := os.CreateTemp(dir, ".oauth-*")

@@ -12,16 +12,8 @@ func TestModeDefaults(t *testing.T) {
 	}
 	if k.HTTP.Listen != "0.0.0.0:8787" || k.Auth.Mode != AuthBuiltin || k.Auth.Builtin.Upstream.Provider != "passkey" ||
 		k.Auth.Builtin.StateFile != "/var/lib/opsgate/oauth.json" || !k.Approval.Web ||
-		!k.Providers.Kubernetes.Enabled || k.Providers.Kubernetes.Kubeconfig != "" || k.Providers.Host.Enabled || k.Server.AuditLog != "" {
+		!k.Providers.Kubernetes.Enabled || k.Providers.Kubernetes.Kubeconfig != "" || k.Server.AuditLog != "" {
 		t.Fatalf("kubernetes defaults: %+v", k)
-	}
-	h, err := Parse([]byte("mode: host\n"), "h")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if h.HTTP.Listen != "127.0.0.1:8787" || !h.Providers.Host.Enabled || h.Providers.Kubernetes.Enabled ||
-		h.Server.AuditLog != "/var/log/opsgate/audit.jsonl" || !h.Approval.Web {
-		t.Fatalf("host defaults: %+v", h)
 	}
 	plain, err := Parse([]byte("server:\n  name: x\n"), "plain")
 	if err != nil {
@@ -41,7 +33,7 @@ func TestModeFileWins(t *testing.T) {
 		t.Fatalf("file values must win: %+v", c)
 	}
 	// Browser approval follows builtin sign-in instead of failing validation.
-	s, err := Parse([]byte("mode: host\nauth:\n  mode: static\n"), "s")
+	s, err := Parse([]byte("mode: kubernetes\nauth:\n  mode: static\n"), "s")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,9 +44,10 @@ func TestModeFileWins(t *testing.T) {
 
 func TestModeRejects(t *testing.T) {
 	for in, want := range map[string]string{
-		"mode: pod\n": "mode must be",
-		"mode: kubernetes\nproviders:\n  host:\n    enabled: true\n": "cannot be enabled in mode kubernetes",
-		"mode: kubernetes\nunknown: 1\n":                             "field unknown not found",
+		"mode: pod\n":  "mode must be",
+		"mode: host\n": "mode must be",
+		"providers:\n  host:\n    enabled: true\n": "field host not found",
+		"mode: kubernetes\nunknown: 1\n":           "field unknown not found",
 	} {
 		if _, err := Parse([]byte(in), "bad"); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: err = %v, want %q", in, err, want)
@@ -71,7 +64,7 @@ func TestEffectiveRoundTrip(t *testing.T) {
 	for _, in := range []string{
 		"",
 		"mode: kubernetes\napproval:\n  window: 30m\n  window_tools: [\"note_*\"]\n",
-		"mode: host\nproviders:\n  kubernetes:\n    enabled: true\n    clusters:\n      - name: prod\n        namespaces: [apps]\n",
+		"mode: kubernetes\nproviders:\n  kubernetes:\n    enabled: true\n    clusters:\n      - name: prod\n        namespaces: [apps]\n",
 		"watch:\n  webhook_url: https://hooks.example.com/x\n",
 	} {
 		c, err := Parse([]byte(in), "in")
@@ -97,13 +90,13 @@ func TestEffectiveRoundTrip(t *testing.T) {
 }
 
 func TestGenerate(t *testing.T) {
-	base := InitOptions{Mode: ModeKubernetes, PublicURL: "https://mcp.example.com", Login: LoginPasskey, User: "alice",
+	base := InitOptions{PublicURL: "https://mcp.example.com", Login: LoginPasskey, User: "alice",
 		Namespaces: []string{"*"}, DenyNamespaces: []string{"kube-system"}, PodLogs: true, NoteVault: "/notes"}
 	for name, o := range map[string]InitOptions{
 		"kubernetes": base,
-		"host": {Mode: ModeHost, PublicURL: "https://ops.example.com", Login: LoginGitHub, User: "octo", ClientID: "id",
-			ClientSecretFile: "/etc/opsgate/secret", Write: true, Units: []string{"nginx*"}, Kubeconfig: "/etc/opsgate/kubeconfig", Namespaces: []string{"apps"}},
-		"google": {Mode: ModeHost, PublicURL: "https://ops.example.com", Login: LoginGoogle, User: "a@example.com", ClientID: "id", ClientSecretFile: "/s"},
+		"github": {PublicURL: "https://ops.example.com", Login: LoginGitHub, User: "octo", ClientID: "id",
+			ClientSecretFile: "/etc/opsgate/secret", Write: true, Namespaces: []string{"apps"}},
+		"google": {PublicURL: "https://ops.example.com", Login: LoginGoogle, User: "a@example.com", ClientID: "id", ClientSecretFile: "/s"},
 	} {
 		data, err := Generate(o)
 		if err != nil {
@@ -117,10 +110,10 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("generated config must inherit web-only approval: %s", data)
 		}
 		u := c.Auth.Builtin.Users
-		if c.Mode != o.Mode || len(u) != 1 || u[0].Subject != o.Subject() || len(c.Auth.Builtin.Admins) != 1 || (len(u[0].Scopes) == 2) != o.Write {
+		if c.Mode != ModeKubernetes || len(u) != 1 || u[0].Subject != o.Subject() || len(c.Auth.Builtin.Admins) != 1 || (len(u[0].Scopes) == 2) != o.Write {
 			t.Fatalf("%s: %+v\n%s", name, c.Auth.Builtin, data)
 		}
-		if c.Providers.Kubernetes.Enabled != (o.Mode == ModeKubernetes || o.Kubeconfig != "") || c.Providers.Note.Enabled != (o.NoteVault != "") {
+		if !c.Providers.Kubernetes.Enabled || c.Providers.Note.Enabled != (o.NoteVault != "") {
 			t.Fatalf("%s: providers %+v", name, c.Providers)
 		}
 	}
@@ -133,10 +126,10 @@ func TestGenerate(t *testing.T) {
 		t.Fatalf("quoted vault: %v %q", err, c.Providers.Note.Vault)
 	}
 	for name, o := range map[string]InitOptions{
-		"space in user":     {Mode: ModeKubernetes, PublicURL: "https://m.example.com", Login: LoginPasskey, User: "a b"},
-		"http public url":   {Mode: ModeKubernetes, PublicURL: "http://m.example.com", Login: LoginPasskey, User: "a"},
-		"github without id": {Mode: ModeHost, PublicURL: "https://m.example.com", Login: LoginGitHub, User: "a"},
-		"unknown login":     {Mode: ModeHost, PublicURL: "https://m.example.com", Login: "saml", User: "a"},
+		"space in user":     {PublicURL: "https://m.example.com", Login: LoginPasskey, User: "a b"},
+		"http public url":   {PublicURL: "http://m.example.com", Login: LoginPasskey, User: "a"},
+		"github without id": {PublicURL: "https://m.example.com", Login: LoginGitHub, User: "a"},
+		"unknown login":     {PublicURL: "https://m.example.com", Login: "saml", User: "a"},
 	} {
 		if _, err := Generate(o); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -145,7 +138,7 @@ func TestGenerate(t *testing.T) {
 }
 
 func TestRequireWebDefault(t *testing.T) {
-	for _, mode := range []string{ModeHost, ModeKubernetes} {
+	for _, mode := range []string{ModeKubernetes} {
 		for _, tc := range []struct {
 			name, settings string
 			want           bool

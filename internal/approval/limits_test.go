@@ -25,7 +25,7 @@ func TestWindowConfig(t *testing.T) {
 		valid    bool
 	}{
 		{"off", 0, nil, true},
-		{"minimum", time.Minute, []string{"host_*", "k8s_?cale"}, true},
+		{"minimum", time.Minute, []string{"note_*", "k8s_?cale"}, true},
 		{"maximum", 12 * time.Hour, []string{"dev_task_start"}, true},
 		{"negative", -time.Minute, nil, false},
 		{"too short", time.Minute - 1, nil, false},

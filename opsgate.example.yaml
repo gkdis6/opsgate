@@ -67,13 +67,6 @@ approval:
   # Windows cover user+tool across clients and targets; in memory, 100 max.
   # Never include dev_task_start: approve every coding task separately.
 providers:
-  host:
-    enabled: false
-    units: [] # Read status/log unit globs, e.g. [myapp.service]; empty allows none.
-    disk_paths: [/]
-    max_log_lines: 500 # Positive cap.
-    restart_units: [] # Separate action globs; empty disables restart tool.
-    command_prefix: [] # Trusted write argv prefix; first element absolute executable.
   kubernetes:
     enabled: false
     name: default # Single-cluster name; clients may omit cluster with one cluster.
@@ -109,15 +102,11 @@ providers:
 #     users:
 #       - subject: oidc:REPLACE_WITH_EXACT_SUBJECT
 #         scopes: [ops:read, ops:write]
-#         tools: [host_service_status, host_service_restart]
+#         tools: [k8s_get, k8s_rollout_restart]
 # approval:
 #   web: true # builtin auth only.
 #   require_web: true # Browser decisions only; stdio writes denied.
 # providers:
-#   host:
-#     enabled: true
-#     restart_units: [myapp.service]
-#     command_prefix: [/usr/bin/sudo, -n] # Exact sudoers rule + service drop-in required.
 #   kubernetes:
 #     enabled: true
 #     namespaces: [apps]

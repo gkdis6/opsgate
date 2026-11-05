@@ -27,9 +27,9 @@ AI 클라이언트 (claude.ai, ChatGPT, Claude Code 등 MCP 클라이언트)
                   |
              공통 도구 래퍼
                   |
-       +----------+----------+------------+
-       |          |          |            |
-      host       kube       note         dev
+                  +----------+------------+
+                  |          |            |
+                 kube       note         dev
                                           |
                                       Unix 소켓
                                           |
@@ -59,7 +59,6 @@ HTTP 리스너는 일반 HTTP로 통신하므로, 외부에 HTTPS로 제공하�
 | `internal/redact` | 정규식과 직접 스캔으로 알려진 비밀값 패턴을 마스킹하지만, 안전장치일 뿐 모든 비밀값을 찾아내지는 못합니다. |
 | `internal/audit` | 파일 또는 stderr에 JSONL 감사 이벤트를 추가합니다. |
 | `internal/ui` | 동의, 승인, 패스키, 관리 페이지의 공통 레이아웃을 제공합니다. |
-| `internal/provider/host` | systemd 상태/로그, 프로세스, 디스크 정보, 허용된 유닛 재시작을 제공합니다. |
 | `internal/provider/kube` | Kubernetes 오브젝트, 이벤트, 로그를 제공하고, 네임스페이스 정책과 허용 목록에 따라 rollout restart, scale, 파드 삭제를 실행합니다. |
 | `internal/provider/note` | Markdown 볼트를 검색하고 읽으며, 선택 사항인 create/append/replace/trash 도구에서는 내용/diff 미리보기와 스냅샷 검사를 사용합니다. |
 | `internal/provider/dev`, `internal/devrunner` | 별도 runner에 요청을 보내면, runner가 설정된 프로젝트/에이전트를 선택해 Git worktree에서 작업을 실행합니다. |
@@ -104,9 +103,9 @@ stdio:
   user: alice
   scopes: [ops:read]
 providers:
-  host:
+  kubernetes:
     enabled: true
-    units: [example.service]
+    namespaces: [default]
 ```
 
 `opsgate.yaml`로 저장한 뒤 다음 명령을 실행하세요.

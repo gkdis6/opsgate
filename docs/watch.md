@@ -208,8 +208,7 @@ kubectl apply -f deploy/kubernetes/opsgate-watch.yaml
 kubectl -n opsgate logs deployment/opsgate-watch
 ```
 
-Outside the cluster, `deploy/systemd/opsgate-watch.service` runs it on a host
-with the same hardening as the server, using a kubeconfig.
+Outside the cluster, `opsgate watch` can also run with a kubeconfig that provides cluster access.
 
 Watch errors (for example missing RBAC) are logged and retried by client-go.
 Restarting the watcher resets the baseline, so changes made while it was down

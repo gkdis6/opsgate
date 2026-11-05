@@ -34,10 +34,6 @@ func Default() Config {
 			TTL: 10 * time.Minute,
 		},
 		Providers: Providers{
-			Host: Host{
-				DiskPaths:   []string{"/"},
-				MaxLogLines: 500,
-			},
 			Kubernetes: Kubernetes{
 				KubernetesCluster: KubernetesCluster{
 					MaxLogLines: 500,
@@ -57,23 +53,20 @@ func Default() Config {
 	}
 }
 
-// DefaultFor returns the defaults of a deployment mode. Both modes serve
-// HTTP with builtin passkey sign-in and keep its state in /var/lib/opsgate.
+// DefaultFor returns the defaults of a deployment mode. A mode serves HTTP
+// with builtin passkey sign-in and keeps its state in /var/lib/opsgate.
 func DefaultFor(mode string) (Config, error) {
 	c := Default()
 	c.Mode = mode
 	switch mode {
 	case "":
 		return c, nil
-	case ModeHost:
-		c.Server.AuditLog = "/var/log/opsgate/audit.jsonl"
-		c.Providers.Host.Enabled = true
 	case ModeKubernetes:
 		// Audit events go to stderr for the cluster's log collection.
 		c.HTTP.Listen = "0.0.0.0:8787"
 		c.Providers.Kubernetes.Enabled = true
 	default:
-		return c, fmt.Errorf("mode must be %s or %s, got %q", ModeHost, ModeKubernetes, mode)
+		return c, fmt.Errorf("mode must be %s, got %q", ModeKubernetes, mode)
 	}
 	c.Auth.Mode = AuthBuiltin
 	c.Auth.Builtin.StateFile = "/var/lib/opsgate/oauth.json"

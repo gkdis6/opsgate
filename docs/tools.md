@@ -2,15 +2,10 @@
 
 [한국어](ko/tools.md)
 
-Host, Kubernetes and note read tools require `ops:read`; dev tools require `dev:run`. Tools are registered only when their provider is enabled. Host units and Kubernetes namespaces are filtered by configuration; namespace denies win. Kubernetes has no Secrets tool. Read-only metadata and logs can still disclose sensitive information.
+Kubernetes and note read tools require `ops:read`; dev tools require `dev:run`. Tools are registered only when their provider is enabled. Kubernetes namespaces are filtered by configuration; namespace denies win. Kubernetes has no Secrets tool. Read-only metadata and logs can still disclose sensitive information.
 
 | Tool | Purpose | Main arguments, defaults and limits |
 | --- | --- | --- |
-| `host_overview` | Host metrics and configured disk paths | None |
-| `host_services` | Allowlisted systemd units | None |
-| `host_service_status` | Allowlisted unit status | Required `unit`; missing suffix becomes `.service`; normalized name at most 256 bytes |
-| `host_logs` | Allowlisted journald logs | Required `unit` (same rules as status); `lines=100`, clamped to 1–`max_log_lines` (default cap 500); `since=""` (no time filter), positive duration including `d` (at most 128 bytes) or RFC3339; `priority=""` (no filter), emerg/alert/crit/err/warning/notice/info/debug or 0–7; `grep=""`, literal case-insensitive substring, at most 4096 bytes |
-| `host_top_processes` | Process usage from /proc, sampled over 500ms; names only, no argv or environment | `sort="cpu"` (cpu or mem); `limit=15`, clamped to 1–50 |
 | `k8s_clusters` | Configured clusters in order: name, context, protection, namespace/log/write policy and reachability | None; discovery timeout 2s per cluster |
 | `k8s_overview` | Node health and allowed namespace workloads/events | `cluster` (see selection rules below) |
 | `k8s_list` | List supported resources | Required `kind`; `namespace=""` (all allowed namespaces); `label_selector=""` (no filter), Kubernetes label selector syntax; `limit=100`, clamped to 1–500 |
@@ -19,7 +14,6 @@ Host, Kubernetes and note read tools require `ops:read`; dev tools require `dev:
 | `k8s_service_check` | Service host name DNS configuration and ready backends; configuration check only (no DNS queries or connections, NetworkPolicies not evaluated) | Required `namespace` (client namespace), `host` (lowercase DNS labels, max 253 bytes; IP addresses rejected); optional `port` (Service port number or name), `pod` (DNS settings in the client namespace). Assumes `cluster.local`; accepts explicit Service names with other domains. Shows resolver candidates, Service, up to 500 selector pods and EndpointSlices; suggests same-name Services in allowed namespaces (up to 10). |
 | `k8s_logs` | Pod logs; registered if any cluster has `allow_logs=true` | Required `namespace`, `pod`; `container` may be omitted only if exactly one regular/init/ephemeral container exists; `tail=200`, clamped to 1–`max_log_lines` (default cap 500); `since=""` (no time filter), positive Go duration up to 168h; `previous=false`; `grep=""`, literal case-insensitive substring; stream capped at 1 MiB |
 | `k8s_events` | Namespace events | `namespace=""` (all allowed namespaces); `warnings_only=true`; `since="1h"`, positive Go duration up to 168h; `limit=50`, clamped to 1–500 |
-| `host_service_restart` | Restart an allowed systemd unit | Required `unit` (same normalization and 256-byte limit as status); `restart_units` gate |
 | `k8s_rollout_restart` | Restart a workload by updating its pod template | Required `kind` (deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` gate |
 | `k8s_scale` | Set workload replicas | Required `kind` (deployment/statefulset), `namespace`, `name`, `replicas` (0–`max_replicas`, default cap 10); `scale` gate |
 | `k8s_delete_pod` | Delete a specific pod with UID precondition | Required `namespace`, `name`; `delete_pod` gate |
@@ -45,7 +39,7 @@ Note search, tags and links operate on masked text.
 
 Note paths use vault-relative forward slashes, preserve Unicode bytes, and are limited to 1024 bytes. Excluded paths behave as missing. Note text is untrusted data. Note numeric inputs outside the documented ranges are rejected. Safe in-vault symlinks are supported with cycle prevention. Scans are bounded to 100000 entries and 128 directory levels; links/backlinks each return at most 1000 results. Write previews include a diff (new content for create), current hash and resulting hash, with explicit truncation near 8 KiB. Apply rechecks the approved hash, size and modification time. Creates publish atomically without overwriting racing creators; updates use a synced temporary file and rename. On Linux, trash atomically moves the source to the approved .trash destination without overwriting an existing entry, then validates the moved note. If a replacement or edit raced with the move, the operation reports an error with the recovery path in .trash; restore it if needed. If the destination appeared after planning, the move fails and leaves the source intact. On Linux, the source and .trash must share a filesystem supporting renameat2 with RENAME_NOREPLACE; otherwise the move fails safely. On other platforms, trash retains a durable approved copy before checking and removing the source; an external replacement between that final check and removal can still be lost. Use versioned backups or sync history on those platforms. Existing trailing-newline policy is preserved. Each content/replacement input is capped at 256 KiB. The create, append and replace tools allow 528 KiB of raw JSON arguments, including escaping; trash retains the default 16 KiB limit. Updates use an optimistic state check followed by rename: an external edit between the check and rename can be overwritten. Use versioned backups or sync history. Large create previews are truncated too, with an explicit omitted-line count.
 
-For host/Kubernetes read-tool numeric limits, zero selects the default; other out-of-range values are clamped. Write replica counts are validated, not clamped. All returned text is subject to `server.max_output_bytes` (default 65536) and calls have cooperative deadlines (`server.tool_timeout`, default 30s).
+For Kubernetes read-tool numeric limits, zero selects the default; other out-of-range values are clamped. Write replica counts are validated, not clamped. All returned text is subject to `server.max_output_bytes` (default 65536) and calls have cooperative deadlines (`server.tool_timeout`, default 30s).
 
 Kubernetes namespace inputs must be DNS-1123 labels; object `name`, `pod` and `container` inputs are validated as DNS-1123 subdomains.
 
@@ -63,7 +57,7 @@ Every Kubernetes tool's output starts with `cluster: <name>`. `k8s_clusters` use
 
 ## Redaction and object sanitization
 
-For `host_logs` and `k8s_logs`, grep matches masked text.
+For `k8s_logs`, grep matches masked text.
 
 The shared `internal/redact` layer masks PEM private keys, Authorization/Proxy-Authorization headers, Basic/Bearer credentials, JWT-shaped tokens, URL passwords, and recognized token patterns for AWS access key IDs, GitHub, GitLab, Slack, Stripe live keys, OpenAI/Anthropic-style keys, Google API keys, Telegram bots, and opsgate `og_at_`, `og_rt_`, and `og_st_` tokens (43 base64url characters after the prefix). Sensitive `:`/`=` assignments and structured argument keys include password/passwd/pwd, secret/client_secret, token/access_token/refresh_token, api_key/apikey/access_key/secret_key/private_key, credential/credentials, auth_token, session_id, cookie, set-cookie and invite, including underscore-prefixed variants such as `db_password` (key matching is case-insensitive). Structured argument maps and slices are traversed recursively. Success text, errors and audit arguments are redacted. This is **best effort**: unfamiliar formats and secrets embedded in arbitrary data can escape.
 
@@ -75,10 +69,8 @@ The shared `internal/redact` layer masks PEM private keys, Authorization/Proxy-A
 
 ## Shared limits
 
-All nine approval-gated tools accept optional `approval_id` for browser retries; omit it on the first call. Dev task IDs are 20 lowercase base32 characters. Task status, log, diff, list and cancellation enforce requester ownership, with runner admins permitted access to all tasks.
+All eight approval-gated tools accept optional `approval_id` for browser retries; omit it on the first call. Dev task IDs are 20 lowercase base32 characters. Task status, log, diff, list and cancellation enforce requester ownership, with runner admins permitted access to all tasks.
 
 Read tools and `dev_task_cancel` accept up to 16 KiB of raw JSON arguments. Write arguments default to 16 KiB; `note_create`, `note_append` and `note_replace` allow 528 KiB, and `dev_task_start` allows 48 KiB. JSON escaping counts toward these limits. Approval summaries are bounded by `max(64 KiB, argument limit + 16 KiB)`: 64 KiB for default tools and dev starts, 544 KiB for note content tools. Redacted display arguments must fit the tool's argument limit. Note previews have a separate approximately 8 KiB display bound.
 
 The shared wrapper omits provider output above 4 MiB entirely, then redacts text before truncating it to `server.max_output_bytes` (default 64 KiB). Errors follow the same path. Smaller provider-specific collection limits still apply. Deadlines are cooperative; write planning and applying each receive a separate `server.tool_timeout` (default 30s), excluding human waiting time.
-
-On cancellation, host commands receive SIGKILL as a process group, with a fallback to killing the direct child. Output draining is bounded by a 250ms wait after cancellation or direct-child exit, so descendants holding output pipes open cannot stall the call. A successful child exit with pipes still open past this bound is reported as an error. Privileged helpers such as sudo, or descendants that leave the process group, may survive cancellation; the output wait remains bounded.

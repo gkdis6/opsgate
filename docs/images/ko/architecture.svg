@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 942" role="img" aria-labelledby="title desc" lang="ko">
 <title id="title">opsgate 동작 구조</title>
-<desc id="desc">MCP 클라이언트는 로컬 stdio 또는 TLS 리버스 프록시를 거치는 HTTPS로 연결합니다. opsgate는 인증, 스코프와 정책 검사, 도구 래퍼의 계획·승인·실행, 출력 마스킹과 크기 제한, JSONL 감사를 적용합니다. 호스트·Kubernetes·노트와 별도 dev runner는 OS 계정과 RBAC로 제한합니다. 셸 도구는 없습니다.</desc>
+<desc id="desc">MCP 클라이언트는 로컬 stdio 또는 TLS 리버스 프록시를 거치는 HTTPS로 연결합니다. opsgate는 인증, 스코프와 정책 검사, 도구 래퍼의 계획·승인·실행, 출력 마스킹과 크기 제한, JSONL 감사를 적용합니다. Kubernetes·노트와 별도 dev runner는 OS 계정과 RBAC로 제한합니다. 셸 도구는 없습니다.</desc>
 <style>
 svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
 text { fill: #202936; }
@@ -41,7 +41,7 @@ text { fill: #202936; }
  <marker id="allow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="allow-tip" d="M0 0 8 4 0 8Z"/></marker>
  <marker id="deny" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="deny-tip" d="M0 0 8 4 0 8Z"/></marker>
 </defs>
-<text x="24" y="30" class="title">정해진 도구로 서버 운영</text>
+<text x="24" y="30" class="title">정해진 도구로 운영</text>
 <rect x="24" y="54" width="374" height="74" rx="9" class="box"/>
 <text x="40" y="81" class="head">로컬 MCP 클라이언트</text>
 <text x="40" y="107">Claude Code / Cursor</text>
@@ -88,11 +88,7 @@ text { fill: #202936; }
 <path d="M256 680 V692" class="line "/>
 <rect x="48" y="692" width="416" height="48" rx="9" class="box"/>
 <text x="64" y="722" class="head">5  JSONL 감사 로그</text>
-<text x="536" y="305" class="head">활성화된 provider</text>
-<rect x="536" y="322" width="250" height="84" rx="9" class="box"/>
-<text x="552" y="347" class="head">호스트</text>
-<text x="552" y="371" class="small">systemd · journald · /proc</text>
-<text x="552" y="392" class="small">서버 OS 권한</text>
+<text x="536" y="411" class="head">활성화된 provider</text>
 <rect x="536" y="428" width="250" height="84" rx="9" class="box"/>
 <text x="552" y="453" class="head">Kubernetes</text>
 <text x="552" y="477" class="small">RBAC로 제한된 서비스 계정</text>
@@ -103,11 +99,9 @@ text { fill: #202936; }
 <rect x="536" y="640" width="250" height="68" rx="9" class="box"/>
 <text x="552" y="665" class="head">Dev</text>
 <text x="552" y="689" class="small">설정된 프로젝트 / 에이전트</text>
-<path d="M464 510 H504 V364 H536" class="line "/>
-<path d="M504 510 V470 H536" class="line "/>
+<path d="M464 510 H504 V470 H536" class="line "/>
 <path d="M504 510 V576 H536" class="line "/>
 <path d="M504 576 V674 H536" class="line "/>
-<path d="M786 364 H804 V674" class="line return"/>
 <path d="M786 470 H804 V674" class="line return"/>
 <path d="M786 576 H804 V674" class="line return"/>
 <path d="M786 674 H804 V774 H492 V656 H464" class="line return"/>

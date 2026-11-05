@@ -41,16 +41,13 @@ const (
 // Deployment modes. A mode fills in the defaults for where the server runs
 // as a service; values written in the file still win.
 const (
-	// ModeHost is a systemd service on the machine it inspects.
-	ModeHost = "host"
-	// ModeKubernetes is a pod that inspects its own cluster. Host tools
-	// are unavailable because a pod sees its container, not the node.
+	// ModeKubernetes is a pod that inspects its own cluster.
 	ModeKubernetes = "kubernetes"
 )
 
 // Config holds the server configuration.
 type Config struct {
-	// Mode is empty (plain defaults, stdio by default), host or kubernetes.
+	// Mode is empty (plain defaults, stdio by default) or kubernetes.
 	Mode      string    `yaml:"mode"`
 	Server    Server    `yaml:"server"`
 	Stdio     Stdio     `yaml:"stdio"`
@@ -205,7 +202,6 @@ type Approval struct {
 
 // Providers configures the available tool providers.
 type Providers struct {
-	Host       Host       `yaml:"host"`
 	Kubernetes Kubernetes `yaml:"kubernetes"`
 	Note       Note       `yaml:"note"`
 	Dev        Dev        `yaml:"dev"`
@@ -237,24 +233,6 @@ type Note struct {
 	AllowWrite bool `yaml:"allow_write"`
 	// MaxNoteBytes caps the size of a note that is read or written.
 	MaxNoteBytes int `yaml:"max_note_bytes"`
-}
-
-// Host configures systemd and host inspection tools.
-type Host struct {
-	Enabled bool `yaml:"enabled"`
-	// Units is a glob allowlist of systemd units whose status and logs
-	// may be read (e.g. "k3s.service", "nginx*"). Empty allows none.
-	Units []string `yaml:"units"`
-	// DiskPaths are mount points reported by host_overview.
-	DiskPaths []string `yaml:"disk_paths"`
-	// MaxLogLines caps journal lines per call.
-	MaxLogLines int `yaml:"max_log_lines"`
-	// RestartUnits is a glob allowlist for host_service_restart. Empty
-	// disables the tool.
-	RestartUnits []string `yaml:"restart_units"`
-	// CommandPrefix is prepended to write commands, e.g. ["/usr/bin/sudo", "-n"].
-	// Elements must be absolute paths or flags.
-	CommandPrefix []string `yaml:"command_prefix"`
 }
 
 // Load reads path on top of the defaults of its mode. Unknown keys are an

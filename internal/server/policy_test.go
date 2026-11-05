@@ -37,24 +37,25 @@ func connect(t *testing.T, s *mcp.Server, options ...*mcp.ClientOptions) *mcp.Cl
 }
 
 func TestToolRegistrationPolicy(t *testing.T) {
-	all := []string{"host_logs", "host_overview", "host_service_restart", "host_service_status", "host_services", "host_top_processes"}
+	all := []string{"note_append", "note_create", "note_links", "note_list", "note_read", "note_recent", "note_replace", "note_search", "note_tags", "note_trash"}
 	for _, tc := range []struct {
 		name        string
 		allow, deny []string
 		want        []string
 	}{
 		{name: "default", want: all},
-		{name: "allow", allow: []string{"host_service*"}, want: []string{"host_service_restart", "host_service_status", "host_services"}},
-		{name: "deny wins", allow: []string{"host_*"}, deny: []string{"host_service*"}, want: []string{"host_logs", "host_overview", "host_top_processes"}},
+		{name: "allow", allow: []string{"note_re*"}, want: []string{"note_read", "note_recent", "note_replace"}},
+		{name: "deny wins", allow: []string{"note_l*", "note_re*"}, deny: []string{"note_re*"}, want: []string{"note_links", "note_list"}},
 		{name: "deny everything", deny: []string{"*"}, want: []string{}},
-		{name: "deny still matches outside allow", allow: []string{"host_overview"}, deny: []string{"host_service_restart"}, want: []string{"host_overview"}},
-		{name: "write only", allow: []string{"host_service_restart"}, want: []string{"host_service_restart"}},
-		{name: "character classes", allow: []string{"host_[lo]*", "host_?op_processes"}, want: []string{"host_logs", "host_overview", "host_top_processes"}},
+		{name: "deny still matches outside allow", allow: []string{"note_read"}, deny: []string{"note_trash"}, want: []string{"note_read"}},
+		{name: "write only", allow: []string{"note_trash"}, want: []string{"note_trash"}},
+		{name: "character classes", allow: []string{"note_[lt]*", "note_?ead"}, want: []string{"note_links", "note_list", "note_read", "note_tags", "note_trash"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := config.Default()
-			cfg.Providers.Host.Enabled = true
-			cfg.Providers.Host.RestartUnits = []string{"example.service"}
+			cfg.Providers.Note.Enabled = true
+			cfg.Providers.Note.Vault = t.TempDir()
+			cfg.Providers.Note.AllowWrite = true
 			cfg.Server.Tools = config.ToolPolicy{Allow: tc.allow, Deny: tc.deny}
 			s, err := New(cfg, &tool.Env{})
 			if err != nil {
@@ -87,21 +88,20 @@ func TestToolRegistrationPolicy(t *testing.T) {
 func TestUnknownToolPattern(t *testing.T) {
 	for _, tc := range []struct {
 		name, pattern, want string
-		allow, host, write  bool
+		allow, note, write  bool
 	}{
-		{"deny typo", "host_overveiw", `tools.deny pattern "host_overveiw" matches no tool`, false, true, false},
-		{"allow typo", "host_overveiw", `tools.allow pattern "host_overveiw" matches no tool`, true, true, false},
-		{"disabled provider", "host_*", `tools.deny pattern "host_*" matches no tool`, false, false, false},
-		{"disabled write", "host_service_restart", `tools.deny pattern "host_service_restart" matches no tool`, false, true, false},
-		{"enabled write", "host_service_restart", "", false, true, true},
+		{"deny typo", "note_raed", `tools.deny pattern "note_raed" matches no tool`, false, true, false},
+		{"allow typo", "note_raed", `tools.allow pattern "note_raed" matches no tool`, true, true, false},
+		{"disabled provider", "note_*", `tools.deny pattern "note_*" matches no tool`, false, false, false},
+		{"disabled write", "note_trash", `tools.deny pattern "note_trash" matches no tool`, false, true, false},
+		{"enabled write", "note_trash", "", false, true, true},
 		{"malformed", "[", "invalid glob", false, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := config.Default()
-			cfg.Providers.Host.Enabled = tc.host
-			if tc.write {
-				cfg.Providers.Host.RestartUnits = []string{"example.service"}
-			}
+			cfg.Providers.Note.Enabled = tc.note
+			cfg.Providers.Note.Vault = t.TempDir()
+			cfg.Providers.Note.AllowWrite = tc.write
 			if tc.allow {
 				cfg.Server.Tools.Allow = []string{tc.pattern}
 			} else {
@@ -121,13 +121,14 @@ func TestUnknownToolPattern(t *testing.T) {
 
 func TestPolicyInventoryIsPerServer(t *testing.T) {
 	cfg := config.Default()
-	cfg.Providers.Host.Enabled = true
-	cfg.Server.Tools.Deny = []string{"host_*"}
+	cfg.Providers.Note.Enabled = true
+	cfg.Providers.Note.Vault = t.TempDir()
+	cfg.Server.Tools.Deny = []string{"note_*"}
 	env := &tool.Env{}
 	if _, err := New(cfg, env); err != nil {
 		t.Fatal(err)
 	}
-	cfg.Providers.Host.Enabled = false
+	cfg.Providers.Note.Enabled = false
 	if _, err := New(cfg, env); err == nil {
 		t.Fatal("second server inherited the first server's offered tools")
 	}
@@ -135,7 +136,7 @@ func TestPolicyInventoryIsPerServer(t *testing.T) {
 
 func TestToolGlobConfigValidation(t *testing.T) {
 	for _, location := range []string{"allow", "deny", "builtin", "external", "static"} {
-		for _, pattern := range []string{"host_*", "note_?ead", "host_[a-z]*", "[", "host_\\"} {
+		for _, pattern := range []string{"k8s_*", "note_?ead", "k8s_[a-z]*", "[", "k8s_\\"} {
 			t.Run(location+"/"+pattern, func(t *testing.T) {
 				cfg := config.Default()
 				cfg.HTTP.PublicURL, cfg.Auth.Mode = "https://ops.example", config.AuthBuiltin
@@ -151,7 +152,7 @@ func TestToolGlobConfigValidation(t *testing.T) {
 				case "static":
 					cfg.Auth.Static = []config.StaticToken{{Name: "alice", Tools: []string{pattern}}}
 				}
-				valid := pattern != "[" && pattern != "host_\\"
+				valid := pattern != "[" && pattern != "k8s_\\"
 				for _, validate := range []func() error{cfg.Validate, cfg.ValidateHTTP} {
 					if err := validate(); (err == nil) != valid {
 						t.Fatalf("validation = %v", err)

@@ -6,7 +6,7 @@ opsgate는 stdio와 `<public_url>/mcp`에서 인증이 필요한 Streamable HTTP
 
 stdio에서는 클라이언트가 바이너리를 실행하고 stdin/stdout으로 MCP 메시지를 주고받습니다. 실행 파일과 설정 파일에는 절대 경로를 사용하고, stdout에는 배너를 출력하지 마세요. 진단 메시지는 stderr로 출력하며, 감사 로그도 기본적으로 stderr에 남깁니다.
 
-프로세스는 실행한 OS 사용자의 권한과 설정된 `stdio.scopes`로 동작하며, `stdio.user`는 감사 로그용 레이블입니다. 설정 파일을 보호하고, 관리자 권한이 없는 일반 계정으로 실행하세요. 필요한 provider와 허용 목록의 유닛·네임스페이스만 활성화하세요. Kubernetes kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하지 않으므로, 수명이 짧은 ServiceAccount 토큰 같은 자격 증명을 사용하세요. 네임스페이스 정책은 Nodes나 PersistentVolumes를 제한하지 않습니다. [RBAC 매니페스트](../../deploy/kubernetes/rbac-readonly.yaml)와 [보안 정책](security.md)을 검토하세요.
+프로세스는 실행한 OS 사용자의 권한과 설정된 `stdio.scopes`로 동작하며, `stdio.user`는 감사 로그용 레이블입니다. 설정 파일을 보호하고, 관리자 권한이 없는 일반 계정으로 실행하세요. 필요한 provider와 허용 목록의 네임스페이스만 활성화하세요. Kubernetes kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하지 않으므로, 수명이 짧은 ServiceAccount 토큰 같은 자격 증명을 사용하세요. 네임스페이스 정책은 Nodes나 PersistentVolumes를 제한하지 않습니다. [RBAC 매니페스트](../../deploy/kubernetes/rbac-readonly.yaml)와 [보안 정책](security.md)을 검토하세요.
 
 ## Claude Code
 
@@ -29,7 +29,7 @@ claude mcp add opsgate -- /path/to/opsgate -config /path/opsgate.yaml
 }
 ```
 
-Claude Desktop의 개발자 설정에서 설정 파일 위치를 확인하고, 수정한 뒤 앱을 다시 시작하세요. macOS와 Windows에서는 로컬 호스트 provider를 활성화하는 대신 SSH로 Linux 호스트를 조회하세요.
+Claude Desktop의 개발자 설정에서 설정 파일 위치를 확인하고, 수정한 뒤 앱을 다시 시작하세요. macOS에서는 Darwin 빌드와 로컬 kubeconfig를 사용할 수 있습니다. Windows 빌드는 없으므로, kubeconfig로 클러스터에 접근할 수 있는 Linux 머신에 SSH로 연결하세요.
 
 ## Cursor
 
@@ -50,7 +50,7 @@ Claude Desktop의 개발자 설정에서 설정 파일 위치를 확인하고, �
 
 ## SSH를 통한 연결
 
-Linux 호스트에 opsgate와 설정 파일을 설치하세요. stdio로 연결하는 명령은 다음과 같습니다.
+kubeconfig로 클러스터에 접근할 수 있는 Linux 머신에 opsgate와 모드 없는 stdio 설정 파일을 설치하세요. stdio로 연결하는 명령은 다음과 같습니다.
 
 ```sh
 ssh host /usr/local/bin/opsgate -config /etc/opsgate.yaml
@@ -115,7 +115,7 @@ auth:
 
 ## 쓰기 승인
 
-opsgate는 provider와 작업 허용 목록을 설정한 경우에만 호스트/Kubernetes 쓰기 도구를 등록합니다. 노트 쓰기에는 볼트 provider와 `allow_write`가 필요합니다. 쓰기에는 `ops:write`, OS/RBAC 권한, 사람의 승인도 필요하며, HTTP 사용자는 `ops:read`도 있어야 합니다. MCP 클라이언트 내 확인(elicitation)을 지원하는 클라이언트는 확인 창에 계획(Plan)을 표시합니다. 여러 프로토콜 버전에서 입력 요청을 여러 차례 주고받는 방식을 사용합니다.
+opsgate는 provider와 작업 허용 목록을 설정한 경우에만 Kubernetes 쓰기 도구를 등록합니다. 노트 쓰기에는 볼트 provider와 `allow_write`가 필요합니다. 쓰기에는 `ops:write`, OS/RBAC 권한, 사람의 승인도 필요하며, HTTP 사용자는 `ops:read`도 있어야 합니다. MCP 클라이언트 내 확인(elicitation)을 지원하는 클라이언트는 확인 창에 계획(Plan)을 표시합니다. 여러 프로토콜 버전에서 입력 요청을 여러 차례 주고받는 방식을 사용합니다.
 
 클라이언트 내 확인을 지원하지 않더라도 builtin 인증에서 `approval.web: true`를 설정하면 웹 승인 링크와 `approval_id`를 반환합니다. 링크를 열고 같은 upstream 사용자로 로그인한 뒤, 요약에 표시된 작업 내용을 꼼꼼히 읽으세요. 승인 후 클라이언트는 같은 도구와 인자에 `approval_id`를 추가해 다시 호출합니다. 승인은 유효 기간이 있는 일회용이며, 승인한 작업에만 유효합니다. 클라이언트 내 확인을 지원하지 않는 static/external 클라이언트는 쓰기 작업을 할 수 없으며, stdio도 클라이언트 내 확인이 필요합니다. 공격자가 장악한 UI는 클라이언트 내 확인을 자동 승인할 수 있고, 프롬프트 인젝션으로 쓰기 요청이 들어올 수도 있으므로 사람이 직접 요약을 읽어야 합니다.
 

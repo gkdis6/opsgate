@@ -7,19 +7,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-func TestHTTPExampleConfig(t *testing.T) {
-	c, err := Load("../../deploy/systemd/opsgate.http.example.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !c.Approval.RequireWeb {
-		t.Fatal("HTTP example must require web approval")
-	}
-	if err := c.ValidateHTTP(); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestDevRunnerExampleConfig(t *testing.T) {
 	if _, err := LoadDevRunner("../../deploy/dev-runner.example.yaml"); err != nil {
 		t.Fatal(err)

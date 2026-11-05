@@ -5,20 +5,15 @@ import (
 	"net"
 	"net/url"
 	"path"
-	"path/filepath"
-	"strings"
 	"time"
 )
 
 // Validate checks settings that do not depend on the transport.
 func (c Config) Validate() error {
 	switch c.Mode {
-	case "", ModeHost, ModeKubernetes:
+	case "", ModeKubernetes:
 	default:
-		return fmt.Errorf("mode must be %s or %s, got %q", ModeHost, ModeKubernetes, c.Mode)
-	}
-	if c.Mode == ModeKubernetes && c.Providers.Host.Enabled {
-		return fmt.Errorf("providers.host cannot be enabled in mode kubernetes: a pod sees its container, not the node")
+		return fmt.Errorf("mode must be %s, got %q", ModeKubernetes, c.Mode)
 	}
 	if err := checkToolGlobs("server.tools.allow", c.Server.Tools.Allow); err != nil {
 		return err
@@ -60,14 +55,6 @@ func (c Config) Validate() error {
 		}
 		if err := checkScopes("auth.static "+t.Name, t.Scopes); err != nil {
 			return err
-		}
-	}
-	for i, p := range c.Providers.Host.CommandPrefix {
-		if i == 0 && !filepath.IsAbs(p) {
-			return fmt.Errorf("providers.host.command_prefix[0] must be an absolute executable path")
-		}
-		if !filepath.IsAbs(p) && !strings.HasPrefix(p, "-") {
-			return fmt.Errorf("providers.host.command_prefix: %q must be an absolute path or a flag", p)
 		}
 	}
 	if err := c.Providers.Kubernetes.validate(); err != nil {

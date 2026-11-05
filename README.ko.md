@@ -4,10 +4,10 @@
 
 [English](README.md)
 
-**셸을 열어 주지 않고도 AI 어시스턴트의 도움을 받아 서버를 운영할 수 있습니다.**
+**셸을 열어 주지 않고도 AI 어시스턴트의 도움을 받아 클러스터를 운영할 수 있습니다.**
 
 opsgate는 Go로 작성한 오픈 소스 MCP 서버입니다. Claude, ChatGPT, Claude Code,
-Cursor 같은 클라이언트에 Linux 호스트와 Kubernetes를 운영하는 정해진 도구를
+Cursor 같은 클라이언트에 Kubernetes를 운영하는 정해진 도구를
 제공합니다. 정책을 명시하고 감사 로그를 남기며, 변경 작업에는 사람이 승인한 범위를 적용합니다.
 
 > **상태:** 첫 공개 릴리스에 필요한 기능을 구현했습니다. 변경 작업에는 사용자 권한 검사,
@@ -62,14 +62,13 @@ AI 클라이언트에는 로그나 조회 결과 안의 지시문을
 
 | 기능(provider) | 조회 도구 | 변경 도구(승인 필요) |
 | --- | --- | --- |
-| 호스트(systemd, journald, `/proc`) | 개요, 서비스 목록, 서비스 상태, 로그, 상위 프로세스 | 허용된 서비스 재시작 |
 | Kubernetes | 개요, 목록, 상세, 이벤트, 파드 로그 | 워크로드 재시작, 실행할 파드 수 조정, 파드 삭제 |
 | 노트: 런북과 메모리, Markdown 폴더 또는 Obsidian 볼트 *(실험적)* | 검색, 읽기, 목록, 최근 노트, 링크, 태그 | 작성, 내용 추가, 내용 수정, 휴지통으로 이동 |
 | Dev *(실험적)* | 프로젝트, 작업 상태, 로그, diff, 목록 | Git worktree에서 코딩 에이전트(Codex, Claude) 실행 |
 
 스코프는 사용자가 opsgate를 통해 수행할 수 있는 작업의 종류입니다. `ops:read`는 조회, `ops:write`는
 운영 대상과 노트 변경, `dev:run`은 코딩 에이전트 실행에 사용합니다. 허용 목록은 접근할
-도구나 변경할 서비스·Kubernetes 대상 등을 설정으로 제한하는 장치입니다. 스코프가 있어도
+도구나 변경할 Kubernetes 대상 등을 설정으로 제한하는 장치입니다. 스코프가 있어도
 설정에서 허용하지 않은 작업은 실행할 수 없습니다.
 
 노트 작성은 설정한 노트 폴더 안에서만 가능합니다. 일반 파일을 서버의 임의 경로에
@@ -86,8 +85,6 @@ requests·limits 설정값은 Kubernetes 상세 조회로 확인할 수 있습�
 AI 클라이언트가 조회 결과를 분석하고 다음 작업을 선택합니다. opsgate 자체는 AI 모델을
 실행하거나 호출하지 않으며, 요청받은 도구의 권한과 대상을 검사하고 실행합니다.
 
-호스트 도구는 **opsgate가 실행되는 서버**의 상태를 조회하고 서비스를 관리합니다.
-로컬 PC에서 실행하면 그 PC가 호스트 조회 대상이며, 호스트 기능에는 Linux가 필요합니다.
 Kubernetes 도구는 kubeconfig의 접속 정보나 클러스터 내부 인증으로 Kubernetes API에
 접속합니다. 따라서 로컬 PC에서 실행해도 네트워크 연결과 접근 권한이 있으면 원격
 클러스터를 조회할 수 있습니다.
@@ -137,15 +134,15 @@ Go 1.26 이상으로 빌드하세요.
 go install github.com/gkdis6/opsgate/cmd/opsgate@latest   # 또는: make build
 ```
 
-설정 파일을 저장하세요. 아래 예제에서는 `/path/opsgate.yaml`을 사용합니다.
+현재 kubeconfig를 사용하는 설정 파일을 저장하세요. 아래 예제에서는 `/path/opsgate.yaml`을 사용합니다.
 
 ```yaml
 stdio:
   scopes: [ops:read]
 providers:
-  host:
+  kubernetes:
     enabled: true
-    units: [ssh.service, "nginx*"]
+    namespaces: [default]
 ```
 
 Claude Code에 등록하세요. 경로는 절대 경로로 쓰세요.
@@ -164,14 +161,14 @@ stdio는 실행한 계정의 권한으로 동작하므로 관리자 권한이 �
 패스키는 별도의 ID 제공자가 필요 없습니다. Face ID, Touch ID, Windows Hello,
 휴대폰, 보안 키로 로그인할 수 있습니다.
 
-`opsgate init`이 실행 위치, 공개 URL, 로그인할 사람을 묻고 짧은 설정 파일을 만듭니다.
+`opsgate init`이 공개 URL, 로그인할 사람, 네임스페이스를 묻고 짧은 설정 파일을 만듭니다.
 
 ```sh
 opsgate init            # opsgate.yaml을 만듭니다. 플래그로 미리 답할 수 있습니다(-h 참고)
 ```
 
 ```yaml
-mode: host              # 파드라면 kubernetes
+mode: kubernetes
 http:
   public_url: "https://mcp.example.com"
 auth:
@@ -183,25 +180,29 @@ auth:
     allowed_redirect_hosts: [claude.ai, chatgpt.com, localhost]
     unknown_redirect_hosts: approve
 providers:
-  host:
-    units: ["myapp.service"]
+  kubernetes:
+    namespaces: ["*"]
+    deny_namespaces: ["kube-system", "kube-public", "kube-node-lease", "opsgate"]
+    allow_logs: true
 ```
 
-나머지는 모드가 채웁니다. HTTP는 `127.0.0.1:8787`(파드에서는 `0.0.0.0:8787`)에서
+나머지는 모드가 채웁니다. HTTP는 `0.0.0.0:8787`에서
 받고, 내장 패스키 로그인을 쓰며, 상태를 `/var/lib/opsgate`에 두고, 브라우저 승인
-링크와 모드에 맞는 provider를 켭니다. 적용되는 값 전체는
+링크와 파드의 ServiceAccount를 사용합니다. 적용되는 값 전체는
 `opsgate config show -config opsgate.yaml`로 볼 수 있습니다.
 
+설정 파일을 `deploy/kubernetes/opsgate-deployment.yaml`의 `opsgate` ConfigMap에 넣고 적용하세요. 매니페스트의 기본 예제는 Google 로그인이며, 패스키 설정으로 바꿔도 현재 매니페스트의 필수 `opsgate-upstream` Secret 마운트는 남아 있습니다. Secret 준비, 이미지 검증, RBAC과 probe 설정은 [배포](docs/ko/deploy.md)를 따르세요.
+
 ```sh
-opsgate -config /etc/opsgate/opsgate.yaml
+kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 ```
 
 `opsgate -h`는 명령과 플래그 목록을, `opsgate help <명령>`은 해당 명령의 도움말을 보여 줍니다. `opsgate version` 또는 `-version`은 빌드 버전을 출력합니다. 도움말과 명령 성공은 종료 코드 0, 잘못된 명령·플래그나 불필요한 인자는 설정을 읽기 전에 2, 실행 중 오류는 1을 반환합니다. 도움말은 stdout, 오류는 stderr로 출력합니다.
 
 1. 처음 시작하면 패스키가 없는 사용자마다 일회용 등록 링크(24시간 유효)가 로그에
    남습니다. 링크를 열고 **Create passkey**를 누르세요. 링크를 새로 만들려면
-   `sudo -u opsgate opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`를 실행하세요.
-2. 앞단에 `Host` 헤더를 그대로 전달하는 TLS 리버스 프록시를 두세요. 공개 호스트는
+   `kubectl -n opsgate exec deploy/opsgate -- /opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`를 실행하세요.
+2. 앞단에 `Host` 헤더를 그대로 전달하는 TLS ingress나 리버스 프록시를 두세요. 공개 호스트는
    `public_url`과 같아야 하며, 다른 호스트로 온 요청은 421로 거부됩니다.
 3. 클라이언트를 `https://mcp.example.com/mcp`에 연결하세요. 예:
    `claude mcp add --transport http opsgate https://mcp.example.com/mcp`.
@@ -209,7 +210,7 @@ opsgate -config /etc/opsgate/opsgate.yaml
 
 생성된 파일은 클라이언트 리다이렉트 호스트(`allowed_redirect_hosts`)를 이미
 제한합니다. 외부에 공개하기 전에 확인하세요. GitHub, Google 등 다른 로그인 방식은
-[인증 문서](docs/ko/authentication.md)에, 프록시 경로·systemd 유닛·릴리스 검증은
+[인증 문서](docs/ko/authentication.md)에, 프록시 경로·릴리스 검증은
 [배포 문서](docs/ko/deploy.md)에 있습니다.
 
 
@@ -240,7 +241,7 @@ opsgate -config /etc/opsgate/opsgate.yaml
 | [설정](docs/ko/configuration.md) | 모든 설정 키와 기본값, 감사 로그 형식 |
 | [도구](docs/ko/tools.md) | 도구 인자, 제한, 마스킹 |
 | [노트](docs/ko/notes.md) | Markdown 폴더에 런북과 장애 기록 남기기 |
-| [배포](docs/ko/deploy.md) | 릴리스 검증, systemd, Kubernetes, 리버스 프록시 |
+| [배포](docs/ko/deploy.md) | 릴리스 검증, Kubernetes, 리버스 프록시 |
 | [Dev provider](docs/ko/dev.md) | 별도 runner로 코딩 에이전트 실행 |
 | [Watch 알림](docs/ko/watch.md) | 별도 `opsgate watch` 프로세스로 Kubernetes 알림을 webhook이나 메일, 또는 둘 다로 전송 |
 | [로드맵](docs/ko/roadmap.md) | 완료한 기능과 앞으로의 계획 |

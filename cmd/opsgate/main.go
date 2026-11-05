@@ -51,10 +51,6 @@ func run(cfgPath, transport string) error {
 			transport = "http"
 		}
 	}
-	// Inside a pod the host provider sees the container, not the node.
-	if cfg.Providers.Host.Enabled && os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
-		log.Printf("warning: providers.host is enabled inside a Kubernetes pod; host tools describe this container, not the node")
-	}
 	al, err := audit.Open(cfg.Server.AuditLog)
 	if err != nil {
 		return fmt.Errorf("audit log: %w", err)

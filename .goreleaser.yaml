@@ -71,6 +71,9 @@ docker_signs:
   - cmd: cosign
     artifacts: all
     args: [sign, '--yes', '${artifact}@${digest}']
+release:
+  # Mark tags such as v0.2.0-rc.1 as prereleases, never as the latest release.
+  prerelease: auto
 changelog:
   use: git
   sort: asc

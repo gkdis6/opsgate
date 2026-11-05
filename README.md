@@ -225,6 +225,46 @@ change notifications. It watches the Kubernetes API and sends alerts directly
 to Discord, custom JSON webhooks or SMTP email. n8n is optional. Paste an alert
 into an MCP client to investigate the resource with opsgate's read tools.
 
+### From an alert to a diagnosis
+
+Paste the alert into your MCP client with a request such as:
+
+> Investigate this alert using opsgate MCP. Check operational records, resource
+> status and events, and current and previous container logs. Separate confirmed
+> causes, hypotheses and checks that still need to be made.
+
+An example investigation follows these steps:
+
+1. If the Notes provider is enabled, search runbooks and past incidents by service, symptom or error text.
+2. Use the alert's cluster, namespace, resource and occurrence time to inspect Pod/workload state and Kubernetes events.
+3. If log access is allowed, compare current logs with the previous container instance's logs using `previous: true` to trace the failure.
+4. Explain confirmed causes, hypotheses and outstanding checks, with supporting logs and events.
+
+The MCP client's AI performs the investigation by calling read tools; watch
+supplies the notification. Available evidence depends on enabled providers and
+access policy. Host resource and systemd log inspection are outside the current
+Kubernetes mode's tool scope. Deleted Pods or expired logs and events can prevent
+a conclusive root-cause diagnosis. Changes such as restarts follow the separate
+approval process.
+
+### Automatic investigation (optional)
+
+The separate `opsgate-analyzer` process can receive signed watch alerts, ask a
+function-calling model to query read-only MCP tools, and send a report to Discord.
+It groups repeated alerts, enforces investigation limits and never calls write
+tools. Configure your own model and credential files; no model is required for
+normal watch or interactive MCP use. This experimental feature supports
+OpenAI-compatible Chat Completions or installed Claude Code (`claude -p`) and Codex (`codex exec`) CLIs,
+selected by `model.backend`. CLI mode reuses the execution account's CLI auth
+and does not require a separate model API-key file. See [automatic investigation](docs/analyzer.md).
+
+Immediate Discord cause explanations support `language: ko` or `en` per output.
+Reports independently select `report.language` and request actionable proposals
+with `report.suggest_actions: true`; proposals are never executed automatically.
+Error codes and raw evidence remain unchanged. See [report language and actions](docs/analyzer.md#display-language-and-proposed-actions).
+
+### Delivery configuration
+
 Add the following to a configuration with the Kubernetes provider enabled:
 
 ```yaml
@@ -232,6 +272,7 @@ watch:
   outputs:
     - name: discord
       type: discord
+      language: ko # ko or en
       url_file: /etc/opsgate/discord-webhook-url
     - name: custom
       type: webhook
@@ -290,6 +331,7 @@ Full details: [SECURITY.md](SECURITY.md).
 | [Deployment](docs/deploy.md) | Release verification, Kubernetes, reverse proxy |
 | [Dev provider](docs/dev.md) | Running coding agents through the separate runner |
 | [Watch alerts](docs/watch.md) | Kubernetes alerts to Discord, custom JSON webhooks and email through a separate `opsgate watch` process |
+| [Automatic investigation](docs/analyzer.md) | Optional model worker, read-only MCP authentication and investigation limits |
 | [Roadmap](docs/roadmap.md) | What is done and what may come |
 
 
@@ -299,3 +341,5 @@ Full details: [SECURITY.md](SECURITY.md).
 See [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md)
 and [changelog](CHANGELOG.md). Licensed under [Apache-2.0](LICENSE),
 copyright 2026 The opsgate Authors.
+
+Incident alerts are sent first; the optional analyzer sends causes, evidence, and suggested actions in a separate message. Analysis does not delay the initial alert.

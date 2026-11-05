@@ -119,3 +119,29 @@ While the project is 0.x, security fixes and support are best effort, focused on
 ## Reporting a vulnerability
 
 Please report privately using [GitHub Security Advisories](https://github.com/gkdis6/opsgate/security/advisories/new): choose **Report a vulnerability** on the repository's Security page. Include the affected revision, configuration with secrets removed, impact and reproducible steps. Do not open public issues for vulnerabilities or publish credentials. Maintainers will coordinate investigation and disclosure privately; response times are best effort.
+
+## Optional analyzer model backends
+
+The analyzer can use an API model or a configured Claude Code or Codex CLI executable.
+CLI mode launches only that operator-controlled executable with fixed flags,
+without a shell. Alert text and evidence arrive on stdin, not command arguments.
+Native CLI tools, direct MCP servers, user/project settings, hooks and persisted
+sessions are disabled through CLI flags; managed organizational settings may
+still apply. All requested MCP calls return to the shared read-only tool policy.
+The process has a deadline, bounded output and process-group cancellation on
+Linux/macOS. These controls do not sandbox a malicious executable or protect its
+OS account from that executable: secure the CLI installation and auth directory.
+CLI credentials and account limits are independent of the MCP read-only token;
+the MCP token is not given to the CLI. `-check` checks executable availability,
+not login freshness or provider access. The default container image does not
+bundle Claude Code or a subscription login.
+
+Codex mode also uses a per-invocation local model catalog to remove model-owned
+shell/patch tools, explicit feature/config overrides, and a JSONL event guard
+that cancels unexpected native-tool events. Its format is tested against CLI
+0.166.0, including a local fake Responses-server contract test that asserts the
+outgoing native tool list is empty. This metadata/config contract must be
+rechecked when upgrading Codex; read-only sandboxing alone does not constrain
+remote MCP writes. Codex receives no MCP token or direct MCP server. Common
+MCP policies remain enforced by the analyzer. Existing CLI auth can be shared
+with a properly protected mount; refresh may write to that directory.

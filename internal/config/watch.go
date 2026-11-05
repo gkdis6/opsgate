@@ -15,8 +15,9 @@ import (
 // watches Kubernetes and delivers alerts. The MCP server does not
 // use it.
 type Watch struct {
+	Outputs []WatchOutput `yaml:"outputs,omitempty"`
 	// WebhookURL receives alert batches as JSON POSTs, e.g. an n8n webhook
-	// that forwards them to chat. `opsgate watch` requires this or Email.
+	// that forwards them to chat. Outputs and Email can also deliver alerts.
 	WebhookURL string `yaml:"webhook_url"`
 	// Email delivers alerts by SMTP, alongside or instead of the webhook.
 	Email WatchEmail `yaml:"email,omitempty"`
@@ -106,13 +107,23 @@ func (w Watch) validate(k Kubernetes) error {
 	if err := w.Email.validate(); err != nil {
 		return err
 	}
-	if w.WebhookURL != "" {
-		u, err := url.Parse(w.WebhookURL)
-		if err != nil || len(w.WebhookURL) > 4096 || u.Hostname() == "" || u.User != nil || u.Opaque != "" || strings.Contains(w.WebhookURL, "#") ||
-			(u.Scheme != "https" && !(u.Scheme == "http" && (isLoopback(strings.ToLower(u.Hostname())) || w.AllowPrivateHTTP && privateHost(u.Hostname())))) {
-			return fmt.Errorf("watch.webhook_url must use https or loopback http (or private http with allow_private_http) without credentials or fragments")
-		}
+	if len(w.Outputs) > 20 {
+		return fmt.Errorf("watch.outputs supports at most 20 outputs")
 	}
+	outputs := map[string]bool{}
+	for i, o := range w.Outputs {
+		if err := o.validate(); err != nil {
+			return fmt.Errorf("watch.outputs[%d]: %w", i, err)
+		}
+		if outputs[o.Name] {
+			return fmt.Errorf("watch.outputs: duplicate name %q", o.Name)
+		}
+		outputs[o.Name] = true
+	}
+	if w.WebhookURL != "" && !validWatchURL(w.WebhookURL, w.AllowPrivateHTTP) {
+		return fmt.Errorf("watch.webhook_url must use https or loopback http (or private http with allow_private_http) without credentials or fragments")
+	}
+
 	if w.ApprovalURL != "" {
 		u, err := url.Parse(w.ApprovalURL)
 		if err != nil || len(w.ApprovalURL) > 2048 || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Opaque != "" ||
@@ -156,8 +167,8 @@ func (c Config) ValidateWatch() error {
 	if !c.Providers.Kubernetes.Enabled {
 		return fmt.Errorf("opsgate watch requires providers.kubernetes.enabled")
 	}
-	if c.Watch.WebhookURL == "" && c.Watch.Email.Host == "" {
-		return fmt.Errorf("opsgate watch requires watch.webhook_url or watch.email.host")
+	if c.Watch.WebhookURL == "" && c.Watch.Email.Host == "" && len(c.Watch.Outputs) == 0 {
+		return fmt.Errorf("opsgate watch requires watch.webhook_url, watch.outputs or watch.email.host")
 	}
 	return nil
 }
@@ -175,4 +186,18 @@ func (c Config) WatchClusters() []KubernetesCluster {
 		}
 	}
 	return result
+}
+
+// ValidateURL checks a URL loaded from a file without exposing its contents.
+func (o WatchOutput) ValidateURL(value string) error {
+	if !validWatchURL(value, o.AllowPrivateHTTP) {
+		return fmt.Errorf("url must use https or permitted private/loopback http without credentials or fragments")
+	}
+	return nil
+}
+
+func validWatchURL(value string, private bool) bool {
+	u, err := url.Parse(value)
+	return err == nil && len(value) <= 4096 && u.Hostname() != "" && u.User == nil && u.Opaque == "" && !strings.Contains(value, "#") &&
+		(u.Scheme == "https" || u.Scheme == "http" && (isLoopback(strings.ToLower(u.Hostname())) || private && privateHost(u.Hostname())))
 }

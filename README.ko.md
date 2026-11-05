@@ -215,6 +215,48 @@ kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 
 
 
+## Watch 알림
+
+MCP 서버와 함께 `opsgate watch`를 실행하면 Kubernetes의 문제와 변경 알림을
+받을 수 있습니다. Kubernetes API를 감시하고 Discord, 커스텀 JSON 웹훅,
+SMTP 이메일로 직접 전송하므로 n8n은 선택 사항입니다. 받은 알림을 MCP
+클라이언트에 붙여넣으면 opsgate 조회 도구로 해당 리소스의 원인을 조사할 수 있습니다.
+
+Kubernetes provider가 켜진 설정에 다음 내용을 추가하세요.
+
+```yaml
+watch:
+  outputs:
+    - name: discord
+      type: discord
+      url_file: /etc/opsgate/discord-webhook-url
+    - name: custom
+      type: webhook
+      url: https://alerts.example.com/ingest
+      header_files:
+        Authorization: /etc/opsgate/alerts-authorization
+      body_template: |
+        {"message": {{json .Text}}, "sent_at": {{json .SentAt}}, "alerts": {{json .Alerts}}}
+```
+
+필요한 전송 대상만 남기면 됩니다. Discord 채널에서 만든 수신 웹훅 URL을
+`url_file`에 저장하고, 인증 헤더 파일에는 `Bearer TOKEN`처럼 전체 값을 넣으세요.
+파일은 시작할 때 읽으므로 변경 후 watch를 재시작해야 합니다. Kubernetes에서는
+Secret을 파일로 마운트해 사용하세요.
+
+```sh
+opsgate watch -config opsgate.yaml
+```
+
+각 대상은 별도 큐·쿨다운·재시도를 사용합니다. Discord 메시지에는 발생 시각(UTC),
+클러스터, namespace/리소스, 오류 이유와 요약이 포함되며, 긴 배치는 Discord 제한에
+맞춰 잘림을 표시합니다. 커스텀 템플릿은 `json` 함수로 값을 안전하게 인코딩하고
+유효한 JSON을 만들어야 합니다. 기존 `watch.webhook_url`과 `watch.email`도
+새 전송 대상과 함께 사용할 수 있습니다. 전송 제한, HMAC 서명과 전체 설정은
+[watch 알림 문서](docs/ko/watch.md)를 참고하세요.
+
+
+
 ## 보안 모델 요약
 
 - 인스턴스 하나가 신뢰 그룹 하나입니다. `ops:read`는 켜진 provider 전체에 적용됩니다.
@@ -243,14 +285,10 @@ kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 | [노트](docs/ko/notes.md) | Markdown 폴더에 런북과 장애 기록 남기기 |
 | [배포](docs/ko/deploy.md) | 릴리스 검증, Kubernetes, 리버스 프록시 |
 | [Dev provider](docs/ko/dev.md) | 별도 runner로 코딩 에이전트 실행 |
-| [Watch 알림](docs/ko/watch.md) | 별도 `opsgate watch` 프로세스로 Kubernetes 알림을 webhook이나 메일, 또는 둘 다로 전송 |
+| [Watch 알림](docs/ko/watch.md) | 별도 `opsgate watch` 프로세스로 Kubernetes 알림을 Discord·커스텀 JSON 웹훅·이메일로 전송 |
 | [로드맵](docs/ko/roadmap.md) | 완료한 기능과 앞으로의 계획 |
 
 
-
-Watch는 `watch.outputs`로 Discord 직접 전송과 커스텀 JSON 웹훅 템플릿을 지원합니다.
-각 대상은 별도 큐와 재시도를 사용하며 n8n은 선택 사항입니다.
-[watch 알림](docs/ko/watch.md#discord-직접-전송과-커스텀-웹훅)을 참고하세요.
 
 ## 기여와 라이선스
 

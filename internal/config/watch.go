@@ -15,7 +15,8 @@ import (
 // watches Kubernetes and delivers alerts. The MCP server does not
 // use it.
 type Watch struct {
-	Outputs []WatchOutput `yaml:"outputs,omitempty"`
+	Language string        `yaml:"language"`
+	Outputs  []WatchOutput `yaml:"outputs,omitempty"`
 	// WebhookURL receives alert batches as JSON POSTs, e.g. an n8n webhook
 	// that forwards them to chat. Outputs and Email can also deliver alerts.
 	WebhookURL string `yaml:"webhook_url"`
@@ -104,6 +105,9 @@ func bareAddress(value string) bool {
 }
 
 func (w Watch) validate(k Kubernetes) error {
+	if w.Language != "" && w.Language != "ko" && w.Language != "en" {
+		return fmt.Errorf("watch.language must be ko or en")
+	}
 	if err := w.Email.validate(); err != nil {
 		return err
 	}

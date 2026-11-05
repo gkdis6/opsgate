@@ -24,7 +24,20 @@ const (
 )
 
 // Alert is one observed change. Text fields must already be redacted.
+// Display holds human-facing localization while source fields stay unchanged.
+type Display struct {
+	Reason  string `json:"reason"`
+	Summary string `json:"summary"`
+	Hint    string `json:"hint,omitempty"`
+}
+
+type ActionLink struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
+}
+
 type Alert struct {
+	Display   *Display  `json:"display,omitempty"`
 	Time      time.Time `json:"time"`
 	Cluster   string    `json:"cluster"`
 	Severity  string    `json:"severity"`
@@ -57,9 +70,11 @@ type Workload struct {
 
 // Batch is one delivery, also the JSON body of a webhook POST.
 type Batch struct {
-	Source string    `json:"source"`
-	SentAt time.Time `json:"sent_at"`
-	Alerts []Alert   `json:"alerts"`
+	Language string       `json:"language,omitempty"`
+	Actions  []ActionLink `json:"actions,omitempty"`
+	Source   string       `json:"source"`
+	SentAt   time.Time    `json:"sent_at"`
+	Alerts   []Alert      `json:"alerts"`
 	// Dropped counts alerts lost to the queue or batch limit.
 	Dropped int `json:"dropped,omitempty"`
 	// Text renders the batch for chat forwarding without further code.
@@ -78,6 +93,7 @@ type Options struct {
 	Sender Sender
 	// ProblemsOnly drops every alert that is not a warning.
 	ProblemsOnly bool
+	Language     string
 	URL          string
 	Secret       []byte
 	Batch        time.Duration

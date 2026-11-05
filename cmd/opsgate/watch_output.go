@@ -55,5 +55,5 @@ func watchOutputSender(o config.WatchOutput) (alert.Sender, error) {
 			return nil, fmt.Errorf("secret_file must hold at least 16 bytes")
 		}
 	}
-	return alert.NewWebhook(alert.WebhookOptions{Options: alert.Options{URL: url, Secret: secret, PrivateOnly: strings.HasPrefix(strings.ToLower(url), "http:")}, Name: o.Name, Format: o.Type, Headers: headers, BodyTemplate: o.BodyTemplate})
+	return alert.NewWebhook(alert.WebhookOptions{Options: alert.Options{URL: url, Secret: secret, PrivateOnly: strings.HasPrefix(strings.ToLower(url), "http:")}, Name: o.Name, Format: o.Type, Language: o.Language, Headers: headers, BodyTemplate: o.BodyTemplate})
 }

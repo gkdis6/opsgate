@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"text/template"
-	"time"
 	"unicode/utf16"
 )
 
@@ -15,6 +13,7 @@ type WebhookOptions struct {
 	Options
 	Name         string
 	Format       string
+	Language     string
 	Headers      map[string]string
 	BodyTemplate string
 }
@@ -25,8 +24,11 @@ func NewWebhook(o WebhookOptions) (Sender, error) {
 	if o.Format != "" && o.Format != "webhook" && o.Format != "discord" {
 		return nil, fmt.Errorf("unsupported webhook format")
 	}
+	if o.Language != "" && o.Language != "ko" && o.Language != "en" {
+		return nil, fmt.Errorf("language must be ko or en")
+	}
 	s := newWebhook(o.Options).(*webhookSender)
-	s.name, s.format = o.Name, o.Format
+	s.name, s.format, s.language = o.Name, o.Format, o.Language
 	if s.name == "" {
 		s.name = "webhook"
 	}
@@ -57,6 +59,7 @@ func (b *limitedBody) Write(p []byte) (int, error) {
 }
 
 func (s *webhookSender) body(b *Batch) ([]byte, error) {
+	b = localizedBatch(b, s.language)
 	if s.template != nil {
 		var out limitedBody
 		if err := s.template.Execute(&out, b); err != nil {
@@ -68,36 +71,24 @@ func (s *webhookSender) body(b *Batch) ([]byte, error) {
 		return out.Bytes(), nil
 	}
 	if s.format == "discord" {
-		var text strings.Builder
-		fmt.Fprintf(&text, "Sent: %s\n", b.SentAt.UTC().Format(time.RFC3339))
-		for _, a := range b.Alerts {
-			fmt.Fprintf(&text, "\n%s [%s] %s %s %s/%s: %s\n%s\n", a.Time.UTC().Format(time.RFC3339), a.Severity, a.Cluster, a.Kind, a.Namespace, a.Name, a.Reason, a.Summary)
-			if a.Suppressed > 0 {
-				fmt.Fprintf(&text, "(+%d similar)\n", a.Suppressed)
-			}
-			if a.Hint != "" {
-				fmt.Fprintf(&text, "Hint: %s\n", a.Hint)
-			}
-			if a.Restart != nil {
-				fmt.Fprintf(&text, "Restart suggestion: %s %s/%s %s\n", a.Restart.Kind, a.Restart.Namespace, a.Restart.Name, a.Restart.URL)
-			}
-		}
-		if b.Dropped > 0 {
-			fmt.Fprintf(&text, "\n%d alerts dropped\n", b.Dropped)
-		}
-		description := discordClip(text.String(), 4096)
+		description := discordClipLanguage(discordDescription(b, s.language), 4096, s.language)
 		return json.Marshal(map[string]any{"allowed_mentions": map[string]any{"parse": []string{}}, "embeds": []any{map[string]any{"title": "opsgate watch", "description": description}}})
 	}
 	return json.Marshal(b)
 }
 
 // Discord counts UTF-16 units; keep a visible marker when a batch is too long.
-func discordClip(s string, limit int) string {
+func discordClip(s string, limit int) string { return discordClipLanguage(s, limit, "en") }
+
+func discordClipLanguage(s string, limit int, language string) string {
 	units := utf16.Encode([]rune(s))
 	if len(units) <= limit {
 		return s
 	}
-	const marker = "\n… truncated; reduce batch size or inspect cluster via MCP"
+	marker := "\n… truncated; reduce batch size or inspect cluster via MCP"
+	if language == "ko" {
+		marker = "\n… 내용이 길어 일부 생략했습니다. 배치 크기를 줄이거나 MCP로 확인하세요."
+	}
 	n := limit - len(utf16.Encode([]rune(marker)))
 	if units[n-1] >= 0xD800 && units[n-1] <= 0xDBFF {
 		n--

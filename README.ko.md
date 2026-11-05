@@ -248,6 +248,10 @@ kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 
 
 
+Watch는 `watch.outputs`로 Discord 직접 전송과 커스텀 JSON 웹훅 템플릿을 지원합니다.
+각 대상은 별도 큐와 재시도를 사용하며 n8n은 선택 사항입니다.
+[watch 알림](docs/ko/watch.md#discord-직접-전송과-커스텀-웹훅)을 참고하세요.
+
 ## 기여와 라이선스
 
 [CONTRIBUTING.md](CONTRIBUTING.md), [행동 강령](CODE_OF_CONDUCT.md),

@@ -186,7 +186,7 @@ X-Opsgate-Signature: sha256=<hex HMAC-SHA256(secret, raw body)>
 
 Verify the signature against the raw body, then reject batches whose signed
 `sent_at` is old to limit replays. Receivers such as n8n can check this with their built-in HMAC node and no custom code. Redirects
-are not followed. Network errors and 5xx responses are retried twice, after 1s
+are not followed. Network errors, HTTP 429 and 5xx responses are retried twice, after 1s
 and 4s; after that the batch is logged as lost. When the internal queue (1000
 alerts) is full, new alerts are counted in `dropped` of the next POST.
 
@@ -213,3 +213,29 @@ Outside the cluster, `opsgate watch` can also run with a kubeconfig that provide
 Watch errors (for example missing RBAC) are logged and retried by client-go.
 Restarting the watcher resets the baseline, so changes made while it was down
 are not reported.
+
+## Direct Discord and custom webhooks
+
+Use `watch.outputs` to deliver directly to Discord or custom JSON endpoints,
+without n8n. Destinations run independently alongside the existing webhook and
+email settings. See [configuration](configuration.md#direct-webhook-destinations)
+for all fields, template variables, credential files and delivery limits.
+
+```yaml
+watch:
+  outputs:
+    - name: discord
+      type: discord
+      url_file: /etc/opsgate/discord-webhook-url
+    - name: custom
+      url: https://alerts.example.com/ingest
+      body_template: |
+        {"content": {{json .Text}}, "alerts": {{json .Alerts}}}
+```
+
+Discord embeds include UTC occurrence times, cluster/resource identity, reasons
+and summaries. Mentions are disabled; descriptions beyond 4096 UTF-16 units are
+marked as truncated. Lower `watch.max_alerts` or keep a native JSON destination
+for complete large batches. Custom templates must render valid JSON (up to 1 MiB).
+Use `json` for escaping and do not put quotes around its result. All webhook
+formats retry HTTP 429 as well as network errors and 5xx, using bounded backoff.

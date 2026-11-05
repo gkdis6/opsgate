@@ -196,7 +196,7 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 
 ## Watch 알림
 
-`watch` 섹션은 별도 프로세스인 `opsgate watch`만 읽고, MCP 서버는 무시합니다. `opsgate watch`를 실행하려면 `providers.kubernetes.enabled`를 켜고 `watch.webhook_url`이나 `watch.email.host` 중 하나 이상을 설정해야 합니다.
+`watch` 섹션은 별도 프로세스인 `opsgate watch`만 읽고, MCP 서버는 무시합니다. `opsgate watch`를 실행하려면 `providers.kubernetes.enabled`를 켜고 `watch.webhook_url`, `watch.outputs`, `watch.email.host` 중 하나 이상을 설정해야 합니다.
 
 | 키 | 기본값 | 의미 |
 | --- | --- | --- |
@@ -262,3 +262,19 @@ runner는 별도 YAML 파일을 사용하며, `providers` 아래에 중첩하지
 웹 승인 결정은 별도의 감사 이벤트로 기록합니다. `outcome`은 `approved` 또는 `rejected`이며, 사용자, 도구와 8글자의 `args.approval_id_prefix`만 포함합니다. 여러 차례 왕복하는 승인 과정에서 검증을 거부하면 요청 상태 없이 `denied` 이벤트를 기록합니다. 도구 출력 본문은 저장하지 않습니다. 감사 로그 쓰기에 실패하면 도구 호출을 실패시키지 않고 stderr에 오류를 보고합니다. 감사 로그는 변조를 막지 못하며 민감한 정보가 남아 있을 수 있으므로, 로그를 보호하고 순환 관리하세요.
 
 승인 시간 창을 만들 때는 원래 승인 방식과 `args.window`/`args.expires_at`을 담은 `window_granted`를 기록합니다. 이후 이 권한을 사용하는 호출에는 `approval: window`를 기록합니다.
+
+### 여러 웹훅 대상에 직접 전송
+
+`watch.outputs`는 최대 20개의 전송 대상을 받으며, 기존 웹훅·이메일과 함께 쓸 수
+있습니다. `type: discord`는 n8n 없이 Discord로 직접 전송하고, `type: webhook`은
+원본 JSON이나 `body_template`으로 만든 JSON을 POST합니다.
+각 대상은 별도 큐·쿨다운·재시도를 사용합니다.
+
+대상별 설정은 `name`(중복 없는 ASCII 영숫자·밑줄·하이픈 1–64자),
+`type`(기본 `webhook`), `url` 또는 `url_file`(둘 중 하나 필수), `headers`,
+`header_files`, `secret_file`, `body_template`(최대 64 KiB),
+`allow_private_http`(기본 false), `problems_only`(기본 false)입니다.
+공통 `watch.batch`, `watch.cooldown`, `watch.max_alerts`를 사용합니다.
+
+[한글 사용 예시와 제한](watch.md#discord-직접-전송과-커스텀-웹훅),
+[전체 설정 표](../configuration.md#direct-webhook-destinations)를 참고하세요.

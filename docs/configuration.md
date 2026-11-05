@@ -189,7 +189,7 @@ Client registration can be restricted with `allowed_redirect_hosts`. With a none
 
 ## Watch alerts
 
-The `watch` section is read only by `opsgate watch`, a separate process; the MCP server ignores it. `opsgate watch` requires `providers.kubernetes.enabled` and at least one of `watch.webhook_url` and `watch.email.host`.
+The `watch` section is read only by `opsgate watch`, a separate process; the MCP server ignores it. `opsgate watch` requires `providers.kubernetes.enabled` and at least one of `watch.webhook_url`, `watch.outputs` and `watch.email.host`.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -210,6 +210,75 @@ The `watch` section is read only by `opsgate watch`, a separate process; the MCP
 | `email.to` | empty | 1–20 bare addresses, no display names or CR/LF |
 | `email.batch` | `5m` | Email batch interval (1m–1h) |
 | `email.problems_only` | `false` | Send warnings only by email |
+
+### Direct webhook destinations
+
+`watch.outputs` is an optional list of up to 20 named destinations. The legacy
+`webhook_url` and SMTP settings still work, including alongside outputs.
+Each destination has an independent bounded queue, cooldown and retry state;
+a failing receiver does not block the others. Outputs use `watch.batch`,
+`watch.cooldown` and `watch.max_alerts`. Global `watch.problems_only` applies
+before fan-out; an output can additionally select warnings only.
+
+| Output key | Default | Meaning |
+| --- | --- | --- |
+| `name` | required | Unique 1–64 ASCII letters, digits, `_` or `-`; identifies delivery errors |
+| `type` | `webhook` | `webhook` for native/custom JSON; `discord` for Discord embeds |
+| `url` | empty | Receiver URL, with the same scheme restrictions as `webhook_url` |
+| `url_file` | empty | Read and trim the receiver URL at startup; set exactly one of `url` and `url_file` |
+| `headers` | empty | Static HTTP headers; prefer files for credentials |
+| `header_files` | empty | Header name to file path; read and trim each value at startup |
+| `secret_file` | empty | Per-output HMAC key, at least 16 bytes after trimming |
+| `body_template` | empty | Go text/template for JSON POST body; only with `type: webhook`, at most 64 KiB |
+| `allow_private_http` | `false` | Per-output opt-in to private plain HTTP, checked on every connection |
+| `problems_only` | `false` | Send warnings only to this output |
+
+```yaml
+watch:
+  outputs:
+    - name: discord
+      type: discord
+      url_file: /etc/opsgate/discord-webhook-url
+    - name: custom
+      type: webhook
+      url: https://alerts.example.com/ingest
+      header_files:
+        Authorization: /etc/opsgate/alerts-authorization
+      body_template: |
+        {"message": {{json .Text}}, "sent_at": {{json .SentAt}}, "alerts": {{json .Alerts}}}
+```
+
+The authorization file contains the full value, for example `Bearer TOKEN`.
+Files are loaded once at startup; restart watch after rotating them. Unreadable
+files, invalid URLs, header values or template syntax fail startup. Files keep
+credentials out of effective configuration output; inline URLs and headers are
+shown as configured. Output settings do not inherit the legacy webhook's key
+or private-HTTP flag. Routing/framing headers such as `Host` and `Content-Length`, and
+`X-Opsgate-Signature`, are reserved; duplicate header names are rejected case-insensitively.
+
+Templates receive the exported Go fields of `alert.Batch`: `.Source`, `.SentAt`,
+`.Alerts`, `.Dropped`, `.Text`; alerts have `.Time`, `.Cluster`, `.Namespace`,
+`.Kind`, `.Name`, `.Severity`, `.Reason`, `.Summary`, `.Hint`, `.Restart` and
+`.Suppressed`. Use `{{json VALUE}}` without surrounding quotes to safely encode
+strings, arrays and objects. Alert text is data, never another template.
+Rendered bodies must be valid JSON and at most 1 MiB; execution or JSON errors
+lose that batch without posting it. POST defaults to `application/json`;
+`headers.Content-Type` can override it. HMAC signs the actual rendered bytes.
+
+Discord needs no bot or n8n: create an incoming channel webhook and store its
+URL in `url_file`. The built-in embed shows UTC occurrence and sending times,
+cluster, severity, kind, namespace/name, reason, summary, suppressed repeats,
+hints, restart suggestions and dropped count. Automatic mentions are disabled.
+Descriptions over Discord's 4096 UTF-16-unit limit are visibly truncated;
+use a smaller batch/max_alerts or a parallel native JSON receiver when complete
+large batches are needed. Custom Discord payloads can instead use `type: webhook`
+with a template, where the operator is responsible for Discord limits and mentions.
+
+All webhook destinations reject redirects and use a 10-second request timeout.
+Network failures, HTTP 429 and 5xx receive two retries after 1s and 4s; other
+non-2xx responses are not retried. There is no persistent delivery queue or
+exactly-once guarantee; retries can duplicate a delivery. HTTP 429 uses the same
+bounded backoff, without a separate server-directed rate-limit scheduler.
 
 Email fields require `email.host`. Webhook and email are independent: configure
 either or both, with separate batching, cooldown state and retries. Both use

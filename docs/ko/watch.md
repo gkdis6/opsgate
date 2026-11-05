@@ -119,7 +119,7 @@ watch는 제안만 합니다. 쓰기 권한이 없고, 제안을 자동으로 �
 X-Opsgate-Signature: sha256=<hex HMAC-SHA256(secret, 원본 본문)>
 ```
 
-받는 쪽에서는 원본 본문으로 서명을 검증한 뒤, 서명된 `sent_at`이 오래된 묶음은 거부해 재전송 공격을 막으세요. n8n 같은 수신 측은 코드 없이 기본 HMAC 노드로 검증할 수 있습니다. 리다이렉트는 따라가지 않습니다. 네트워크 오류와 5xx 응답은 1초, 4초 뒤 두 번 재시도하고, 그래도 실패하면 그 묶음을 잃었다고 로그에 남깁니다. 내부 큐(알림 1000개)가 가득 차면 새 알림은 다음 POST의 `dropped`에 셉니다.
+받는 쪽에서는 원본 본문으로 서명을 검증한 뒤, 서명된 `sent_at`이 오래된 묶음은 거부해 재전송 공격을 막으세요. n8n 같은 수신 측은 코드 없이 기본 HMAC 노드로 검증할 수 있습니다. 리다이렉트는 따라가지 않습니다. 네트워크 오류, HTTP 429와 5xx 응답은 1초, 4초 뒤 두 번 재시도하고, 그래도 실패하면 그 묶음을 잃었다고 로그에 남깁니다. 내부 큐(알림 1000개)가 가득 차면 새 알림은 다음 POST의 `dropped`에 셉니다.
 
 ## 실행
 
@@ -135,3 +135,54 @@ kubectl -n opsgate logs deployment/opsgate-watch
 클러스터 밖에서도 kubeconfig로 클러스터에 접근할 수 있으면 `opsgate watch`를 실행할 수 있습니다.
 
 watch 오류(예: RBAC 권한 부족)는 로그에 남고 client-go가 다시 시도합니다. watcher를 재시작하면 기준점이 다시 잡히므로, 꺼져 있던 동안의 변경은 알리지 않습니다.
+
+## Discord 직접 전송과 커스텀 웹훅
+
+`watch.outputs`로 n8n 없이 Discord나 원하는 JSON 수신 서버에 직접 보낼 수
+있습니다. 기존 `webhook_url`, 이메일과 함께 쓸 수 있고, 각 대상은 별도 큐,
+쿨다운과 재시도를 사용하므로 느린 대상이 다른 전송을 막지 않습니다.
+전체 설정은 [설정 문서](../configuration.md#direct-webhook-destinations)를 참고하세요.
+
+```yaml
+watch:
+  outputs:
+    - name: discord
+      type: discord
+      url_file: /etc/opsgate/discord-webhook-url
+    - name: custom
+      type: webhook
+      url: https://alerts.example.com/ingest
+      header_files:
+        Authorization: /etc/opsgate/alerts-authorization
+      body_template: |
+        {"message": {{json .Text}}, "sent_at": {{json .SentAt}}, "alerts": {{json .Alerts}}}
+```
+
+Discord 채널에서 만든 웹훅 URL을 `url_file`에 저장하면 됩니다. 인증 헤더
+파일에는 `Bearer TOKEN`처럼 전체 값을 넣으세요. 파일은 시작할 때 읽으므로
+변경 후 watch를 재시작해야 합니다. URL과 헤더를 파일로 지정하면 설정 출력에
+비밀 값이 나타나지 않습니다. 직접 적은 URL과 헤더는 설정 출력에 그대로 보입니다.
+
+`type` 기본값은 `webhook`이며 원본 JSON을 보냅니다. `body_template`을 지정하면
+Go 템플릿에 배치 필드 `.Source`, `.SentAt`, `.Alerts`, `.Dropped`, `.Text`가 전달됩니다.
+`{{json 값}}`을 따옴표로 감싸지 않고 사용하면 안전하게 JSON으로 인코딩합니다.
+알림 텍스트 자체는 템플릿으로 실행하지 않습니다. 템플릿은 최대 64 KiB, 결과는
+유효한 JSON으로 최대 1 MiB입니다. 문법 오류는 시작 시 거부하고, 실행 오류나
+유효하지 않은 JSON은 전송하지 않고 해당 배치 실패로 기록합니다.
+
+Discord 기본 형식은 발생·전송 시각(UTC), 클러스터, 심각도, 리소스 종류와
+namespace/이름, 오류 이유·요약, 반복 횟수, 힌트와 재시작 제안 등을 표시합니다.
+자동 멘션은 끕니다. 설명이 Discord의 4096 UTF-16 단위 제한을 넘으면 잘림을
+표시하므로 `watch.max_alerts`를 줄이거나 원본 JSON 대상에도 함께 보내세요.
+`type: webhook`과 템플릿으로 Discord 형식을 직접 만들 수도 있지만, 이 경우
+길이 제한과 멘션 설정도 직접 처리해야 합니다.
+
+각 대상의 `secret_file`은 변환 후 실제 HTTP 본문을 HMAC 서명합니다. 기존
+웹훅의 키나 `allow_private_http`는 새 대상에 상속되지 않습니다. 대상별로
+`headers`, `header_files`, `allow_private_http`, `problems_only`를 지정할 수 있고,
+공통 `watch.batch`, `watch.cooldown`, `watch.max_alerts`가 적용됩니다. 전역
+`watch.problems_only`가 켜져 있으면 모든 대상에서 정보 알림을 제외합니다.
+
+리다이렉트는 거부하고 요청 제한 시간은 10초입니다. 네트워크 오류, HTTP 429와
+5xx는 1초·4초 뒤 두 번 재시도합니다. 별도의 서버 지정 속도 제한 스케줄러는
+없습니다. 영구 큐와 정확히 한 번 전송 보장은 없으며, 재시도로 중복될 수 있습니다.

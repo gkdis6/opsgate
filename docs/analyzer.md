@@ -190,7 +190,7 @@ queries when the call budget allows it. Without Notes, the investigation uses Ku
 
 Independently of MCP annotations, the analyzer allows only these exact tool
 names: `k8s_clusters`, `k8s_overview`, `k8s_list`, `k8s_get`, `k8s_events`,
-`k8s_logs`, `k8s_service_check`, `note_search`, `note_read`, `note_recent`,
+`k8s_logs`, `k8s_service_check`, `k8s_remediation_options`, `note_search`, `note_read`, `note_recent`,
 `note_list`, `note_links`, `note_tags`. They must also advertise `readOnlyHint`.
 A model-selected call is checked again before execution. Write tools are never
 offered or called; no approval window can expand this list.
@@ -219,7 +219,8 @@ reference deployment has no public ingress. Use TLS outside a trusted private
 network. Authentication does not make log, event or note text trusted instructions.
 
 [The Kubernetes reference](../deploy/kubernetes/opsgate-analyzer.yaml) starts at
-zero replicas until configs and credentials are supplied. It uses a distinct
+zero replicas until configs and credentials are supplied. Set `listen: 0.0.0.0:8080` in
+`analyzer.yaml`, because its Service and readiness probe connect through the pod address. It uses a distinct
 ServiceAccount bound to `opsgate-readonly`. Create the `opsgate-analyzer`
 ConfigMap containing `analyzer.yaml` and `reader.yaml`, an `opsgate-analyzer`
 Secret with `hmac`, `mcp-token` and `model-api-key`, and an

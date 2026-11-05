@@ -131,6 +131,7 @@ spec:
         - name: upstream-secret
           secret:
             secretName: opsgate-upstream
+            optional: true # Only Google or GitHub sign-in reads it; passkeys do not.
             defaultMode: 0440
             items:
               - key: client-secret

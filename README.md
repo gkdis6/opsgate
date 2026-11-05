@@ -4,11 +4,10 @@
 
 [한국어](README.ko.md)
 
-**Let AI assistants help operate your servers, without handing them a shell.**
+**Let AI assistants help operate your clusters, without handing them a shell.**
 
 opsgate is an open-source MCP server written in Go. It gives clients such as
-Claude, ChatGPT, Claude Code and Cursor a fixed set of operations tools for Linux
-hosts and Kubernetes, with explicit policy, human-approved changes and
+Claude, ChatGPT, Claude Code and Cursor a fixed set of operations tools for Kubernetes, with explicit policy, human-approved changes and
 an audit log.
 
 > **Status:** features for the first public release are implemented. Changes
@@ -65,14 +64,13 @@ Providers are groups of tools; enable only the groups you need.
 
 | Provider | Read tools | Write tools (approval required) |
 | --- | --- | --- |
-| Host (systemd, journald, `/proc`) | overview, services, unit status, logs, top processes | restart an allowed unit |
 | Kubernetes | overview, list, get, events, pod logs | rollout restart, scale, delete pod |
 | Notes: runbooks and memory, Markdown folder or Obsidian vault *(experimental)* | search, read, list, recent, links, tags | create, append, replace, move to `.trash` |
 | Dev *(experimental)* | projects, task status, log, diff, list | start a coding agent (Codex or Claude) in a Git worktree |
 
 Scopes define the kinds of work a user can perform through opsgate: `ops:read` for inspection,
 `ops:write` for operations and note changes, and `dev:run` for coding-agent tasks.
-Allowlists restrict tools and targets such as services and Kubernetes workloads.
+Allowlists restrict tools and targets such as Kubernetes workloads.
 A scope alone does not enable an operation prohibited by configuration.
 
 Notes can be created only inside the configured notes folder. There is no tool
@@ -90,9 +88,7 @@ and limits.
 The AI client analyzes results and chooses the next operation. opsgate itself
 does not run or call an AI model; it checks and executes requested tools.
 
-Host tools inspect and manage the server where opsgate runs. If you run it on
-your local PC, that PC is the host target; host tools require Linux. Kubernetes
-tools connect to the Kubernetes API using kubeconfig or in-cluster credentials.
+Kubernetes tools connect to the Kubernetes API using kubeconfig or in-cluster credentials.
 A local instance can therefore inspect a remote cluster when network access
 and permissions allow it.
 
@@ -140,15 +136,15 @@ Build with Go 1.26 or later:
 go install github.com/gkdis6/opsgate/cmd/opsgate@latest   # or: make build
 ```
 
-Save a configuration, for example `/path/opsgate.yaml`:
+Save a configuration using the current kubeconfig, for example `/path/opsgate.yaml`:
 
 ```yaml
 stdio:
   scopes: [ops:read]
 providers:
-  host:
+  kubernetes:
     enabled: true
-    units: [ssh.service, "nginx*"]
+    namespaces: [default]
 ```
 
 Register it with Claude Code (use absolute paths):
@@ -167,7 +163,7 @@ unprivileged. Other clients: [client setup](docs/clients.md).
 Passkeys need no identity provider: people sign in with Face ID, Touch ID,
 Windows Hello, a phone or a security key.
 
-`opsgate init` asks where it runs, the public URL and who signs in, then writes
+`opsgate init` asks for the public URL, who signs in and the namespaces, then writes
 a short configuration:
 
 ```sh
@@ -175,7 +171,7 @@ opsgate init            # writes opsgate.yaml; flags answer ahead, see -h
 ```
 
 ```yaml
-mode: host              # or kubernetes for a pod
+mode: kubernetes
 http:
   public_url: "https://mcp.example.com"
 auth:
@@ -187,25 +183,29 @@ auth:
     allowed_redirect_hosts: [claude.ai, chatgpt.com, localhost]
     unknown_redirect_hosts: approve
 providers:
-  host:
-    units: ["myapp.service"]
+  kubernetes:
+    namespaces: ["*"]
+    deny_namespaces: ["kube-system", "kube-public", "kube-node-lease", "opsgate"]
+    allow_logs: true
 ```
 
-The mode fills in the rest: HTTP on `127.0.0.1:8787` (`0.0.0.0:8787` in a pod),
+The mode fills in the rest: HTTP on `0.0.0.0:8787`,
 builtin passkey sign-in, state in `/var/lib/opsgate`, browser approval links and
-the matching providers. `opsgate config show -config opsgate.yaml` prints every
+the pod’s ServiceAccount. `opsgate config show -config opsgate.yaml` prints every
 effective value.
 
+Put this file in the `opsgate` ConfigMap of `deploy/kubernetes/opsgate-deployment.yaml` and apply it. The manifest’s sample uses Google sign-in; replacing its config with passkeys still leaves the required `opsgate-upstream` Secret mount. Follow [deployment](docs/deploy.md) for Secret provisioning, image verification, RBAC and probe configuration.
+
 ```sh
-opsgate -config /etc/opsgate/opsgate.yaml
+kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 ```
 
 Run `opsgate -h` to list commands and flags, or `opsgate help <command>` for command help. `opsgate version` (also `-version`) prints the build version. Help and successful commands exit 0; invalid commands, flags or extra arguments exit 2 before loading configuration; operational errors exit 1. Help goes to stdout and errors to stderr.
 
 1. On first start, opsgate logs a one-time setup link (valid 24 hours) for each
    user without a passkey. Open it and press **Create passkey**. Later links:
-   `sudo -u opsgate opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`.
-2. Put a TLS reverse proxy in front that preserves the `Host` header. The public
+   `kubectl -n opsgate exec deploy/opsgate -- /opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`.
+2. Put a TLS ingress or reverse proxy in front that preserves the `Host` header. The public
    host must match `public_url`; other hosts get 421.
 3. Connect a client to `https://mcp.example.com/mcp`, for example
    `claude mcp add --transport http opsgate https://mcp.example.com/mcp`, or add
@@ -213,7 +213,7 @@ Run `opsgate -h` to list commands and flags, or `opsgate help <command>` for com
 
 The generated file already limits client redirect hosts
 (`allowed_redirect_hosts`); review them before exposing the server. GitHub, Google and other sign-in options are covered
-in [authentication](docs/authentication.md). Proxy routes, systemd units and
+in [authentication](docs/authentication.md). Proxy routes and
 release verification are in [deployment](docs/deploy.md).
 
 
@@ -244,7 +244,7 @@ Full details: [SECURITY.md](SECURITY.md).
 | [Configuration](docs/configuration.md) | Every configuration key, defaults and audit log format |
 | [Tools](docs/tools.md) | Tool arguments, limits, redaction |
 | [Notes](docs/notes.md) | Runbooks and incident memory in a Markdown folder |
-| [Deployment](docs/deploy.md) | Release verification, systemd, Kubernetes, reverse proxy |
+| [Deployment](docs/deploy.md) | Release verification, Kubernetes, reverse proxy |
 | [Dev provider](docs/dev.md) | Running coding agents through the separate runner |
 | [Watch alerts](docs/watch.md) | Separate `opsgate watch` process sending Kubernetes alerts to a webhook, email or both |
 | [Roadmap](docs/roadmap.md) | What is done and what may come |

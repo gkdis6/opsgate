@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 942" role="img" aria-labelledby="title desc" lang="en">
 <title id="title">How opsgate works</title>
-<desc id="desc">MCP clients use local stdio or HTTPS through a TLS reverse proxy. opsgate checks identity, scopes and policy, wraps tools with plan/approval/apply, masks and limits results, and writes JSONL audit events. Host, Kubernetes, notes and a separate dev runner are bounded by OS accounts and RBAC. There is no shell tool.</desc>
+<desc id="desc">MCP clients use local stdio or HTTPS through a TLS reverse proxy. opsgate checks identity, scopes and policy, wraps tools with plan/approval/apply, masks and limits results, and writes JSONL audit events. Kubernetes, notes and a separate dev runner are bounded by OS accounts and RBAC. There is no shell tool.</desc>
 <style>
 svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
 text { fill: #202936; }
@@ -88,11 +88,7 @@ text { fill: #202936; }
 <path d="M256 680 V692" class="line "/>
 <rect x="48" y="692" width="416" height="48" rx="9" class="box"/>
 <text x="64" y="722" class="head">5  JSONL audit log</text>
-<text x="536" y="305" class="head">Enabled providers</text>
-<rect x="536" y="322" width="250" height="84" rx="9" class="box"/>
-<text x="552" y="347" class="head">Host</text>
-<text x="552" y="371" class="small">systemd · journald · /proc</text>
-<text x="552" y="392" class="small">Server OS permissions</text>
+<text x="536" y="411" class="head">Enabled providers</text>
 <rect x="536" y="428" width="250" height="84" rx="9" class="box"/>
 <text x="552" y="453" class="head">Kubernetes</text>
 <text x="552" y="477" class="small">RBAC-limited service account</text>
@@ -103,11 +99,9 @@ text { fill: #202936; }
 <rect x="536" y="640" width="250" height="68" rx="9" class="box"/>
 <text x="552" y="665" class="head">Dev</text>
 <text x="552" y="689" class="small">Configured projects / agents</text>
-<path d="M464 510 H504 V364 H536" class="line "/>
-<path d="M504 510 V470 H536" class="line "/>
+<path d="M464 510 H504 V470 H536" class="line "/>
 <path d="M504 510 V576 H536" class="line "/>
 <path d="M504 576 V674 H536" class="line "/>
-<path d="M786 364 H804 V674" class="line return"/>
 <path d="M786 470 H804 V674" class="line return"/>
 <path d="M786 576 H804 V674" class="line return"/>
 <path d="M786 674 H804 V774 H492 V656 H464" class="line return"/>

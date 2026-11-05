@@ -33,7 +33,7 @@ credential or runner configuration write access.
 
 Copy [dev-runner.example.yaml](../deploy/dev-runner.example.yaml) to
 `/etc/opsgate/dev-runner.yaml`. Make the file root-owned, readable by `opsdev`,
-and unwritable by both service accounts. Restrict its parent directory too.
+and unwritable by both the server and runner accounts. Restrict its parent directory too.
 Select exact project names, absolute paths, base refs and fixed agent argv.
 Only `{workdir}` and `{output}` are substituted. Prompts are saved privately to
 `prompt.txt` and provided on stdin. Agent environments contain only HOME, a fixed
@@ -53,6 +53,7 @@ drop-in can run this after RuntimeDirectory is created (adjust the setfacl path)
 
 ```ini
 [Service]
+RuntimeDirectoryPreserve=yes
 ExecStartPre=/usr/bin/setfacl -m g:opsgate:--x /run/opsgate-dev
 ```
 
@@ -62,6 +63,8 @@ The owner `opsdev` can apply that ACL without root. The socket itself is
 in `socket_group` may connect. The runtime directory ACL is necessary because
 socket group permissions alone do not grant parent traversal. Do not add the
 HTTP account to `opsdev` or relax state directory permissions.
+
+The server runs in a pod, so mount `/run/opsgate-dev` through `hostPath` and place the pod on the runner’s node. Set the pod’s `runAsGroup` to the host GID of `socket_group`: the peer check in `internal/devrunner/peer_linux.go` accepts a matching primary group, and the runtime directory ACL above grants that group traversal. Set `RuntimeDirectoryPreserve=yes` in the same drop-in. Otherwise systemd removes the directory when the runner stops, and the pod’s mount keeps pointing at the old directory. This pod-to-runner setup is experimental and has not been exercised.
 
 Enable and start the runner with systemd, then configure the MCP server:
 

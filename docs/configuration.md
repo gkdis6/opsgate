@@ -10,21 +10,22 @@ Defaults below come from `config.Default()`; a `mode` changes some of them (see 
 Values written in the file always win. Without a mode the defaults below apply
 and the transport defaults to stdio.
 
-| Key | `mode: host` (systemd service) | `mode: kubernetes` (pod) |
-| --- | --- | --- |
-| `-transport` default | `http` | `http` |
-| `http.listen` | `127.0.0.1:8787` | `0.0.0.0:8787` |
-| `auth.mode` | `builtin` | `builtin` |
-| `auth.builtin.upstream.provider` | `passkey` | `passkey` |
-| `auth.builtin.state_file` | `/var/lib/opsgate/oauth.json` | `/var/lib/opsgate/oauth.json` |
-| `approval.web` | `true` while `auth.mode` is builtin | `true` while `auth.mode` is builtin |
-| `server.audit_log` | `/var/log/opsgate/audit.jsonl` | `""` (stderr, for the cluster's log collection) |
-| `providers.host.enabled` | `true` | `false`; enabling it is an error because a pod sees its container, not the node |
-| `providers.kubernetes.enabled` | `false` | `true`, with the pod's ServiceAccount (`kubeconfig: ""`) |
+| Key | `mode: kubernetes` (pod) |
+| --- | --- |
+| `-transport` default | `http` |
+| `http.listen` | `0.0.0.0:8787` |
+| `auth.mode` | `builtin` |
+| `auth.builtin.upstream.provider` | `passkey` |
+| `auth.builtin.state_file` | `/var/lib/opsgate/oauth.json` |
+| `approval.web` | `true` while `auth.mode` is builtin |
+| `server.audit_log` | `""` (stderr, for the cluster's log collection) |
+| `providers.kubernetes.enabled` | `true`, with the pod's ServiceAccount (`kubeconfig: ""`) |
 
-Namespaces, units, users and write targets are never defaulted.
-`opsgate init` asks for them, plus the mode, public URL and sign-in (passkey,
-Google or GitHub), and writes a short mode-based file with mode 0600. It refuses
+The mode does not fill in namespaces, users or write targets.
+`opsgate init` asks for namespaces, users, the public URL and sign-in (passkey,
+Google or GitHub), and writes a short `mode: kubernetes` file with mode 0600.
+Write tools stay off until targets are listed in configuration. It also asks whether
+to grant the user `ops:write`. It refuses
 to overwrite a file without `-force`. Every question has a flag (`opsgate init
 -h`); without a terminal, or with `-yes`, unanswered questions take their
 defaults, and the public URL and user must be given as flags. The result is
@@ -39,17 +40,13 @@ this prints `require_web: true` explicitly. Running that output with
 
 | YAML key | Default | Meaning |
 | --- | --- | --- |
-| `mode` | `""` | Empty, `host` or `kubernetes`; see above |
+| `mode` | `""` | Empty or `kubernetes`; see above |
 | `server.name` | `opsgate` | MCP server name |
 | `server.audit_log` | `""` | Empty writes to stderr; otherwise JSONL path |
 | `server.max_output_bytes` | `65536` | Tool output byte limit; must be positive |
 | `server.tool_timeout` | `30s` | Cooperative call timeout; separate planning/applying deadlines for writes; positive |
 | `stdio.user` | `local` | Audit identity label; OS user is the trust boundary |
 | `stdio.scopes` | `[ops:read]` | Accepted scopes: ops:read, ops:write, dev:run; write does not enable actions |
-| `providers.host.enabled` | `false` | Enable host provider |
-| `providers.host.units` | `[]` | Unit glob allowlist; empty allows none |
-| `providers.host.disk_paths` | `[/]` | Mount points for overview |
-| `providers.host.max_log_lines` | `500` | Journal lines per call cap |
 | `providers.kubernetes.enabled` | `false` | Enable Kubernetes provider |
 | `providers.kubernetes.clusters` | omitted | Ordered connection/policy entries; mutually exclusive with single-cluster fields |
 | `providers.kubernetes.name` / `clusters[].name` | `default` / required | Name clients select with the cluster argument |
@@ -91,8 +88,6 @@ this prints `require_web: true` explicitly. Running that output with
 | `approval.require_web` | `true` when `approval.web` is true; otherwise `false` | Require browser approval on HTTP; explicit `false` allows elicitation; explicit `true` also denies stdio writes |
 | `approval.window` | `0s` | Optional user/tool/target auto-approval lifetime; 1m–12h when enabled |
 | `approval.window_tools` | `[]` | `path.Match` tool-name globs eligible for windows; empty allows none |
-| `providers.host.restart_units` | `[]` | Separate restart unit glob allowlist; empty disables tool |
-| `providers.host.command_prefix` | `[]` | Write argv prefix, e.g. [/usr/bin/sudo, -n]; first element absolute executable, remaining paths/flags |
 | `providers.kubernetes.rollout_restart` | `[]` | namespace/name globs; empty disables tool |
 | `providers.kubernetes.scale` | `[]` | namespace/name globs; empty disables tool |
 | `providers.kubernetes.delete_pod` | `[]` | namespace/name globs; empty disables tool |
@@ -115,7 +110,7 @@ this prints `require_web: true` explicitly. Running that output with
 
 Server policy patterns must match a tool offered by an enabled provider after its action gates, or startup fails. Per-user/token tool patterns are syntax-checked and enforced on calls; they do not filter tools/list. Scopes, server policy, per-user tool policy and provider resource allowlists all apply. Empty tool allowlists add no restriction, unlike empty provider resource allowlists. Configuration changes require a restart.
 
-All providers are disabled by default. Enabling the host provider exposes overview/process tools even with no allowed units; enabling Kubernetes permits cluster-scoped reads subject to RBAC. `ops:read` covers all enabled read providers, including the optional experimental note provider. `dev:run` covers dev tools, with HTTP additionally requiring `ops:read`. See [the trust model](../SECURITY.md).
+All providers are disabled by default. Enabling Kubernetes permits cluster-scoped reads subject to RBAC. `ops:read` covers all enabled read providers, including the optional experimental note provider. `dev:run` covers dev tools, with HTTP additionally requiring `ops:read`. See [the trust model](../SECURITY.md).
 
 Note writes run as the server account, so notes it creates or rewrites are owned by that account. Grant it access with ACLs rather than ownership, and keep the vault owner able to replace those files (write access to their directories). A sync tool running as the vault owner cannot chmod files it does not own: in Syncthing, set the vault folder's Ignore Permissions option, or permission-only changes from other devices fail with "operation not permitted".
 
@@ -180,11 +175,11 @@ OAuth GET routes reject request bodies; POST body reads have a 10-second deadlin
 
 `external` validates JWT signatures using issuer discovery and JWKS, with issuer, audience, expiry and allowed algorithm checks. Issuer, discovery and JWKS URLs require HTTPS, except loopback HTTP. JWKS fetch attempts are shared across requests and limited to one per minute, including failed fetches. Cached valid keys continue to work; a new signing key may be rejected until the cooldown expires. Audience defaults to the MCP resource URL. Scopes come from `scope` or `scp`; an optional `claim:<value>` user allowlist further restricts identities and intersects their scopes. `static` accepts pre-shared bearer tokens configured by SHA-256 digest; generate a token and digest with `opsgate -gen-token`. Store the raw token only in the client's secret storage. Static mode provides no DCR or OAuth login.
 
-Host, Kubernetes and note read tools require `ops:read`. Host/Kubernetes writes require their own action allowlist; note writes require `allow_write`. These operations require `ops:write`, underlying OS/RBAC permission and human confirmation. Dev tools instead require `dev:run`, and `dev_task_start` requires human confirmation. HTTP access additionally requires `ops:read`, so remote writers need both scopes. Namespace allow/deny rules still apply to Kubernetes writes. Read unit allowlists do not authorize restarts.
+Kubernetes and note read tools require `ops:read`. Kubernetes writes require their own action allowlist; note writes require `allow_write`. These operations require `ops:write`, underlying OS/RBAC permission and human confirmation. Dev tools instead require `dev:run`, and `dev_task_start` requires human confirmation. HTTP access additionally requires `ops:read`, so remote writers need both scopes. Namespace allow/deny rules still apply to Kubernetes writes.
 
 The server validates inputs and builds a side-effect-free plan before confirmation. With builtin auth and `approval.web: true`, HTTP defaults to browser approval and returns an approval link and `approval_id`. Setting `approval.require_web: false` explicitly allows clients supporting MCP elicitation to use an in-client prompt, including multi round-trip input requests across protocol versions; other clients still use the web link. The human opens it, signs in upstream as the same user and reviews the exact operation. After approval, retry the same tool with exactly the same arguments plus `approval_id`. Approvals expire, are single-use and bind the user, tool, SHA-256 of canonical unredacted arguments (excluding `approval_id`) and plan. Writes are denied if redaction changes the summary, so the human sees an unambiguous target. Kubernetes plans include the target UID; execution uses that invocation’s plan and identity/version preconditions. Without a confirmation channel, writes are denied; stdio supports elicitation only.
 
-Optional time-window approvals require both `approval.window` (1m–12h; `0s` disables the feature) and `approval.window_tools` (a `path.Match` glob allowlist; empty allows no tools). For example, `window: 30m` and `window_tools: [host_service_restart]` let a human choose **Approve + allow for 30m** in the browser, or the optional **Also auto-approve host_service_restart for 30m** checkbox in elicitation. The grant covers that exact user, tool and target, including later calls from another client or with different arguments. It does not cover another target. Do not enable windows for `dev_task_start`; each task should receive a separate review. It does not grant scopes, bypass action allowlists, skip input validation or skip planning. Grants live only in memory, expire without renewal on use, are capped at 100, and disappear on restart. Each call still has its own audit record with `approval: window`; grant creation emits a separate `window_granted` event with the source (`web` or `elicitation`), duration and expiry. With `require_web`, only the browser can obtain a grant and stdio writes remain denied.
+Optional time-window approvals require both `approval.window` (1m–12h; `0s` disables the feature) and `approval.window_tools` (a `path.Match` glob allowlist; empty allows no tools). For example, `window: 30m` and `window_tools: [k8s_rollout_restart]` let a human choose **Approve + allow for 30m** in the browser, or the optional **Also auto-approve k8s_rollout_restart for 30m** checkbox in elicitation. The grant covers that exact user, tool and target, including later calls from another client or with different arguments. It does not cover another target. Do not enable windows for `dev_task_start`; each task should receive a separate review. It does not grant scopes, bypass action allowlists, skip input validation or skip planning. Grants live only in memory, expire without renewal on use, are capped at 100, and disappear on restart. Each call still has its own audit record with `approval: window`; grant creation emits a separate `window_granted` event with the source (`web` or `elicitation`), duration and expiry. With `require_web`, only the browser can obtain a grant and stdio writes remain denied.
 
 Approval pages show the plan with diff highlighting, requester, transport, expiry and collapsed arguments. After deciding, return to the chat and ask the assistant to retry; there is no automatic redirect. Approval summaries allow up to `max(64 KiB, argument limit + 16 KiB)`. Raw JSON arguments default to 16 KiB; note content tools allow 528 KiB (256 KiB per content/replacement field), and `dev_task_start` allows 48 KiB for its 32 KiB prompt. JSON escaping counts toward the wire limit.
 
@@ -251,10 +246,9 @@ The runner uses a separate YAML file, never nested under `providers`. Its config
 The shared wrapper writes one JSON object per handled tool call, appended to `server.audit_log`, or stderr when empty. New files are created with mode 0600 (subject to umask); existing permissions are retained. Symlinks, non-regular files and group/world-writable files are rejected. Stdout is reserved for MCP messages.
 
 ```json
-{"time":"2026-10-24T12:00:00Z","user":"local","transport":"stdio","tool":"host_service_status","args":{"unit":"ssh.service"},"outcome":"ok","duration_ms":12,"output_bytes":120}
+{"time":"2026-10-24T12:00:00Z","user":"local","transport":"stdio","tool":"k8s_get","args":{"kind":"deployment","namespace":"default","name":"web"},"outcome":"ok","duration_ms":12,"output_bytes":120}
 ```
 
 Fields of `audit.Event`: `time` (RFC3339 timestamp with optional fractional seconds), `user`, `transport`, `tool`, optional redacted `args`, `outcome` (`ok`, `error`, `denied`, `pending`), optional redacted `error`, `duration_ms`, and `output_bytes` (returned success text size; zero on error). Write events additionally include optional redacted `plan` (the summary shown to the human) and `approval` (the confirmation method, `elicitation`, `web` or `window`; may also be present on a refusal or pending call). `pending` means human input is outstanding. Browser retry instructions count in `output_bytes`; elicitation input requests do not return text output. Planning and applying each receive a separate tool timeout; human confirmation may take longer. Web decisions emit separate audit events with `outcome` `approved` or `rejected`, user, tool and only an eight-character `args.approval_id_prefix`. Denied multi round-trip approval verifications emit `denied` events without request state. Tool output bodies are not stored. Audit write failures are reported to stderr without failing the tool call; audit is not tamper-proof. Protect and rotate logs, which may still contain sensitive information.
 
 Window creation emits `window_granted` with the source approval method and `args.window`/`args.expires_at`; later calls using the grant record `approval: window`.
-

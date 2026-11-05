@@ -27,9 +27,9 @@ AI client (claude.ai, ChatGPT, Claude Code, or another MCP client)
                   |
              shared tool wrapper
                   |
-       +----------+----------+------------+
-       |          |          |            |
-      host       kube       note         dev
+                  +----------+------------+
+                  |          |            |
+                 kube       note         dev
                                           |
                                       Unix socket
                                           |
@@ -59,7 +59,6 @@ The command selects one transport per process. stdio is the default. HTTP requir
 | `internal/redact` | Masks known secret patterns using regular expressions and direct scanning; masking is a safety net, not complete secret detection |
 | `internal/audit` | Appends JSONL audit events to a file or stderr |
 | `internal/ui` | Shared page layout for consent, approval, passkeys and administration |
-| `internal/provider/host` | systemd status/logs, processes, disk information and allowlisted unit restarts |
 | `internal/provider/kube` | Kubernetes objects, events and logs; allowlisted rollout restarts, scaling and pod deletion within namespace policy |
 | `internal/provider/note` | Searches and reads a Markdown vault; optional create/append/replace/trash tools with content/diff previews and snapshot checks |
 | `internal/provider/dev`, `internal/devrunner` | Sends requests to a separate runner; the runner chooses configured projects/agents and executes tasks in Git worktrees |
@@ -104,9 +103,9 @@ stdio:
   user: alice
   scopes: [ops:read]
 providers:
-  host:
+  kubernetes:
     enabled: true
-    units: [example.service]
+    namespaces: [default]
 ```
 
 Save as `opsgate.yaml`, then run:

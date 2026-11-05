@@ -6,7 +6,7 @@ opsgate supports stdio and authenticated Streamable HTTP at `<public_url>/mcp`. 
 
 For stdio, the client launches the binary and exchanges MCP messages through stdin/stdout. Use absolute executable/config paths. Keep stdout free of banners; diagnostics and the default audit destination use stderr.
 
-The process runs with the launching OS user's permissions and configured `stdio.scopes`. `stdio.user` is an audit label. Protect the config and use an unprivileged account. Enable only needed providers and allowlisted units/namespaces. Kubernetes kubeconfig `exec` and `auth-provider` credential plugins are rejected; use credentials such as a short-lived ServiceAccount token. Namespace policies do not restrict Nodes or PersistentVolumes; review the [RBAC manifest](../deploy/kubernetes/rbac-readonly.yaml) and [security policy](../SECURITY.md).
+The process runs with the launching OS user's permissions and configured `stdio.scopes`. `stdio.user` is an audit label. Protect the config and use an unprivileged account. Enable only needed providers and allowlisted namespaces. Kubernetes kubeconfig `exec` and `auth-provider` credential plugins are rejected; use credentials such as a short-lived ServiceAccount token. Namespace policies do not restrict Nodes or PersistentVolumes; review the [RBAC manifest](../deploy/kubernetes/rbac-readonly.yaml) and [security policy](../SECURITY.md).
 
 ## Claude Code
 
@@ -29,7 +29,7 @@ Merge into `claude_desktop_config.json`, preserving other servers:
 }
 ```
 
-Use Claude Desktop's developer settings to locate its configuration and restart the app after editing. On macOS and Windows, use SSH to inspect a Linux host rather than enabling the local host provider.
+Use Claude Desktop's developer settings to locate its configuration and restart the app after editing. On macOS, use a Darwin build with a local kubeconfig. There are no Windows builds; use SSH to a Linux machine with kubeconfig access to the cluster.
 
 ## Cursor
 
@@ -50,7 +50,7 @@ Only trust project MCP configurations you have reviewed: they can launch program
 
 ## Over SSH
 
-Install opsgate and its config on the Linux host. The stdio command is:
+Install opsgate and its configuration without a mode on a Linux machine with kubeconfig access to the cluster. The stdio command is:
 
 ```sh
 ssh host /usr/local/bin/opsgate -config /etc/opsgate.yaml
@@ -113,7 +113,7 @@ Start with `opsgate -transport http -config /path/opsgate.yaml`. Configure a loc
 
 ## Approving writes
 
-Host/Kubernetes writes are registered only with their provider and action allowlist; note writes need the vault provider and `allow_write`. They also need `ops:write`, OS/RBAC permission and human confirmation; HTTP users need `ops:read` too. Clients supporting MCP elicitation display the plan in an in-client prompt, using multi round-trip input requests across protocol versions.
+Kubernetes writes are registered only with their provider and action allowlist; note writes need the vault provider and `allow_write`. They also need `ops:write`, OS/RBAC permission and human confirmation; HTTP users need `ops:read` too. Clients supporting MCP elicitation display the plan in an in-client prompt, using multi round-trip input requests across protocol versions.
 
 Otherwise, builtin auth with `approval.web: true` returns a browser approval link and `approval_id`. Open the link, sign in as the same upstream user and read the exact summary. After approval, the client retries the same tool and arguments plus `approval_id`. Approval is expiring, single-use and bound to the exact operation. Static/external clients without elicitation cannot write; stdio also requires elicitation. A compromised UI can auto-approve elicitation, and prompt injection can request writes: humans must read the summary.
 

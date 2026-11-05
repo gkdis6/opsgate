@@ -14,7 +14,7 @@ sudo 권한, 클러스터 자격 증명, 프로덕션 비밀값, 배포 키가 �
 
 허용 목록에 있는 각 저장소와 그 `.git` 디렉터리를 `opsdev`가 탐색하고 읽고 쓸 수 있도록 권한을 주세요. 예를 들어 관리자는 `/srv/projects/example`에 특정 사용자를 지정한 ACL을, 새 파일에 적용할 기본 ACL을, 상위 디렉터리에 탐색 ACL을 설정할 수 있습니다. 먼저 기존 그룹과 ACL 권한을 검토하세요. Git worktree는 원본 저장소의 객체와 ref를 공유하므로 worktree에만 쓰기 권한을 주어서는 충분하지 않습니다. HTTP 계정에는 저장소, runner 상태, 에이전트 자격 증명, runner 설정을 수정할 권한을 주지 마세요.
 
-[dev-runner.example.yaml](../../deploy/dev-runner.example.yaml)을 `/etc/opsgate/dev-runner.yaml`로 복사하세요. 파일은 root 소유로 설정하고 `opsdev`가 읽을 수 있게 하되, 두 서비스 계정 모두 쓸 수 없게 하세요. 상위 디렉터리의 접근 권한도 제한하세요. 프로젝트 이름, 절대 경로, base ref, 고정된 에이전트 argv를 정확히 지정하세요. argv에서는 `{workdir}`와 `{output}`만 치환하며, 프롬프트는 `prompt.txt`에 비공개로 저장한 뒤 stdin으로 전달합니다.
+[dev-runner.example.yaml](../../deploy/dev-runner.example.yaml)을 `/etc/opsgate/dev-runner.yaml`로 복사하세요. 파일은 root 소유로 설정하고 `opsdev`가 읽을 수 있게 하되, 서버 계정과 runner 계정 모두 쓸 수 없게 하세요. 상위 디렉터리의 접근 권한도 제한하세요. 프로젝트 이름, 절대 경로, base ref, 고정된 에이전트 argv를 정확히 지정하세요. argv에서는 `{workdir}`와 `{output}`만 치환하며, 프롬프트는 `prompt.txt`에 비공개로 저장한 뒤 stdin으로 전달합니다.
 
 에이전트 환경에는 HOME, 고정된 PATH, LANG, TERM, 운영자가 설정한 `env` 항목만 들어갑니다. 이 항목은 신뢰할 수 있는 설정으로 취급하며 기본값을 덮어쓸 수 있으므로, 에이전트에 필요한 항목만 설정하세요.
 
@@ -26,10 +26,13 @@ sudo 권한, 클러스터 자격 증명, 프로덕션 비밀값, 배포 키가 �
 
 ```ini
 [Service]
+RuntimeDirectoryPreserve=yes
 ExecStartPre=/usr/bin/setfacl -m g:opsgate:--x /run/opsgate-dev
 ```
 
 디렉터리 소유자인 `opsdev`는 root 권한 없이 이 ACL을 적용할 수 있습니다. 소켓 자체는 `opsdev:opsgate` 소유이며 권한은 0660입니다. 연결을 수락할 때마다 Linux `SO_PEERCRED`도 확인하므로, runner와 UID가 같거나 `socket_group`이 기본 그룹 또는 보조 그룹인 UID만 연결할 수 있습니다. 소켓 그룹 권한만으로는 상위 디렉터리를 탐색할 수 없어 런타임 디렉터리 ACL이 필요합니다. HTTP 계정을 `opsdev`에 추가하거나 상태 디렉터리 권한을 완화하지 마세요.
+
+서버는 파드에서 실행하므로, runner가 실행되는 노드에 파드를 배치하고 `/run/opsgate-dev`를 `hostPath`로 마운트해 소켓에 접근해야 합니다. 파드의 `runAsGroup`을 호스트의 `socket_group` GID로 설정하세요. `internal/devrunner/peer_linux.go`의 피어 검사는 일치하는 기본 그룹을 허용하고, 위 런타임 디렉터리 ACL은 그 그룹에 탐색 권한을 줍니다. 같은 드롭인에 `RuntimeDirectoryPreserve=yes`도 설정하세요. 그렇지 않으면 runner가 중지될 때 systemd가 디렉터리를 삭제하며, 파드의 마운트는 이전 디렉터리를 계속 가리킵니다. 이 파드와 runner 간 연결 구성은 실험적이며 아직 실행해 확인하지 않았습니다.
 
 systemd로 runner를 활성화하고 시작한 뒤 MCP 서버를 설정하세요.
 

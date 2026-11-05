@@ -4,7 +4,7 @@
 
 <img src="../images/ko/approval-flow.svg" alt="쓰기 승인 경로, 재호출 검사와 거부 경로" width="830">
 
-쓰기 래퍼로 등록한 도구는 계획(Plan)이 성공하고 사람이 승인해야 실행(Apply) 단계로 넘어갑니다. 호스트/Kubernetes 쓰기, 노트 쓰기, `dev_task_start`가 이 절차를 따릅니다. 코딩 작업을 중지하는 `dev_task_cancel`은 승인 없이 실행할 수 있도록 설계했습니다.
+쓰기 래퍼로 등록한 도구는 계획(Plan)이 성공하고 사람이 승인해야 실행(Apply) 단계로 넘어갑니다. Kubernetes 쓰기, 노트 쓰기, `dev_task_start`가 이 절차를 따릅니다. 코딩 작업을 중지하는 `dev_task_cancel`은 승인 없이 실행할 수 있도록 설계했습니다.
 
 ## 실행 흐름
 
@@ -48,7 +48,7 @@ opsgate는 먼저 요청과 `require_web` 제한을 검증한 뒤 유효한 승�
 approval:
   ttl: 10m
   window: 15m
-  window_tools: [host_service_restart]
+  window_tools: [k8s_rollout_restart]
 ```
 
 ### 클라이언트 내 확인
@@ -78,7 +78,7 @@ approval:
 최초 호출은 링크, 만료 시각, 재호출 안내를 담은 텍스트 도구 결과를 반환하고, 감사 로그에는 `pending`으로 기록합니다. 프로토콜 오류는 아니며 실행(Apply) 단계로 넘어가지 않습니다. 승인한 뒤에는 클라이언트로 돌아가 재호출을 요청하세요. 다음은 재호출 예시입니다.
 
 ```json
-{"unit":"example.service","approval_id":"<id from the pending result>"}
+{"kind":"deployment","namespace":"default","name":"web","approval_id":"<id from the pending result>"}
 ```
 
 페이지에는 계획을 한 줄씩 표시하고 diff 줄을 강조하며, 마스킹된 인자도 함께 보여 줍니다. 요청한 사용자 본인만 페이지를 열고 승인 여부를 결정할 수 있습니다. 승인·거부 요청에는 CSRF 검사와 교차 출처 보호를 적용하고, 결정은 한 번만 받습니다. 페이지에는 스크립트를 허용하지 않는 엄격한 Content Security Policy를 적용합니다.

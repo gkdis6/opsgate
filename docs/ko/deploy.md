@@ -2,11 +2,7 @@
 
 [English](../deploy.md)
 
-호스트 점검에는 Linux 네이티브 바이너리를, Kubernetes 점검에는 컨테이너를 사용하세요.
-distroless 이미지에는 셸, sudo, systemctl, journalctl이 없으며,
-파드 안에서 실행하는 host provider는 노드의 상태를 보여 주지 않습니다.
-파드 안에서 host provider를 켜면 opsgate가 시작할 때 경고를 남깁니다.
-Darwin 빌드는 로컬 클라이언트용이며, systemd로 배포하려면 Linux가 필요합니다.
+Kubernetes 점검에는 컨테이너를 사용하세요. Darwin 빌드는 kubeconfig로 클러스터에 접근하는 로컬 클라이언트용입니다. Windows 빌드는 없습니다.
 
 Streamable HTTP, OAuth, 인증, 사람의 승인, 쓰기 도구는 모두 구현했습니다.
 현재 소스는 첫 공개 릴리스를 준비하는 단계이며, 외부 보안 검토는 아직 받지 않았습니다.
@@ -74,7 +70,7 @@ YAML이나 명령 인자에 직접 넣거나 소스 관리에 포함하지 마�
 `ops:write`는 필요한 운영자에게만 주세요.
 각 쓰기 작업에는 허용된 대상, OS/RBAC 권한, 사람의 승인도 필요합니다.
 
-호스트에서는 opsgate를 `127.0.0.1:8787`에 바인딩하고 로컬 리버스 프록시에서 TLS를 종료하세요.
+Service `opsgate:8787` 앞의 ingress나 리버스 프록시에서 TLS를 종료하세요.
 `/mcp`, `/.well-known/*`, `/oauth/*`, `/passkey/*`, `/passkey.js`, `/approve/*`, `/admin/clients`를 프록시하도록 설정하세요.
 경로, 쿼리, Host, Authorization, Origin, MCP 헤더는 변경하지 말고,
 응답 헤더, 쿠키, 리다이렉트도 그대로 전달하세요.
@@ -101,12 +97,12 @@ Forwarded-Host 헤더는 Host를 대체하지 않습니다.
 `notify_url`로 대기 중인 클라이언트의 JSON 알림을 보낼 수 있지만, 알림 전달을 보장하지는 않습니다.
 클라이언트의 목적지를 검토하고, 클라이언트가 스스로 제시한 이름을 검증된 정보로 취급하지 마세요.
 
-예를 들어 다음 Caddy 설정은 TLS 인증서를 발급받고 응답을 스트리밍합니다.
+예를 들어 `opsgate` 네임스페이스에서 실행하는 Caddy는 다음 설정으로 TLS 인증서를 발급받고 응답을 스트리밍합니다.
 
 ```caddyfile
 mcp.example.com {
     @opsgate path /mcp /.well-known/* /oauth/* /passkey/* /passkey.js /approve/* /admin/clients
-    reverse_proxy @opsgate 127.0.0.1:8787 {
+    reverse_proxy @opsgate opsgate:8787 {
         flush_interval -1
     }
     respond 404
@@ -118,31 +114,10 @@ mcp.example.com {
 클러스터 네트워크 정책으로 ingress 컨트롤러와 모니터링에서만 Kubernetes Service에 접근할 수 있도록 제한하세요.
 DNS, Google OIDC, Kubernetes API에 필요한 아웃바운드 통신은 허용하세요.
 
-## systemd로 설치
-
-Linux 아카이브를 검증하고 푼 뒤, 다음 명령을 관리자 권한으로 실행하세요.
-
-```sh
-sudo useradd --system --user-group --home-dir /var/lib/opsgate --shell /usr/sbin/nologin opsgate
-sudo install -o root -g root -m 0755 opsgate /usr/local/bin/opsgate
-sudo install -d -o root -g opsgate -m 0750 /etc/opsgate
-sudo install -o root -g opsgate -m 0640 deploy/systemd/opsgate.http.example.yaml /etc/opsgate/opsgate.yaml
-sudo install -o root -g root -m 0644 deploy/systemd/opsgate.service /etc/systemd/system/opsgate.service
-```
+## Kubernetes에 설치
 
 배포 템플릿은 바이너리 아카이브에는 없고, 체크아웃한 소스에 들어 있습니다.
-비밀값 프로비저닝 시스템으로 Google 클라이언트 비밀값을 `/etc/opsgate/google-client-secret`에 배치하세요.
-소유자는 `root:opsgate`, 모드는 `0640`으로 설정하고,
-시작하기 전에 설정의 오리진, 클라이언트 ID, 사용자, 허용 목록을 수정하세요.
-유닛은 OAuth 상태와 감사 로그를 저장할 비공개 디렉터리 `/var/lib/opsgate`와 `/var/log/opsgate`를 만듭니다.
-감사 로그의 보존 정책을 설정하고, 로그 수집 시 접근을 제한하세요.
-로그 로테이션 중에도 이벤트가 누락되지 않도록 설정하세요.
 
-호스트 예제는 Kubernetes도 활성화합니다.
-컨텍스트가 `opsgate`이고 자격 증명의 권한을 적절히 제한한 `/etc/opsgate/kubeconfig`를 준비하세요.
-모드는 `0640`, 소유자는 `root:opsgate`로 설정하세요.
-서비스는 홈 디렉터리를 숨기므로 `~/.kube`에 의존하지 마세요.
-Kubernetes를 사용하지 않으면 `providers.kubernetes.enabled: false`로 설정하세요.
 네임스페이스 허용 목록은 RBAC을 보완합니다.
 제공된 `rbac-readonly.yaml`의 ClusterRoleBinding은 ServiceAccount가 Kubernetes API 수준에서 허용된 리소스 종류를 모든 네임스페이스에서 읽을 수 있게 합니다. opsgate 정책이 거부한 네임스페이스도 포함됩니다.
 watcher도 이 역할을 공유합니다. 이 바인딩에서는 애플리케이션 정책이 네임스페이스 접근 경계입니다.
@@ -150,55 +125,9 @@ watcher도 이 역할을 공유합니다. 이 바인딩에서는 애플리케이
 쓰기는 선택 사항이며, 이 권한만으로는 허용하지 않습니다.
 쓰기가 필요하면 필요한 네임스페이스 스코프 권한만 추가하세요.
 
-```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now opsgate
-sudo systemctl status opsgate
-curl --fail http://127.0.0.1:8787/healthz
-```
-
-공개 오리진에서 검색(discovery)이 동작하는지 확인하세요.
-인증되지 않은 `/mcp` 요청을 거부하는지, 목록에 없는 Google 신원으로 로그인할 수 없는지도 확인하세요.
-허용된 일회용 대상에 읽기 작업을 하나 실행하고,
-쓰기를 활성화했다면 승인된 쓰기 작업도 하나 실행하세요.
-
-### 호스트 서비스 재시작 옵션
-
-기본 유닛은 `NoNewPrivileges=yes`와 빈 capability bounding set을 사용합니다.
-선택 설정인 `restart_units: [myapp.service]`와 `command_prefix: [/usr/bin/sudo, -n]`을 사용하려면
-권한 설정을 직접 바꿔야 합니다.
-재시작이 필요하지 않으면 `restart_units: []`를 유지하세요.
-
-`sudo visudo -f /etc/sudoers.d/opsgate`로 아래 규칙을 정확히 작성하고 모드를 0440으로 설정하세요.
-
-```sudoers
-opsgate ALL=(root) NOPASSWD: /usr/bin/systemctl restart -- myapp.service
-```
-
-실행되는 argv는 정확히 `sudo -n /usr/bin/systemctl restart -- <unit>`입니다.
-설치된 `systemctl`의 절대 경로와 정확한 유닛 이름에 맞추세요.
-임의의 systemctl 명령, 와일드카드 유닛, 셸 실행을 허용하거나 비밀번호 없이 모든 명령을 실행할 수 있는 sudo 권한을 주지 마세요.
-
-`sudo systemctl edit opsgate`로 다음 내용을 추가하세요.
-
-```ini
-[Service]
-NoNewPrivileges=no
-CapabilityBoundingSet=
-CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_AUDIT_WRITE
-```
-
-이렇게 제한한 capability로 sudo가 자격 증명을 변경하고 감사 기능과 연동할 수 있습니다.
-sudo/PAM 요구사항은 배포판마다 다르므로, 설치된 정책으로 테스트하고 필요한 capability만 남기세요.
-이제 서비스가 정확히 지정한 재시작 명령을 관리자 권한으로 실행할 수 있으므로, 이 권한 변경이 보안에 미치는 영향을 검토하세요.
-설정, 실행 파일, 유닛, sudoers 파일은 관리자가 소유하도록 유지하세요.
-systemd를 다시 로드하고 서비스를 재시작하세요.
-
-## Kubernetes에 설치
-
 `deploy/kubernetes/opsgate-deployment.yaml`과 기존 `deploy/kubernetes/rbac-readonly.yaml`을 사용하세요.
 이 배포는 RBAC 매니페스트에 정의된 ServiceAccount `opsgate`를 사용합니다.
-host provider는 끄고 읽기만 활성화하며, OAuth 상태를 저장할 PVC를 마운트합니다.
+읽기만 활성화하며, OAuth 상태를 저장할 PVC를 마운트합니다.
 복제본 수는 하나로, 전략은 `Recreate`로 유지하세요.
 여러 프로세스가 상태 파일을 동시에 공유해서는 안 됩니다.
 기본 StorageClass가 필요하며, 기본값이 없으면 PVC에 직접 지정하세요.
@@ -220,7 +149,7 @@ kubectl -n opsgate rollout status deployment/opsgate
 
 시크릿은 필수이며 읽기 전용으로 마운트합니다. 매니페스트에는 클라이언트 비밀값이 들어 있지 않습니다.
 시크릿의 RBAC 권한을 제한하고 저장 시 암호화를 활성화하세요.
-로그는 클러스터 로그 수집기가 수집할 수 있도록 stderr로 출력합니다.
+로그는 클러스터 로그 수집기가 수집할 수 있도록 stderr로 출력합니다. 클러스터 로그 수집기에서 감사 로그 보존과 수집 접근 제한을 설정하고 이벤트 누락을 방지하세요.
 TLS ingress/리버스 프록시가 Service `opsgate:8787`로 연결되도록 설정하고,
 앞서 설명한 경로와 스트리밍 동작을 유지하세요.
 
@@ -247,19 +176,14 @@ subPath 마운트는 변경 사항을 자동으로 다시 로드하지 않으므
 kubectl -n opsgate rollout restart deployment/opsgate
 ```
 
+공개 오리진에서 검색(discovery)이 동작하는지 확인하세요.
+인증되지 않은 `/mcp` 요청을 거부하는지, 목록에 없는 신원으로 로그인할 수 없는지도 확인하세요.
+허용된 일회용 대상에 읽기 작업을 하나 실행하고,
+쓰기를 활성화했다면 승인된 쓰기 작업도 하나 실행하세요.
+
 ## 업그레이드와 로컬 빌드
 
-먼저 릴리스 노트를 읽고 새 릴리스 산출물을 검증하세요.
-호스트 서비스를 중지하고 OAuth 상태, 설정, 감사 로그를 안전하게 백업하세요.
-바이너리를 교체한 뒤 서비스를 시작하고 상태 확인과 인증 검사를 다시 하세요.
-롤백할 수 있도록 이전에 검증한 바이너리와 그 버전에 호환되는 상태 백업을 보관하세요.
-이전 프로세스와 새 프로세스가 같은 상태 파일을 사용하며 동시에 실행되지 않도록 하세요.
-
-Kubernetes에서는 배포를 중지한 상태에서 일관된 상태 백업을 만드세요.
-검증된 이미지 다이제스트로 바꾼 뒤 적용하세요.
-`Recreate` 전략은 의도적으로 서비스를 잠시 중단합니다.
-트래픽을 재개하기 전에 프로브, 검색, 로그인, 정책 검사가 정상인지 확인하세요.
-롤백할 때는 이전 버전과 호환되는 상태를 복원해야 할 수 있습니다.
+릴리스 노트를 읽고 새 아티팩트를 먼저 검증하세요. Kubernetes 배포를 중지한 동안 OAuth 상태, 설정, 감사 로그를 안전하게 백업하고, 검증된 이미지 다이제스트로 바꾼 뒤 적용하세요. `Recreate`는 의도적으로 짧은 중단을 만듭니다. 트래픽을 다시 받기 전에 프로브, 검색, 로그인, 정책 검사를 확인하세요. 롤백을 위해 이전의 검증된 이미지와 호환되는 상태 백업을 보관하세요. 롤백에는 이전 버전과 호환되는 상태 복원이 필요할 수 있습니다. 구버전과 새 버전 프로세스를 같은 상태 파일에 동시에 연결하지 마세요.
 
 `make docker VERSION=dev`는 Go 1.26을 사용해 로컬에서 빌드하고 root가 아닌 사용자로 실행되는 distroless 이미지를 만듭니다.
 `make snapshot`은 GoReleaser v2(릴리스 워크플로는 v2.19.0으로 고정), Syft, Buildx가 설치된 Docker를 사용합니다.

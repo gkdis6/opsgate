@@ -28,7 +28,7 @@ func (approvalBrowser) RequireUser(next func(http.ResponseWriter, *http.Request,
 }
 
 func TestDefaultApprovalRejectsClientSelfApproval(t *testing.T) {
-	for _, mode := range []string{config.ModeHost, config.ModeKubernetes} {
+	for _, mode := range []string{config.ModeKubernetes} {
 		t.Run(mode, func(t *testing.T) {
 			cfg, err := config.Parse([]byte("mode: "+mode+"\n"), "attack")
 			if err != nil {
@@ -96,12 +96,12 @@ func TestStdioApprovalServer(t *testing.T) {
 }
 
 func TestStdioModeApproval(t *testing.T) {
-	for _, mode := range []string{config.ModeHost, config.ModeKubernetes} {
+	for _, mode := range []string{config.ModeKubernetes} {
 		for _, setting := range []string{"unset", "false", "true", "shown"} {
 			t.Run(mode+"/"+setting, func(t *testing.T) {
 				dir := t.TempDir()
 				path := filepath.Join(dir, "opsgate.yaml")
-				data := fmt.Sprintf("mode: %s\nserver:\n  audit_log: %q\nstdio:\n  scopes: [ops:read, ops:write]\nhttp:\n  public_url: https://ops.example\nproviders:\n  host:\n    enabled: false\n  kubernetes:\n    enabled: false\n  note:\n    enabled: true\n    vault: %q\n    allow_write: true\n", mode, filepath.Join(dir, "audit"), dir)
+				data := fmt.Sprintf("mode: %s\nserver:\n  audit_log: %q\nstdio:\n  scopes: [ops:read, ops:write]\nhttp:\n  public_url: https://ops.example\nproviders:\n  kubernetes:\n    enabled: false\n  note:\n    enabled: true\n    vault: %q\n    allow_write: true\n", mode, filepath.Join(dir, "audit"), dir)
 				if setting == "true" || setting == "false" {
 					data += "approval:\n  require_web: " + setting + "\n"
 				}
@@ -172,7 +172,7 @@ func TestHTTPElicitationWarning(t *testing.T) {
 		{name: "static", settings: "auth:\n  mode: static\n", warn: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg, err := config.Parse([]byte("mode: host\nhttp:\n  public_url: https://ops.example\n  listen: 127.0.0.1:99999\nproviders:\n  host:\n    enabled: false\n"+tc.settings), "warning")
+			cfg, err := config.Parse([]byte("mode: kubernetes\nhttp:\n  public_url: https://ops.example\n  listen: 127.0.0.1:99999\nproviders:\n  kubernetes:\n    enabled: false\n"+tc.settings), "warning")
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -4,7 +4,7 @@
 
 <img src="images/approval-flow.svg" alt="Write approval channels, retry checks and denial exits" width="830">
 
-Tools registered through the write wrapper need a successful plan and human confirmation before Apply. This includes host/Kubernetes writes, note writes and `dev_task_start`. Stopping a coding task with `dev_task_cancel` deliberately needs no approval.
+Tools registered through the write wrapper need a successful plan and human confirmation before Apply. This includes Kubernetes writes, note writes and `dev_task_start`. Stopping a coding task with `dev_task_cancel` deliberately needs no approval.
 
 ## Execution flow
 
@@ -48,7 +48,7 @@ This is a configuration fragment to merge into a working configuration:
 approval:
   ttl: 10m
   window: 15m
-  window_tools: [host_service_restart]
+  window_tools: [k8s_rollout_restart]
 ```
 
 ### In-client elicitation
@@ -78,7 +78,7 @@ initial call -> pending result with /approve/<id> link
 The initial call returns a text tool result with a link, an expiry and instructions to retry. It is audited as `pending`; it is not a protocol error and does not execute Apply. After approving, return to the client and request the retry. For example, a retry may contain:
 
 ```json
-{"unit":"example.service","approval_id":"<id from the pending result>"}
+{"kind":"deployment","namespace":"default","name":"web","approval_id":"<id from the pending result>"}
 ```
 
 The page displays the plan line by line, highlights diff lines, and includes masked arguments. Only the exact requesting user can view or decide it. Decisions are protected by CSRF checks and cross-origin protection, are accepted once, and use a strict script-free Content Security Policy.

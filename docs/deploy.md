@@ -2,11 +2,7 @@
 
 [한국어](ko/deploy.md)
 
-Use the native Linux binary for host inspection and the container for Kubernetes
-inspection. The distroless image contains no shell, sudo, systemctl or journalctl;
-the host provider does not represent a node when run inside a pod, and opsgate
-logs a warning at startup if it is enabled there. Darwin builds
-are provided for local clients; the systemd deployment requires Linux.
+Use the container for Kubernetes inspection. Darwin builds are provided for local clients accessing clusters through kubeconfig. There are no Windows builds.
 
 Streamable HTTP, OAuth, authentication, human approval and write tools are
 implemented. This checkout is preparing for its first public release; third-party
@@ -72,8 +68,7 @@ the client secret in a file or Kubernetes Secret, never directly in YAML, a comm
 source control. Give `ops:write` only to operators who need it. Each write also
 requires an allowed target, OS/RBAC permissions and human approval.
 
-On a host, bind opsgate to `127.0.0.1:8787` and terminate TLS at a local reverse
-proxy. Proxy `/mcp`, `/.well-known/*`, `/oauth/*`, `/passkey/*`, `/passkey.js`,
+Terminate TLS at an ingress or reverse proxy in front of Service `opsgate:8787`. Proxy `/mcp`, `/.well-known/*`, `/oauth/*`, `/passkey/*`, `/passkey.js`,
 `/approve/*` and `/admin/clients` without changing the path, query, Host, Authorization, Origin or MCP headers. Preserve response
 headers, cookies and redirects. Support GET, POST, DELETE and streaming responses;
 disable buffering and caching, and allow long-lived MCP connections. Do not log
@@ -97,12 +92,12 @@ review at `/admin/clients` by subjects in `admins` (also present in `users`).
 `notify_url` can send a best-effort JSON notification for pending clients. Review
 client destinations and never treat a self-reported client name as verified.
 
-For example, Caddy obtains TLS certificates and streams responses with:
+For example, Caddy running in the `opsgate` namespace obtains TLS certificates and streams responses with:
 
 ```caddyfile
 mcp.example.com {
     @opsgate path /mcp /.well-known/* /oauth/* /passkey/* /passkey.js /approve/* /admin/clients
-    reverse_proxy @opsgate 127.0.0.1:8787 {
+    reverse_proxy @opsgate opsgate:8787 {
         flush_interval -1
     }
     respond 404
@@ -114,31 +109,11 @@ it need not be exposed by the public proxy. Restrict Kubernetes Service access
 to the ingress controller and monitoring using your cluster's network policy.
 Permit required egress to DNS, Google OIDC and the Kubernetes API.
 
-## Install with systemd
-
-After verifying and extracting the Linux archive, run as an administrator:
-
-```sh
-sudo useradd --system --user-group --home-dir /var/lib/opsgate --shell /usr/sbin/nologin opsgate
-sudo install -o root -g root -m 0755 opsgate /usr/local/bin/opsgate
-sudo install -d -o root -g opsgate -m 0750 /etc/opsgate
-sudo install -o root -g opsgate -m 0640 deploy/systemd/opsgate.http.example.yaml /etc/opsgate/opsgate.yaml
-sudo install -o root -g root -m 0644 deploy/systemd/opsgate.service /etc/systemd/system/opsgate.service
-```
+## Install in Kubernetes
 
 The deployment templates are in the source checkout, not the binary archive.
-Place the Google client secret at `/etc/opsgate/google-client-secret`, owned by
-`root:opsgate`, mode `0640`, using your secret provisioning system. Edit the
-config's origin, client ID, users and allowlists before starting. The unit creates
-private `/var/lib/opsgate` and `/var/log/opsgate` directories for OAuth state and
-audit records. Configure retention and restricted collection for audit logs;
-avoid dropping events during rotation.
 
-The host example also enables Kubernetes: provision `/etc/opsgate/kubeconfig`
-(mode `0640`, `root:opsgate`) with context `opsgate` and appropriately restricted
-credentials. The service hides home directories, so do not rely on `~/.kube`.
-Set `providers.kubernetes.enabled: false` if Kubernetes is unused. Namespace
-allowlists supplement RBAC. The ClusterRoleBinding in `rbac-readonly.yaml` lets
+Namespace allowlists supplement RBAC. The ClusterRoleBinding in `rbac-readonly.yaml` lets
 the ServiceAccount read allowed resource kinds across all namespaces at the
 Kubernetes API level, including namespaces denied by opsgate policy. The watcher
 shares this role. Application policy is the namespace boundary with this binding;
@@ -146,55 +121,9 @@ replace it with per-namespace RoleBindings for a stricter setup. Its permissions
 do not authorize optional write actions; add only the required namespace-scoped
 permissions if writes are needed.
 
-```sh
-sudo systemctl daemon-reload
-sudo systemctl enable --now opsgate
-sudo systemctl status opsgate
-curl --fail http://127.0.0.1:8787/healthz
-```
-
-Verify discovery through the public origin, that unauthenticated `/mcp` requests
-are rejected, and that an unlisted Google identity cannot sign in. Exercise one
-read and, if enabled, one approved write against a disposable allowed target.
-
-### Optional host service restarts
-
-The default unit has `NoNewPrivileges=yes` and an empty capability bounding set.
-The optional `restart_units: [myapp.service]` and
-`command_prefix: [/usr/bin/sudo, -n]` require an explicit privilege change to work.
-Leave `restart_units: []` if restarts are unnecessary.
-
-Use `sudo visudo -f /etc/sudoers.d/opsgate` to install this exact rule (mode 0440):
-
-```sudoers
-opsgate ALL=(root) NOPASSWD: /usr/bin/systemctl restart -- myapp.service
-```
-
-The executed argv is exactly
-`sudo -n /usr/bin/systemctl restart -- <unit>`. Match the installed absolute
-`systemctl` path and exact unit name. Never grant arbitrary systemctl commands,
-wildcard units, a shell, or blanket passwordless sudo.
-
-Use `sudo systemctl edit opsgate` to add:
-
-```ini
-[Service]
-NoNewPrivileges=no
-CapabilityBoundingSet=
-CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_AUDIT_WRITE
-```
-
-The bounded capabilities let sudo change credentials and use audit integration;
-sudo/PAM requirements vary by distribution. Test with the installed policy and
-retain only necessary capabilities. Review the security tradeoff: the service
-can now invoke that exact privileged restart. Keep config, executable, unit and
-sudoers files administrator-owned. Reload systemd and restart the service.
-
-## Install in Kubernetes
-
 Use `deploy/kubernetes/opsgate-deployment.yaml` and the existing
 `deploy/kubernetes/rbac-readonly.yaml`. The deployment uses the latter's ServiceAccount
-`opsgate`, disables the host provider, enables only reads, and mounts a PVC for
+`opsgate`, enables only reads, and mounts a PVC for
 OAuth state. Keep one replica and the `Recreate` strategy; concurrent processes
 must not share the state file. A default StorageClass is required, or set one
 explicitly on the PVC. Protect the PVC and its backups as credentials.
@@ -215,7 +144,7 @@ kubectl -n opsgate rollout status deployment/opsgate
 
 The Secret is required and mounted read-only; no client secret is embedded in
 the manifest. Restrict Secret RBAC and enable encryption at rest. Logs go to
-stderr for your cluster log collector. Configure a TLS ingress/reverse proxy to
+stderr for your cluster log collector. Configure audit retention and restricted collection in that collector, and avoid dropping events. Configure a TLS ingress/reverse proxy to
 Service `opsgate:8787`, preserving the routes and streaming behavior above.
 Probes use the internal `/healthz` endpoint. The manifest binds to `0.0.0.0`, so
 each supplied HTTP probe includes
@@ -241,18 +170,13 @@ Restart after changing the ConfigMap (the subPath mount does not hot reload):
 kubectl -n opsgate rollout restart deployment/opsgate
 ```
 
+Verify discovery through the public origin, that unauthenticated `/mcp` requests
+are rejected, and that an unlisted identity cannot sign in. Exercise one
+read and, if enabled, one approved write against a disposable allowed target.
+
 ## Upgrades and local builds
 
-Read release notes and verify the new artifacts first. Stop the host service,
-back up OAuth state, config and audit logs securely, replace the binary, then
-start and repeat the health/authentication checks. Keep the prior verified binary
-and a compatible state backup for rollback. Do not run old and new processes
-against the same state file.
-
-For Kubernetes, take a consistent state backup while the deployment is stopped,
-update the verified image digest, and apply. `Recreate` intentionally incurs a
-short outage. Confirm probes, discovery, login and policy checks before resuming
-traffic. A rollback may require restoring state compatible with the old version.
+Read release notes and verify the new artifacts first. For Kubernetes, stop the deployment and securely back up OAuth state, config and audit logs, then update the verified image digest and apply. `Recreate` intentionally incurs a short outage. Confirm probes, discovery, login and policy checks before resuming traffic. Keep the prior verified image and a compatible state backup for rollback; rollback may require restoring state compatible with the old version. Never run old and new processes against the same state file.
 
 `make docker VERSION=dev` builds locally from Go 1.26 into a nonroot distroless
 image. `make snapshot` uses GoReleaser v2 (the release workflow pins v2.19.0),

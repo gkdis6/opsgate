@@ -10,11 +10,10 @@ metadata:
   namespace: opsgate
 data:
   opsgate.yaml: |
-    # `opsgate init -mode kubernetes` writes a file like this one. The mode
+    # `opsgate init` writes a file like this one. The mode
     # serves HTTP on 0.0.0.0:8787 with builtin sign-in, keeps its state in
-    # /var/lib/opsgate, uses the pod's ServiceAccount, audits to stderr and
-    # leaves host tools off. Print every effective value with
-    # `opsgate config show -config <file>`.
+    # /var/lib/opsgate, uses the pod's ServiceAccount and audits to stderr.
+    # Print every effective value with `opsgate config show -config <file>`.
     mode: kubernetes
     http:
       public_url: https://mcp.example.com

@@ -131,9 +131,9 @@ func TestCallerToolMetadata(t *testing.T) {
 	}{
 		{"absent", nil, true},
 		{"empty", map[string]any{"tools": []string(nil)}, true},
-		{"globs", map[string]any{"tools": []string{"host_*"}}, true},
-		{"string", map[string]any{"tools": "host_*"}, false},
-		{"wrong slice type", map[string]any{"tools": []any{"host_*"}}, false},
+		{"globs", map[string]any{"tools": []string{"k8s_*"}}, true},
+		{"string", map[string]any{"tools": "k8s_*"}, false},
+		{"wrong slice type", map[string]any{"tools": []any{"k8s_*"}}, false},
 		{"null", map[string]any{"tools": nil}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -144,7 +144,7 @@ func TestCallerToolMetadata(t *testing.T) {
 			}
 			if ok && len(c.Tools) > 0 {
 				c.Tools[0] = "*"
-				if tc.extra["tools"].([]string)[0] != "host_*" {
+				if tc.extra["tools"].([]string)[0] != "k8s_*" {
 					t.Fatal("caller can mutate verifier tool restrictions")
 				}
 			}

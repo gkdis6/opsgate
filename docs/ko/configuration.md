@@ -10,21 +10,22 @@
 파일에 직접 적은 값이 항상 우선합니다. 모드가 없으면 아래 표의 기본값을 쓰고,
 전송 방식의 기본값은 stdio입니다.
 
-| 키 | `mode: host` (systemd 서비스) | `mode: kubernetes` (파드) |
-| --- | --- | --- |
-| `-transport` 기본값 | `http` | `http` |
-| `http.listen` | `127.0.0.1:8787` | `0.0.0.0:8787` |
-| `auth.mode` | `builtin` | `builtin` |
-| `auth.builtin.upstream.provider` | `passkey` | `passkey` |
-| `auth.builtin.state_file` | `/var/lib/opsgate/oauth.json` | `/var/lib/opsgate/oauth.json` |
-| `approval.web` | `auth.mode`가 builtin이면 `true` | `auth.mode`가 builtin이면 `true` |
-| `server.audit_log` | `/var/log/opsgate/audit.jsonl` | `""` (stderr. 클러스터 로그 수집용) |
-| `providers.host.enabled` | `true` | `false`. 파드는 노드가 아니라 자기 컨테이너를 보므로 켜면 오류입니다 |
-| `providers.kubernetes.enabled` | `false` | `true`. 파드의 ServiceAccount를 씁니다(`kubeconfig: ""`) |
+| 키 | `mode: kubernetes` (파드) |
+| --- | --- |
+| `-transport` 기본값 | `http` |
+| `http.listen` | `0.0.0.0:8787` |
+| `auth.mode` | `builtin` |
+| `auth.builtin.upstream.provider` | `passkey` |
+| `auth.builtin.state_file` | `/var/lib/opsgate/oauth.json` |
+| `approval.web` | `auth.mode`가 builtin이면 `true` |
+| `server.audit_log` | `""` (stderr. 클러스터 로그 수집용) |
+| `providers.kubernetes.enabled` | `true`. 파드의 ServiceAccount를 씁니다(`kubeconfig: ""`) |
 
-네임스페이스, 유닛, 사용자, 쓰기 대상은 모드가 채우지 않습니다.
-`opsgate init`은 이것들과 함께 모드, 공개 URL, 로그인 방식(패스키, Google, GitHub)을
-묻고, 모드 기반의 짧은 파일을 권한 0600으로 만듭니다. 이미 있는 파일은 `-force` 없이
+네임스페이스, 사용자, 쓰기 대상은 모드가 채우지 않습니다.
+`opsgate init`은 네임스페이스, 사용자, 공개 URL, 로그인 방식(패스키, Google, GitHub)을
+묻고, `mode: kubernetes`인 짧은 파일을 권한 0600으로 만듭니다. 쓰기 도구는 설정에
+대상을 나열하기 전까지 꺼져 있습니다. 사용자에게 `ops:write`를
+부여할지 묻습니다. 이미 있는 파일은 `-force` 없이
 덮어쓰지 않습니다. 모든 질문에 대응하는 플래그가 있습니다(`opsgate init -h`).
 터미널이 없거나 `-yes`를 주면 답하지 않은 질문은 기본값을 쓰고, 공개 URL과 사용자는
 플래그로 줘야 합니다. 파일을 쓰기 전에 HTTP 서버와 같은 방식으로 검증합니다.
@@ -38,17 +39,13 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 
 | YAML 키 | 기본값 | 설명 |
 | --- | --- | --- |
-| `mode` | `""` | 비어 있거나 `host`, `kubernetes`입니다. 위 설명을 참고하세요 |
+| `mode` | `""` | 비어 있거나 `kubernetes`입니다. 위 설명을 참고하세요 |
 | `server.name` | `opsgate` | MCP 서버 이름입니다 |
 | `server.audit_log` | `""` | JSONL 로그 파일 경로입니다. 비어 있으면 stderr에 기록합니다 |
 | `server.max_output_bytes` | `65536` | 도구 출력의 바이트 수 제한이며, 양수여야 합니다 |
 | `server.tool_timeout` | `30s` | 도구가 취소 신호를 따를 때 적용되는 호출 제한 시간입니다. 쓰기는 계획(Plan)과 실행(Apply)에 각각 따로 적용하며, 양수여야 합니다 |
 | `stdio.user` | `local` | 감사 로그의 사용자 식별 레이블이며, 신뢰 경계는 OS 사용자입니다 |
 | `stdio.scopes` | `[ops:read]` | ops:read, ops:write, dev:run을 허용합니다. 쓰기 스코프만으로 작업을 활성화하지는 않습니다 |
-| `providers.host.enabled` | `false` | host provider를 활성화합니다 |
-| `providers.host.units` | `[]` | 유닛 glob 허용 목록이며, 비어 있으면 어떤 유닛도 허용하지 않습니다 |
-| `providers.host.disk_paths` | `[/]` | 개요에 사용할 마운트 지점입니다 |
-| `providers.host.max_log_lines` | `500` | 호출당 journal 로그의 최대 줄 수입니다 |
 | `providers.kubernetes.enabled` | `false` | Kubernetes provider를 활성화합니다 |
 | `providers.kubernetes.clusters` | 생략 | 여러 클러스터의 연결·정책 목록입니다. 단일 클러스터 필드와 함께 사용할 수 없습니다 |
 | `providers.kubernetes.name` / `clusters[].name` | `default` / 필수 | 호출의 `cluster` 인자로 선택하는 이름입니다 |
@@ -90,8 +87,6 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 | `approval.require_web` | `approval.web`이 true이면 `true`, 아니면 `false` | HTTP에서 웹 승인을 필수로 합니다. 명시적 `false`는 클라이언트 내 확인을 허용하고, 명시적 `true`는 stdio 쓰기도 거부합니다 |
 | `approval.window` | `0s` | 사용자/도구/대상별 자동 승인 시간 창의 유효 기간입니다. 선택 사항이며, 활성화하면 1m–12h 범위로 설정합니다 |
 | `approval.window_tools` | `[]` | 승인 시간 창을 허용할 도구 이름의 `path.Match` glob이며, 비어 있으면 어떤 도구도 허용하지 않습니다 |
-| `providers.host.restart_units` | `[]` | 재시작할 유닛의 별도 glob 허용 목록이며, 비어 있으면 도구를 비활성화합니다 |
-| `providers.host.command_prefix` | `[]` | 쓰기 argv 앞에 붙일 값이며, 예로 [/usr/bin/sudo, -n]이 있습니다. 첫 요소는 실행 파일의 절대 경로이고 나머지는 경로/플래그입니다 |
 | `providers.kubernetes.rollout_restart` | `[]` | namespace/name glob이며, 비어 있으면 도구를 비활성화합니다 |
 | `providers.kubernetes.scale` | `[]` | namespace/name glob이며, 비어 있으면 도구를 비활성화합니다 |
 | `providers.kubernetes.delete_pod` | `[]` | namespace/name glob이며, 비어 있으면 도구를 비활성화합니다 |
@@ -114,7 +109,7 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 
 서버 정책의 패턴은 활성화된 provider가 작업별 활성화 조건을 적용한 뒤 제공하는 도구와 일치해야 합니다. 일치하는 도구가 없으면 시작에 실패합니다. 사용자별/토큰별 도구 패턴은 구문을 검사한 뒤 호출할 때 적용하며, tools/list는 필터링하지 않습니다. 스코프, 서버 정책, 사용자별 도구 정책, provider 리소스 허용 목록을 모두 적용합니다. 도구 허용 목록이 비어 있으면 추가 제한을 두지 않으므로, 비어 있는 provider 리소스 허용 목록과는 의미가 다릅니다. 설정을 바꾸면 재시작하세요.
 
-모든 provider는 기본적으로 꺼져 있습니다. host provider를 활성화하면 허용한 유닛이 없어도 개요/프로세스 도구를 제공하며, Kubernetes를 활성화하면 RBAC이 허용하는 범위에서 클러스터 범위 리소스를 읽을 수 있습니다. `ops:read`는 선택 사항인 실험 단계의 note provider를 포함해 활성화된 모든 읽기 provider에 적용됩니다. `dev:run`은 dev 도구에 적용되며, HTTP에서는 `ops:read`도 필요합니다. [신뢰 모델](security.md)을 참고하세요.
+모든 provider는 기본적으로 꺼져 있습니다. Kubernetes를 활성화하면 RBAC이 허용하는 범위에서 클러스터 범위 리소스를 읽을 수 있습니다. `ops:read`는 선택 사항인 실험 단계의 note provider를 포함해 활성화된 모든 읽기 provider에 적용됩니다. `dev:run`은 dev 도구에 적용되며, HTTP에서는 `ops:read`도 필요합니다. [신뢰 모델](security.md)을 참고하세요.
 
 노트 쓰기는 서버 계정으로 실행하므로, 생성하거나 다시 쓴 노트는 서버 계정이 소유합니다. 소유권을 넘기는 대신 ACL로 서버 계정에 접근 권한을 주고, 볼트 소유자가 이 파일을 교체할 수 있도록 파일이 있는 디렉터리의 쓰기 권한을 유지하세요. 볼트 소유자로 실행하는 동기화 도구는 자신이 소유하지 않은 파일에 chmod를 적용할 수 없습니다. Syncthing에서는 볼트 폴더의 Ignore Permissions 옵션을 설정하세요. 그렇지 않으면 다른 기기에서 권한만 바꾼 변경 사항을 반영할 때 "operation not permitted" 오류가 발생합니다.
 
@@ -183,13 +178,13 @@ OAuth GET 경로는 요청 본문을 거부하며, POST 본문 읽기에는 10�
 
 `static`은 SHA-256 다이제스트로 설정한 사전 공유 Bearer 토큰을 허용합니다. `opsgate -gen-token`으로 토큰과 다이제스트를 생성하고, 원본 토큰은 클라이언트의 비밀값 저장소에만 보관하세요. static 모드는 DCR이나 OAuth 로그인을 제공하지 않습니다.
 
-호스트, Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. 호스트/Kubernetes 쓰기에는 별도의 작업 허용 목록이, 노트 쓰기에는 `allow_write`가 필요합니다. 이 쓰기 작업에는 `ops:write`, 실제 OS/RBAC 권한, 사람의 승인이 필요합니다. dev 도구에는 대신 `dev:run`이 필요하며, `dev_task_start`에는 사람의 승인도 필요합니다. HTTP 접근에는 `ops:read`도 필요하므로 원격 쓰기 사용자에게는 두 스코프가 모두 필요합니다. 네임스페이스 허용/거부 규칙은 Kubernetes 쓰기에도 적용합니다. 읽기용 유닛 허용 목록만으로는 재시작을 허용하지 않습니다.
+Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes 쓰기에는 별도의 작업 허용 목록이, 노트 쓰기에는 `allow_write`가 필요합니다. 이 쓰기 작업에는 `ops:write`, 실제 OS/RBAC 권한, 사람의 승인이 필요합니다. dev 도구에는 대신 `dev:run`이 필요하며, `dev_task_start`에는 사람의 승인도 필요합니다. HTTP 접근에는 `ops:read`도 필요하므로 원격 쓰기 사용자에게는 두 스코프가 모두 필요합니다. 네임스페이스 허용/거부 규칙은 Kubernetes 쓰기에도 적용합니다.
 
 서버는 승인 전에 입력을 검증하고 부수 효과가 없는 계획(Plan)을 만듭니다. builtin 인증과 `approval.web: true`를 사용하는 HTTP에서는 기본적으로 웹 승인을 요구하고 승인 링크와 `approval_id`를 반환합니다. `approval.require_web: false`를 명시하면 지원하는 클라이언트에서 클라이언트 내 확인(elicitation)을 허용합니다. 프로토콜 버전에 따라 여러 차례 왕복하는 입력 요청도 포함하며, 지원하지 않는 클라이언트는 계속 웹 링크를 사용합니다. 링크를 열고 같은 업스트림 사용자로 로그인한 뒤, 실행할 작업을 정확히 검토하세요. 승인 후에는 같은 도구에 정확히 같은 인자와 `approval_id`를 추가해 다시 호출하세요.
 
 승인은 유효 기간이 있고 한 번만 사용할 수 있으며, 사용자, 도구, 마스킹하지 않은 정규화 인자의 SHA-256(`approval_id` 제외), 계획에 연결됩니다. 사용자가 대상을 명확히 볼 수 있어야 하므로 마스킹으로 요약이 바뀌면 쓰기를 거부합니다. Kubernetes 계획에는 대상 UID를 포함하며, 실행(Apply)에는 같은 호출에서 만든 계획과 식별자/버전 사전 조건을 사용합니다. 확인 채널이 없으면 쓰기를 거부하고, stdio는 클라이언트 내 확인만 지원합니다.
 
-승인 시간 창은 선택 사항이며, 사용하려면 `approval.window`와 `approval.window_tools`가 모두 필요합니다. `approval.window`는 1m–12h 범위로 설정하세요. `0s`이면 기능을 비활성화합니다. `approval.window_tools`는 `path.Match` glob 허용 목록이며 비어 있으면 어떤 도구도 허용하지 않습니다. 예를 들어 `window: 30m`과 `window_tools: [host_service_restart]`를 설정하면 브라우저에서 **Approve + allow for 30m**를 선택하거나, 클라이언트 내 확인에서 **Also auto-approve host_service_restart for 30m** 체크박스를 선택할 수 있습니다. 체크박스 선택은 필수가 아닙니다.
+승인 시간 창은 선택 사항이며, 사용하려면 `approval.window`와 `approval.window_tools`가 모두 필요합니다. `approval.window`는 1m–12h 범위로 설정하세요. `0s`이면 기능을 비활성화합니다. `approval.window_tools`는 `path.Match` glob 허용 목록이며 비어 있으면 어떤 도구도 허용하지 않습니다. 예를 들어 `window: 30m`과 `window_tools: [k8s_rollout_restart]`를 설정하면 브라우저에서 **Approve + allow for 30m**를 선택하거나, 클라이언트 내 확인에서 **Also auto-approve k8s_rollout_restart for 30m** 체크박스를 선택할 수 있습니다. 체크박스 선택은 필수가 아닙니다.
 
 이 권한은 정확히 그 사용자, 도구, 대상에 적용되며, 이후 다른 클라이언트에서 호출하거나 다른 인자를 사용해도 적용됩니다. 다른 대상에는 적용되지 않습니다. `dev_task_start`에는 승인 시간 창을 활성화하지 말고, 각 작업을 별도로 검토하세요. 이 기능은 스코프를 주거나 작업 허용 목록을 우회하지 않으며, 입력 검증이나 계획을 생략하지도 않습니다. 권한은 메모리에만 보관하고 최대 100개까지 허용합니다. 사용해도 유효 기간이 늘어나지 않으며, 만료되거나 재시작하면 사라집니다. 호출마다 `approval: window`가 포함된 별도의 감사 로그를 남깁니다. 권한을 만들 때는 승인 방식(`web` 또는 `elicitation`), 기간, 만료 시각을 담은 별도의 `window_granted` 이벤트를 기록합니다. `require_web`을 사용하면 이 권한도 브라우저에서만 받을 수 있으며 stdio 쓰기는 계속 거부합니다.
 
@@ -249,7 +244,7 @@ runner는 별도 YAML 파일을 사용하며, `providers` 아래에 중첩하지
 공통 래퍼는 처리한 도구 호출마다 JSON 객체 하나를 `server.audit_log`에 추가하며, 경로가 비어 있으면 stderr에 기록합니다. 새 파일은 umask의 영향을 받는 0600 권한으로 만들고 기존 파일의 권한은 유지합니다. 심볼릭 링크, 일반 파일이 아닌 파일, 그룹이나 다른 사용자가 쓸 수 있는 파일은 거부합니다. Stdout은 MCP 메시지 전용입니다.
 
 ```json
-{"time":"2026-10-24T12:00:00Z","user":"local","transport":"stdio","tool":"host_service_status","args":{"unit":"ssh.service"},"outcome":"ok","duration_ms":12,"output_bytes":120}
+{"time":"2026-10-24T12:00:00Z","user":"local","transport":"stdio","tool":"k8s_get","args":{"kind":"deployment","namespace":"default","name":"web"},"outcome":"ok","duration_ms":12,"output_bytes":120}
 ```
 
 `audit.Event`의 필드는 다음과 같습니다.

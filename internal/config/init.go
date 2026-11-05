@@ -16,7 +16,6 @@ const (
 
 // InitOptions are the answers `opsgate init` turns into a configuration.
 type InitOptions struct {
-	Mode      string // ModeHost or ModeKubernetes
 	PublicURL string
 	Login     string // LoginPasskey, LoginGoogle or LoginGitHub
 	// User is a passkey name, a Google email or a GitHub login, without
@@ -26,15 +25,10 @@ type InitOptions struct {
 	ClientID         string
 	ClientSecretFile string
 	// Write also grants ops:write; write tools still need targets listed.
-	Write bool
-	// Kubernetes is always on in mode kubernetes. In mode host it is on
-	// when Kubeconfig is set.
-	Kubeconfig     string
+	Write          bool
 	Namespaces     []string
 	DenyNamespaces []string
 	PodLogs        bool
-	// Units are systemd unit globs for host tools (mode host).
-	Units []string
 	// NoteVault enables read-only notes when set.
 	NoteVault string
 }
@@ -53,9 +47,6 @@ func (o InitOptions) Subject() string {
 // Generate writes a short configuration that relies on the mode for
 // everything else, and checks it the way the server will.
 func Generate(o InitOptions) ([]byte, error) {
-	if o.Mode != ModeHost && o.Mode != ModeKubernetes {
-		return nil, fmt.Errorf("mode must be %s or %s", ModeHost, ModeKubernetes)
-	}
 	if o.User == "" || strings.ContainsFunc(o.User, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
 		return nil, fmt.Errorf("user must be a single word without spaces")
 	}
@@ -71,14 +62,9 @@ func Generate(o InitOptions) ([]byte, error) {
 	w := func(format string, args ...any) { fmt.Fprintf(&b, format+"\n", args...) }
 	w("# Written by `opsgate init`. Every effective value, defaults included:")
 	w("#   opsgate config show -config <this file>")
-	if o.Mode == ModeKubernetes {
-		w("# mode kubernetes: serves HTTP on 0.0.0.0:8787, uses the pod's ServiceAccount,")
-		w("# keeps sign-in state in /var/lib/opsgate, audits to stderr, no host tools.")
-	} else {
-		w("# mode host: serves HTTP on 127.0.0.1:8787 behind your TLS proxy, keeps sign-in")
-		w("# state in /var/lib/opsgate and audits to /var/log/opsgate/audit.jsonl.")
-	}
-	w("mode: %s", o.Mode)
+	w("# mode kubernetes: serves HTTP on 0.0.0.0:8787, uses the pod's ServiceAccount,")
+	w("# keeps sign-in state in /var/lib/opsgate and audits to stderr.")
+	w("mode: %s", ModeKubernetes)
 	w("http:")
 	w("  public_url: %s", q(o.PublicURL))
 	w("auth:")
@@ -113,21 +99,11 @@ func Generate(o InitOptions) ([]byte, error) {
 		return nil, fmt.Errorf("login must be %s, %s or %s", LoginPasskey, LoginGoogle, LoginGitHub)
 	}
 	w("providers:")
-	if o.Mode == ModeHost {
-		w("  host:")
-		w("    units: %s", list(o.Units))
-	}
-	if o.Mode == ModeKubernetes || o.Kubeconfig != "" {
-		w("  kubernetes:")
-		if o.Mode == ModeHost {
-			w("    enabled: true")
-			w("    kubeconfig: %s", q(o.Kubeconfig))
-		}
-		w("    namespaces: %s", list(o.Namespaces))
-		w("    deny_namespaces: %s", list(o.DenyNamespaces))
-		w("    allow_logs: %t", o.PodLogs)
-		w("    # Write tools stay off until targets are listed, e.g. rollout_restart: [\"apps/*\"]")
-	}
+	w("  kubernetes:")
+	w("    namespaces: %s", list(o.Namespaces))
+	w("    deny_namespaces: %s", list(o.DenyNamespaces))
+	w("    allow_logs: %t", o.PodLogs)
+	w("    # Write tools stay off until targets are listed, e.g. rollout_restart: [\"apps/*\"]")
 	if o.NoteVault != "" {
 		w("  note:")
 		w("    enabled: true")

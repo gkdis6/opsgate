@@ -2,15 +2,10 @@
 
 [English](../tools.md)
 
-호스트, Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요하고, dev 도구에는 `dev:run`이 필요합니다. 각 도구는 provider를 활성화했을 때만 등록됩니다. 호스트 유닛과 Kubernetes 네임스페이스는 설정에 따라 필터링하며, 네임스페이스 거부 목록이 우선합니다. Kubernetes 시크릿을 다루는 도구는 없습니다. 읽기 전용 메타데이터와 로그에도 민감한 정보가 드러날 수 있습니다.
+Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요하고, dev 도구에는 `dev:run`이 필요합니다. 각 도구는 provider를 활성화했을 때만 등록됩니다. Kubernetes 네임스페이스는 설정에 따라 필터링하며, 네임스페이스 거부 목록이 우선합니다. Kubernetes 시크릿을 다루는 도구는 없습니다. 읽기 전용 메타데이터와 로그에도 민감한 정보가 드러날 수 있습니다.
 
 | 도구 | 용도 | 주요 인자, 기본값, 제한 |
 | --- | --- | --- |
-| `host_overview` | 호스트 지표와 설정된 디스크 경로 | 없음 |
-| `host_services` | 허용 목록의 systemd 유닛 | 없음 |
-| `host_service_status` | 허용 목록의 유닛 상태 | 필수 `unit`; 접미사가 없으면 `.service` 추가; 정규화한 이름 최대 256바이트 |
-| `host_logs` | 허용 목록의 journald 로그 | 필수 `unit`(상태 조회와 같은 규칙); `lines=100`, 1–`max_log_lines`로 보정(기본 상한 500); `since=""`(시간 필터 없음), 양수 기간 표기(`d` 지원, 최대 128바이트) 또는 RFC3339; `priority=""`(필터 없음), emerg/alert/crit/err/warning/notice/info/debug 또는 0–7; `grep=""`, 문자열 그대로 대소문자 구분 없이 부분 검색, 최대 4096바이트 |
-| `host_top_processes` | /proc에서 500ms 동안 수집한 프로세스 사용량(이름만 표시, argv와 환경 변수 제외) | `sort="cpu"`(cpu 또는 mem); `limit=15`, 1–50으로 보정 |
 | `k8s_clusters` | 설정 순서대로 클러스터 이름, 컨텍스트, 보호 여부, 네임스페이스·로그·쓰기 정책과 연결 상태 | 없음; 클러스터마다 discovery 조회 제한 2초 |
 | `k8s_overview` | 노드 상태와 허용된 네임스페이스의 워크로드/이벤트 | `cluster`(아래 규칙 적용) |
 | `k8s_list` | 지원하는 리소스 목록 | 필수 `kind`; `namespace=""`(허용된 모든 네임스페이스); `label_selector=""`(필터 없음), Kubernetes 레이블 선택자 문법; `limit=100`, 1–500으로 보정 |
@@ -19,7 +14,6 @@
 | `k8s_service_check` | 서비스 호스트 이름의 DNS 설정과 준비된 백엔드 점검(설정만 확인하며 DNS 질의·연결을 보내지 않고 NetworkPolicy는 평가하지 않음) | 필수 `namespace`(조회하는 쪽 네임스페이스), `host`(소문자 DNS 이름, 최대 253바이트, IP 주소 불가); 선택 `port`(서비스 포트 번호 또는 이름), `pod`(DNS 설정을 가져올 같은 네임스페이스의 파드); 클러스터 도메인은 `cluster.local`로 가정하고, 도메인까지 적은 이름은 다른 도메인도 허용; 조회 후보, Service, 선택자에 맞는 파드(최대 500개), EndpointSlice를 확인; 다른 허용 네임스페이스의 같은 이름 Service를 최대 10개 제안 |
 | `k8s_logs` | 파드 로그(하나 이상의 클러스터에서 `allow_logs=true`일 때 도구 등록) | 필수 `namespace`, `pod`; 일반/init/ephemeral 컨테이너를 통틀어 정확히 하나일 때만 `container` 생략 가능; `tail=200`, 1–`max_log_lines`로 보정(기본 상한 500); `since=""`(시간 필터 없음), 양수 Go 기간 표기(최대 168h); `previous=false`; `grep=""`, 문자열 그대로 대소문자 구분 없이 부분 검색; 스트림 상한 1 MiB |
 | `k8s_events` | 네임스페이스 이벤트 | `namespace=""`(허용된 모든 네임스페이스); `warnings_only=true`; `since="1h"`, 양수 Go 기간 표기(최대 168h); `limit=50`, 1–500으로 보정 |
-| `host_service_restart` | 허용된 systemd 유닛 재시작 | 필수 `unit`(상태 조회와 같은 정규화 및 256바이트 제한); `restart_units` 허용 설정 필요 |
 | `k8s_rollout_restart` | 파드 템플릿을 갱신해 워크로드 재시작 | 필수 `kind`(deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` 허용 설정 필요 |
 | `k8s_scale` | 워크로드 복제본 수 설정 | 필수 `kind`(deployment/statefulset), `namespace`, `name`, `replicas`(0–`max_replicas`, 기본 상한 10); `scale` 허용 설정 필요 |
 | `k8s_delete_pod` | UID 사전 조건을 적용한 특정 파드 삭제 | 필수 `namespace`, `name`; `delete_pod` 허용 설정 필요 |
@@ -55,7 +49,7 @@ Linux에서는 원본을 승인된 .trash 경로로 원자적으로 이동한 �
 
 노트를 갱신할 때는 현재 상태가 바뀌지 않았는지 확인한 뒤 rename으로 교체합니다. 검사와 rename 사이에 외부에서 편집한 내용은 덮어쓸 수 있으므로, 버전별 백업이나 동기화 이력을 사용하세요. 새 노트의 미리보기도 크면 자르고 생략한 줄 수를 표시합니다.
 
-호스트/Kubernetes 읽기 도구의 숫자 입력에 0을 지정하면 기본값을 사용하고, 그 외에 범위를 벗어난 값은 범위 안으로 보정합니다. 쓰기 작업의 복제본 수는 보정 없이 검증합니다. 반환하는 모든 텍스트에는 `server.max_output_bytes`(기본값 65536)가 적용됩니다. 호출의 제한 시간(`server.tool_timeout`, 기본값 30s)은 도구가 취소 신호를 따를 때 적용됩니다.
+Kubernetes 읽기 도구의 숫자 입력에 0을 지정하면 기본값을 사용하고, 그 외에 범위를 벗어난 값은 범위 안으로 보정합니다. 쓰기 작업의 복제본 수는 보정 없이 검증합니다. 반환하는 모든 텍스트에는 `server.max_output_bytes`(기본값 65536)가 적용됩니다. 호출의 제한 시간(`server.tool_timeout`, 기본값 30s)은 도구가 취소 신호를 따를 때 적용됩니다.
 
 Kubernetes 네임스페이스 입력은 DNS-1123 레이블이어야 합니다. 객체의 `name`, `pod`, `container` 입력은 DNS-1123 하위 도메인으로 검증합니다.
 
@@ -75,7 +69,7 @@ kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하
 
 ## 마스킹과 객체 정리
 
-`host_logs`와 `k8s_logs`의 grep은 마스킹된 텍스트를 검색합니다.
+`k8s_logs`의 grep은 마스킹된 텍스트를 검색합니다.
 
 공유 `internal/redact` 계층은 PEM 개인 키, Authorization/Proxy-Authorization 헤더, Basic/Bearer 자격 증명, JWT 형태의 토큰, URL 비밀번호를 마스킹합니다. AWS 액세스 키 ID, GitHub, GitLab, Slack, Stripe live 키, OpenAI/Anthropic 형식 키, Google API 키, Telegram 봇, opsgate의 `og_at_`, `og_rt_`, `og_st_` 토큰(접두사 뒤 base64url 문자 43개)의 알려진 패턴도 마스킹합니다.
 
@@ -91,10 +85,8 @@ kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하
 
 ## 공통 제한
 
-승인이 필요한 도구 9개는 모두 브라우저에서 재시도할 때 쓰는 `approval_id`를 선택 인자로 받습니다. 첫 호출에서는 생략하세요. dev 작업 ID는 소문자 base32 문자 20개로 구성됩니다. 작업 상태, 로그, diff, 목록을 조회하거나 작업을 취소할 때는 요청자 본인의 작업인지 검사하며, runner 관리자는 모든 작업에 접근할 수 있습니다.
+승인이 필요한 도구 8개는 모두 브라우저에서 재시도할 때 쓰는 `approval_id`를 선택 인자로 받습니다. 첫 호출에서는 생략하세요. dev 작업 ID는 소문자 base32 문자 20개로 구성됩니다. 작업 상태, 로그, diff, 목록을 조회하거나 작업을 취소할 때는 요청자 본인의 작업인지 검사하며, runner 관리자는 모든 작업에 접근할 수 있습니다.
 
 읽기 도구와 `dev_task_cancel`은 원시 JSON 인자를 최대 16 KiB까지 받습니다. 쓰기 인자의 기본 상한도 16 KiB이지만, `note_create`, `note_append`, `note_replace`는 528 KiB, `dev_task_start`는 48 KiB까지 허용합니다. JSON 이스케이프도 이 크기에 포함됩니다. 승인 요약의 상한은 `max(64 KiB, argument limit + 16 KiB)`로, 기본 도구와 dev 작업 시작은 64 KiB, 노트 내용을 다루는 도구는 544 KiB입니다. 화면에 표시할 마스킹한 인자도 각 도구의 인자 제한을 넘을 수 없습니다. 노트 미리보기에는 별도로 약 8 KiB의 표시 제한이 있습니다.
 
 공유 래퍼는 4 MiB를 초과하는 provider 출력을 통째로 생략합니다. 그 이하는 텍스트를 마스킹한 뒤 `server.max_output_bytes`(기본값 64 KiB)에 맞춰 자르며, 오류도 같은 방식으로 처리합니다. provider별 수집 제한이 더 작으면 그 제한도 적용됩니다. 제한 시간은 도구가 취소 신호를 따를 때 적용됩니다. 쓰기 작업은 계획(Plan)과 실행(Apply)에 각각 별도의 `server.tool_timeout`(기본값 30s)을 적용하며, 사람이 승인할 때까지 기다리는 시간은 제외합니다.
-
-호스트 명령을 취소하면 프로세스 그룹에 SIGKILL을 보내고, 실패하면 직접 실행한 자식 프로세스의 종료를 시도합니다. 취소되거나 직접 실행한 자식 프로세스가 종료된 뒤에는 남은 출력 수집을 최대 250ms 동안 기다립니다. 따라서 하위 프로세스가 출력 파이프를 열어 두어도 호출이 무한정 기다리지 않습니다. 자식 프로세스가 성공적으로 종료했더라도 이 시간이 지나도록 출력 파이프가 열려 있으면 오류를 반환합니다. sudo 같은 권한 상승 도우미나 프로세스 그룹을 벗어난 하위 프로세스는 취소 후에도 남을 수 있지만, 이때도 출력 대기 시간은 제한됩니다.

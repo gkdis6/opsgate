@@ -132,6 +132,6 @@ kubectl apply -f deploy/kubernetes/opsgate-watch.yaml
 kubectl -n opsgate logs deployment/opsgate-watch
 ```
 
-클러스터 밖에서는 `deploy/systemd/opsgate-watch.service`가 서버와 같은 보안 설정으로 호스트에서 실행합니다. 이때는 kubeconfig를 씁니다.
+클러스터 밖에서도 kubeconfig로 클러스터에 접근할 수 있으면 `opsgate watch`를 실행할 수 있습니다.
 
 watch 오류(예: RBAC 권한 부족)는 로그에 남고 client-go가 다시 시도합니다. watcher를 재시작하면 기준점이 다시 잡히므로, 꺼져 있던 동안의 변경은 알리지 않습니다.

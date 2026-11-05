@@ -151,41 +151,34 @@ func TestVersion(t *testing.T) {
 
 func TestInitStreams(t *testing.T) {
 	c, out, errout, _ := testApp()
-	args := []string{"init", "-yes", "-mode", "host", "-public-url", "https://example.com", "-login", "passkey", "-user", "alice", "-o", "-"}
-	if code := c.execute(args); code != 0 || !strings.Contains(out.String(), "mode: host") || errout.Len() != 0 {
+	args := []string{"init", "-yes", "-public-url", "https://example.com", "-login", "passkey", "-user", "alice", "-o", "-"}
+	if code := c.execute(args); code != 0 || !strings.Contains(out.String(), "mode: kubernetes") || errout.Len() != 0 {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, out, errout)
 	}
 }
 
 func TestInitNamespaceDenies(t *testing.T) {
-	for _, mode := range []string{"kubernetes", "host"} {
-		t.Run(mode, func(t *testing.T) {
-			for _, override := range []bool{false, true} {
-				c, out, errout, _ := testApp()
-				args := []string{"init", "-yes", "-mode", mode, "-public-url", "https://example.com", "-login", "passkey", "-user", "alice", "-o", "-"}
-				if mode == "host" {
-					args = append(args, "-kubeconfig", "/etc/opsgate/kubeconfig")
-				}
-				want := `deny_namespaces: ["kube-system", "kube-public", "kube-node-lease", "opsgate"]`
-				if override {
-					args = append(args, "-deny-namespaces", "private-*")
-					want = `deny_namespaces: ["private-*"]`
-				}
-				if code := c.execute(args); code != 0 || errout.Len() != 0 {
-					t.Fatalf("exit=%d stderr=%q", code, errout)
-				}
-				if !strings.Contains(out.String(), want) {
-					t.Fatalf("generated config missing %q: %s", want, out)
-				}
-			}
-		})
+	for _, override := range []bool{false, true} {
+		c, out, errout, _ := testApp()
+		args := []string{"init", "-yes", "-public-url", "https://example.com", "-login", "passkey", "-user", "alice", "-o", "-"}
+		want := `deny_namespaces: ["kube-system", "kube-public", "kube-node-lease", "opsgate"]`
+		if override {
+			args = append(args, "-deny-namespaces", "private-*")
+			want = `deny_namespaces: ["private-*"]`
+		}
+		if code := c.execute(args); code != 0 || errout.Len() != 0 {
+			t.Fatalf("exit=%d stderr=%q", code, errout)
+		}
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("generated config missing %q: %s", want, out)
+		}
 	}
 }
 
 func TestPasskeyInviteOutput(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "opsgate.yaml")
-	data := fmt.Sprintf(`mode: host
+	data := fmt.Sprintf(`mode: kubernetes
 http:
   public_url: https://ops.example
 auth:

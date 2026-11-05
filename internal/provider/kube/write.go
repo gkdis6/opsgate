@@ -37,7 +37,7 @@ func (p *provider) validateWrites() error {
 	if p.cfg.MaxReplicas < 0 {
 		return fmt.Errorf("max_replicas must not be negative")
 	}
-	for _, patterns := range [][]string{p.cfg.RolloutRestart, p.cfg.Scale, p.cfg.DeletePod} {
+	for _, patterns := range [][]string{p.cfg.RolloutRestart, p.cfg.Scale, p.cfg.DeletePod, p.cfg.RestoreImage} {
 		for _, pattern := range patterns {
 			if len(pattern) > 512 || strings.Count(pattern, "/") != 1 {
 				return fmt.Errorf("write allowlist must contain namespace/name patterns")
@@ -83,6 +83,10 @@ func writeKind(kind string, daemon bool) (resource, error) {
 }
 
 func (r *registry) registerWrites(s *mcp.Server, env *tool.Env, note string) {
+	if r.any(func(p *provider) bool { return len(p.cfg.RestoreImage) > 0 }) {
+		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_restore_image", Title: "Restore previous healthy container image", Description: "After human approval, restore only a Deployment container image from a currently ready owned ReplicaSet. Exact expected image and source are rechecked. No approval window.", Direct: true}, clusterWrite(r, (*provider).planRestoreImage, (*provider).applyRestoreImage))
+	}
+
 	if r.any(func(p *provider) bool { return len(p.cfg.RolloutRestart) > 0 }) {
 		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_rollout_restart", Title: "Restart Kubernetes workload", Description: "Select cluster and restart an allowlisted deployment, statefulset or daemonset by updating its pod template after human approval." + note, Direct: true}, clusterWrite(r, (*provider).planRollout, (*provider).applyRollout))
 	}

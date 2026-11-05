@@ -102,7 +102,7 @@ func clusterWrite[In interface {
 			}
 			preview.Summary = fmt.Sprintf("Cluster %q: %s", p.cfg.Name, preview.Summary)
 			preview.Target = fmt.Sprintf("Kubernetes cluster %q", p.cfg.Name)
-			preview.NoWindow = p.cfg.Protected
+			preview.NoWindow = preview.NoWindow || p.cfg.Protected
 			return preview, nil
 		},
 		Apply: func(ctx context.Context, c tool.Caller, in In, preview tool.Plan) (string, error) {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"time"
 )
 
 // Kubernetes supports either a single cluster or an ordered list of clusters.
@@ -36,9 +37,11 @@ type KubernetesCluster struct {
 	MaxLogLines       int  `yaml:"max_log_lines"`
 	// Write actions. Each list holds "namespace/name" globs; empty
 	// disables the tool. Namespace allow/deny rules still apply.
-	RolloutRestart []string `yaml:"rollout_restart"`
-	Scale          []string `yaml:"scale"`
-	DeletePod      []string `yaml:"delete_pod"`
+	RestoreImage      []string `yaml:"restore_image"`
+	ActionApprovalURL string   `yaml:"action_approval_url"`
+	RolloutRestart    []string `yaml:"rollout_restart"`
+	Scale             []string `yaml:"scale"`
+	DeletePod         []string `yaml:"delete_pod"`
 	// MaxReplicas caps k8s_scale.
 	MaxReplicas int32 `yaml:"max_replicas"`
 }
@@ -88,6 +91,11 @@ func (k Kubernetes) validate() error {
 	name := regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 	seen := map[string]bool{}
 	for _, c := range k.ClusterList() {
+		if c.ActionApprovalURL != "" {
+			if err := (Watch{ApprovalURL: c.ActionApprovalURL, Batch: time.Second, MaxAlerts: 1}).validate(Kubernetes{}); err != nil {
+				return fmt.Errorf("invalid action_approval_url: %w", err)
+			}
+		}
 		if !name.MatchString(c.Name) || seen[c.Name] {
 			return fmt.Errorf("providers.kubernetes: cluster names must be unique lowercase DNS labels of at most 63 characters: %q", c.Name)
 		}

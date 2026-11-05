@@ -37,6 +37,9 @@ func (m *Manager) Routes(mux *http.ServeMux) {
 			m.browser.RequireUser(m.page).ServeHTTP(w, r)
 		}))))
 	}
+	mux.Handle("GET /approve/restore-image/{cluster}/{namespace}/{name}", securityHeaders(protect.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		m.browser.RequireUser(m.restoreImageRequest).ServeHTTP(w, r)
+	}))))
 	mux.Handle("GET "+restartPattern, securityHeaders(protect.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.browser.RequireUser(m.restartRequest).ServeHTTP(w, r)
 	}))))

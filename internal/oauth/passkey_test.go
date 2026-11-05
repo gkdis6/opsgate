@@ -465,3 +465,40 @@ func TestPasskeyPageSurvivesAnotherBrowser(t *testing.T) {
 		t.Fatalf("authorize path = %q", got)
 	}
 }
+
+func TestImageRestorePasskeySurvivesBrowserSwitch(t *testing.T) {
+	f := newPasskeyFixture(t, "", "passkey:alice")
+	target := "/approve/restore-image/main/apps/web?" + url.Values{
+		"container": {"app"}, "expected_image": {"registry.example/team/app:bad"}, "image": {"registry.example/team/app@sha256:abcd"},
+	}.Encode()
+	r := httptest.NewRequest("GET", "https://ops.example"+target, nil)
+	w := httptest.NewRecorder()
+	f.s.RequireUser(func(http.ResponseWriter, *http.Request, string) { t.Fatal("unexpected session") }).ServeHTTP(w, r)
+	location := w.Header().Get("Location")
+	if w.Code != http.StatusSeeOther || location != "/oauth/passkey?return="+url.QueryEscape(target) {
+		t.Fatalf("login: %d %q", w.Code, location)
+	}
+	if page := f.do(t, "GET", location, nil, w.Result().Cookies()); page.Code != http.StatusOK {
+		t.Fatalf("same browser: %d", page.Code)
+	}
+	other := f.do(t, "GET", location, nil, nil)
+	if other.Code != http.StatusSeeOther || other.Header().Get("Location") != target {
+		t.Fatalf("external browser: %d %q", other.Code, other.Header().Get("Location"))
+	}
+	// The external browser starts its own login, never reuses the app's state.
+	fresh := httptest.NewRecorder()
+	f.s.RequireUser(func(http.ResponseWriter, *http.Request, string) { t.Fatal("unexpected session") }).ServeHTTP(fresh, httptest.NewRequest("GET", "https://ops.example"+other.Header().Get("Location"), nil))
+	if fresh.Header().Get("Location") != location || len(fresh.Result().Cookies()) == 0 {
+		t.Fatal("new login was not initialized")
+	}
+	for _, bad := range []string{
+		target + "&next=https://evil.example", target + "&image=duplicate",
+		"/approve/restore-image/main/apps/web?container=app&expected_image=bad",
+		"/approve/restore-image/main/apps/web?container=app&expected_image=bad&image=%0d%0aLocation:evil",
+		"/approve/restart/main/deployment/apps/web?container=app&expected_image=bad&image=good",
+	} {
+		if approvalReturn(bad) {
+			t.Fatalf("unsafe return accepted: %q", bad)
+		}
+	}
+}

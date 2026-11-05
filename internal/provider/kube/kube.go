@@ -65,11 +65,11 @@ func clusterClient(cfg config.KubernetesCluster) (kubernetes.Interface, error) {
 
 type clusterConnection struct {
 	kubernetes.Interface
-	discovery discovery.DiscoveryInterface
+	discovery discovery.DiscoveryInterfaces
 	inCluster bool
 }
 
-func (c *clusterConnection) Discovery() discovery.DiscoveryInterface { return c.discovery }
+func (c *clusterConnection) Discovery() discovery.DiscoveryInterfaces { return c.discovery }
 
 type provider struct {
 	inCluster bool

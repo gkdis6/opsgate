@@ -12,6 +12,10 @@ func TestWatchOutputs(t *testing.T) {
 		name, output string
 		bad          bool
 	}{
+		{"discord Korean", `[{name: discord, type: discord, language: ko, url_file: /run/discord}]`, false},
+		{"discord English", `[{name: discord, type: discord, language: en, url_file: /run/discord}]`, false},
+		{"unsupported language", `[{name: discord, type: discord, language: fr, url_file: /run/discord}]`, true},
+		{"webhook language", `[{name: custom, type: webhook, language: ko, url_file: /run/url}]`, false},
 		{"discord", `[{name: discord, type: discord, url_file: /run/discord}]`, false},
 		{"custom", `[{name: custom, url: https://example.com, headers: {Authorization: Bearer}, body_template: '{"text":{{json .Text}}}'}]`, false},
 		{"unknown type", `[{name: x, type: slack, url: https://example.com}]`, true},

@@ -9,6 +9,7 @@ import (
 // WatchOutput delivers JSON directly to a receiver. Each output has its own queue.
 type WatchOutput struct {
 	Name             string            `yaml:"name"`
+	Language         string            `yaml:"language,omitempty"`
 	Type             string            `yaml:"type"` // webhook (default) or discord
 	URL              string            `yaml:"url,omitempty"`
 	URLFile          string            `yaml:"url_file,omitempty"`
@@ -31,6 +32,9 @@ func (o WatchOutput) validate() error {
 	}
 	if o.Type != "" && o.Type != "webhook" && o.Type != "discord" {
 		return fmt.Errorf("type must be webhook or discord")
+	}
+	if o.Language != "" && o.Language != "ko" && o.Language != "en" {
+		return fmt.Errorf("language must be ko or en")
 	}
 	if (o.URL == "") == (o.URLFile == "") {
 		return fmt.Errorf("set exactly one of url and url_file")

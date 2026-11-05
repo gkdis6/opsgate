@@ -14,10 +14,10 @@ import (
 )
 
 type webhookSender struct {
-	opts         Options
-	name, format string
-	headers      map[string]string
-	template     *template.Template
+	opts                   Options
+	name, format, language string
+	headers                map[string]string
+	template               *template.Template
 }
 
 func newWebhook(opts Options) Sender {
@@ -32,7 +32,7 @@ func newWebhook(opts Options) Sender {
 	// A redirect could move signed alerts to an unconfigured host.
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	opts.Client = &client
-	return &webhookSender{opts: opts}
+	return &webhookSender{opts: opts, language: opts.Language}
 }
 
 func privateTransport() *http.Transport {

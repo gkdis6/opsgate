@@ -10,8 +10,8 @@ opsgate is an open-source MCP server written in Go. It gives clients such as
 Claude, ChatGPT, Claude Code and Cursor a fixed set of operations tools for Kubernetes, with explicit policy, human-approved changes and
 an audit log.
 
-> **Status:** features for the first public release are implemented. Changes
-> require user authorization, allowed targets and human approval. Read restrictions
+> **Status:** early release; notes, the dev provider, watch and the analyzer are
+> experimental. Changes require user authorization, allowed targets and human approval. Read restrictions
 > and output redaction reduce sensitive data exposure. Third-party security review
 > is pending; the [security policy](SECURITY.md) explains the protections and
 > remaining limitations.
@@ -56,6 +56,13 @@ The optional note provider keeps runbooks and
 past incidents in plain Markdown. Assistants are instructed to consult past
 records and offer to record the outcome. See [notes](docs/notes.md).
 
+### Alerts can arrive with an investigation
+
+`opsgate watch` sends Kubernetes alerts directly to Discord, webhooks or email.
+The optional analyzer then investigates with read-only tools and reports the
+likely cause. For a failed image it can offer a restore link, which still needs a
+person's approval. See [watch alerts](#watch-alerts).
+
 
 
 ## What it can do
@@ -64,9 +71,9 @@ Providers are groups of tools; enable only the groups you need.
 
 | Provider | Read tools | Write tools (approval required) |
 | --- | --- | --- |
-| Kubernetes | overview, list, get, events, pod logs | rollout restart, scale, delete pod |
+| Kubernetes | clusters, overview, list, get, environment, service check, events, pod logs, remediation options | rollout restart, scale, delete pod, restore a previous image |
 | Notes: runbooks and memory, Markdown folder or Obsidian vault *(experimental)* | search, read, list, recent, links, tags | create, append, replace, move to `.trash` |
-| Dev *(experimental)* | projects, task status, log, diff, list | start a coding agent (Codex or Claude) in a Git worktree |
+| Dev *(experimental)* | projects, task status, log, diff, list | start a coding agent (Codex or Claude) in a Git worktree; cancelling your own task needs no new approval |
 
 Scopes define the kinds of work a user can perform through opsgate: `ops:read` for inspection,
 `ops:write` for operations and note changes, and `dev:run` for coding-agent tasks.
@@ -85,8 +92,9 @@ and limits.
 
 <img src="docs/images/architecture.svg" alt="opsgate architecture: client transports, authentication, tool processing, providers and OS account / RBAC trust boundaries" width="830">
 
-The AI client analyzes results and chooses the next operation. opsgate itself
-does not run or call an AI model; it checks and executes requested tools.
+The AI client analyzes results and chooses the next operation. The opsgate MCP
+server does not run or call an AI model; it checks and executes requested tools.
+Only the optional, separate `opsgate-analyzer` calls a model you configure.
 
 Kubernetes tools connect to the Kubernetes API using kubeconfig or in-cluster credentials.
 A local instance can therefore inspect a remote cluster when network access
@@ -113,7 +121,8 @@ also allows elicitation with `-transport stdio` for mode-based files; explicit
 Optional approval windows let a person approve a particular tool for a limited
 time. During that window, subsequent calls by the same user can skip a new
 approval prompt, including calls with different targets or arguments. Permission
-and target checks still run on every call. Windows are disabled by default.
+and target checks still run on every call. Windows are disabled by default, and
+`k8s_restore_image` never uses one.
 
 <img src="docs/images/approval-flow.svg" alt="Write approval flow: plan, approval window or client / web confirmation, retry verification, Apply and denial exits" width="830">
 
@@ -130,11 +139,16 @@ changes require approval, and saved records can inform later investigations. See
 
 ## Quick start: local (stdio)
 
-Build with Go 1.26 or later:
+Download an archive from [releases](https://github.com/gkdis6/opsgate/releases)
+after [verifying it](docs/deploy.md#verify-a-release-before-installing), or build
+with Go 1.26 or later:
 
 ```sh
 go install github.com/gkdis6/opsgate/cmd/opsgate@latest   # or: make build
 ```
+
+This `go install` builds only `opsgate`. The optional analyzer is the separate
+command `./cmd/opsgate-analyzer`.
 
 Save a configuration using the current kubeconfig, for example `/path/opsgate.yaml`:
 
@@ -200,8 +214,6 @@ Put this file in the `opsgate` ConfigMap of `deploy/kubernetes/opsgate-deploymen
 kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 ```
 
-Run `opsgate -h` to list commands and flags, or `opsgate help <command>` for command help. `opsgate version` (also `-version`) prints the build version. Help and successful commands exit 0; invalid commands, flags or extra arguments exit 2 before loading configuration; operational errors exit 1. Help goes to stdout and errors to stderr.
-
 1. On first start, opsgate logs a one-time setup link (valid 24 hours) for each
    user without a passkey. Open it and press **Create passkey**. Later links:
    `kubectl -n opsgate exec deploy/opsgate -- /opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`.
@@ -214,7 +226,8 @@ Run `opsgate -h` to list commands and flags, or `opsgate help <command>` for com
 The generated file already limits client redirect hosts
 (`allowed_redirect_hosts`); review them before exposing the server. GitHub, Google and other sign-in options are covered
 in [authentication](docs/authentication.md). Proxy routes and
-release verification are in [deployment](docs/deploy.md).
+release verification are in [deployment](docs/deploy.md). Run `opsgate -h` to list
+commands and flags.
 
 
 
@@ -222,46 +235,7 @@ release verification are in [deployment](docs/deploy.md).
 
 Run `opsgate watch` alongside the MCP server to receive Kubernetes problem and
 change notifications. It watches the Kubernetes API and sends alerts directly
-to Discord, custom JSON webhooks or SMTP email. n8n is optional. Paste an alert
-into an MCP client to investigate the resource with opsgate's read tools.
-
-### From an alert to a diagnosis
-
-Paste the alert into your MCP client with a request such as:
-
-> Investigate this alert using opsgate MCP. Check operational records, resource
-> status and events, and current and previous container logs. Separate confirmed
-> causes, hypotheses and checks that still need to be made.
-
-An example investigation follows these steps:
-
-1. If the Notes provider is enabled, search runbooks and past incidents by service, symptom or error text.
-2. Use the alert's cluster, namespace, resource and occurrence time to inspect Pod/workload state and Kubernetes events.
-3. If log access is allowed, compare current logs with the previous container instance's logs using `previous: true` to trace the failure.
-4. Explain confirmed causes, hypotheses and outstanding checks, with supporting logs and events.
-
-The MCP client's AI performs the investigation by calling read tools; watch
-supplies the notification. Available evidence depends on enabled providers and
-access policy. Host resource and systemd log inspection are outside the current
-Kubernetes mode's tool scope. Deleted Pods or expired logs and events can prevent
-a conclusive root-cause diagnosis. Changes such as restarts follow the separate
-approval process.
-
-### Automatic investigation (optional)
-
-The separate `opsgate-analyzer` process can receive signed watch alerts, ask a
-function-calling model to query read-only MCP tools, and send a report to Discord.
-It groups repeated alerts, enforces investigation limits and never calls write
-tools. Configure your own model and credential files; no model is required for
-normal watch or interactive MCP use. This experimental feature supports
-OpenAI-compatible Chat Completions or installed Claude Code (`claude -p`) and Codex (`codex exec`) CLIs,
-selected by `model.backend`. CLI mode reuses the execution account's CLI auth
-and does not require a separate model API-key file. See [automatic investigation](docs/analyzer.md).
-
-Immediate Discord cause explanations support `language: ko` or `en` per output.
-Reports independently select `report.language` and request actionable proposals
-with `report.suggest_actions: true`; proposals are never executed automatically.
-Error codes and raw evidence remain unchanged. See [report language and actions](docs/analyzer.md#display-language-and-proposed-actions).
+to Discord, custom JSON webhooks or SMTP email. n8n is optional.
 
 ### Delivery configuration
 
@@ -269,6 +243,7 @@ Add the following to a configuration with the Kubernetes provider enabled:
 
 ```yaml
 watch:
+  problems_only: true # optional: warnings only
   outputs:
     - name: discord
       type: discord
@@ -292,6 +267,12 @@ In Kubernetes, mount these files from Secrets.
 opsgate watch -config opsgate.yaml
 ```
 
+`watch.problems_only: true` keeps warnings such as restarts, `OOMKilled`, image
+pull failures and stalled rollouts. It drops change notices for every destination:
+images, replicas, ConfigMap keys, objects added or removed, and node recovery. Set
+it on one output to limit only that destination. Individual reasons cannot be
+filtered.
+
 Each destination has its own queue, cooldown and retries. Discord embeds include
 UTC occurrence times, cluster, namespace/resource, reason and summary; long
 batches are visibly truncated to fit Discord's limit. Custom templates use the
@@ -299,6 +280,48 @@ batches are visibly truncated to fit Discord's limit. Custom templates use the
 `watch.webhook_url` and `watch.email` settings remain supported alongside outputs.
 See [watch alerts](docs/watch.md) for delivery limits, HMAC signatures and all
 configuration options.
+
+### Investigating an alert
+
+Paste an alert into your MCP client with a request such as:
+
+> Investigate this alert using opsgate MCP. Check operational records, resource
+> status and events, and current and previous container logs. Separate confirmed
+> causes, hypotheses and checks that still need to be made.
+
+The client's AI does the investigation with read tools. Available evidence depends
+on enabled providers and access policy, and deleted Pods or expired logs and events
+can prevent a conclusive diagnosis. Changes follow the usual approval process.
+
+### Automatic investigation (optional)
+
+The separate, experimental `opsgate-analyzer` receives signed watch alerts, has a
+model investigate through an allowlist of read-only MCP tools, and sends a report
+to Discord. Alerts go out first; the report is a separate message, so analysis does
+not delay them. It groups repeated alerts, enforces investigation limits, never
+calls write tools and never executes its own proposals. Select an OpenAI-compatible
+API or an installed Claude Code or Codex CLI with `model.backend`. Normal watch and
+MCP use need no model.
+
+**Data leaves your cluster.** Alert text and tool output, including logs and notes
+the analyzer can read, go to the model provider you select, and reports go to
+Discord. Both are redacted first, but redaction cannot detect every secret. Allow
+access only to data you intend those services to receive.
+
+Report language and action proposals are set with `report.language` and
+`report.suggest_actions`. See [automatic investigation](docs/analyzer.md).
+
+### Restoring a failed image (optional)
+
+Set `restore_image` (a `namespace/deployment` allowlist) and `action_approval_url`
+on a Kubernetes cluster to enable this. For a Pod failing with `ImagePullBackOff`,
+`ErrImagePull` or `InvalidImageName`, `k8s_remediation_options` returns an approval
+link when a currently ready ReplicaSet of the same Deployment supplies a different
+image. The analyzer can attach the link to its report.
+
+Opening the link needs sign-in and shows a fresh plan. Nothing changes until a
+person approves, and the plan is checked again before the patch. Only that
+container's image changes; configuration is not rolled back.
 
 
 
@@ -312,6 +335,8 @@ configuration options.
 - HTTP requires browser approval by default when `approval.web` is enabled.
   Explicit `approval.require_web: false` opts in to elicitation, allowing a
   compromised client to approve its own writes; HTTP startup logs a warning.
+- The optional analyzer sends alerts and the evidence it reads to the model provider
+  you select. Redaction reduces this exposure but does not guarantee it.
 
 Full details: [SECURITY.md](SECURITY.md).
 
@@ -341,5 +366,3 @@ Full details: [SECURITY.md](SECURITY.md).
 See [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md)
 and [changelog](CHANGELOG.md). Licensed under [Apache-2.0](LICENSE),
 copyright 2026 The opsgate Authors.
-
-Incident alerts are sent first; the optional analyzer sends causes, evidence, and suggested actions in a separate message. Analysis does not delay the initial alert.

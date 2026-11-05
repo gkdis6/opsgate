@@ -10,7 +10,7 @@ opsgate는 Go로 작성한 오픈 소스 MCP 서버입니다. Claude, ChatGPT, C
 Cursor 같은 클라이언트에 Kubernetes를 운영하는 정해진 도구를
 제공합니다. 정책을 명시하고 감사 로그를 남기며, 변경 작업에는 사람이 승인한 범위를 적용합니다.
 
-> **상태:** 첫 공개 릴리스에 필요한 기능을 구현했습니다. 변경 작업에는 사용자 권한 검사,
+> **상태:** 초기 릴리스이며, 노트, Dev provider, watch, analyzer는 실험적 기능입니다. 변경 작업에는 사용자 권한 검사,
 > 허용 대상 제한, 사람의 승인이 적용됩니다. 조회 범위 제한과 출력 마스킹으로 민감 정보
 > 노출을 줄입니다. 외부 보안 검토는 아직 받지 않았으며, 보호 범위와 남아 있는 한계는
 > [보안 정책](docs/ko/security.md)에 설명합니다.
@@ -54,6 +54,13 @@ AI 클라이언트에는 로그나 조회 결과 안의 지시문을
 일반 Markdown으로 보관합니다. AI에 과거 기록을 먼저 참고하고,
 이번 조치를 기록할지 사용자에게 제안하도록 안내합니다. [노트](docs/ko/notes.md)를 참고하세요.
 
+### 알림과 함께 원인 분석을 받을 수 있습니다
+
+`opsgate watch`가 Kubernetes 알림을 Discord, 웹훅, 이메일로 직접 보냅니다.
+선택 기능인 analyzer는 조회 도구로 조사해 예상 원인을 보고합니다. 이미지 오류에는
+복원 링크를 제안할 수 있으며, 실행하려면 사람의 승인이 필요합니다.
+[Watch 알림](#watch-알림)을 참고하세요.
+
 
 
 ## 할 수 있는 일
@@ -62,9 +69,9 @@ AI 클라이언트에는 로그나 조회 결과 안의 지시문을
 
 | 기능(provider) | 조회 도구 | 변경 도구(승인 필요) |
 | --- | --- | --- |
-| Kubernetes | 개요, 목록, 상세, 이벤트, 파드 로그 | 워크로드 재시작, 실행할 파드 수 조정, 파드 삭제 |
+| Kubernetes | 클러스터, 개요, 목록, 상세, 환경 변수, 서비스 점검, 이벤트, 파드 로그, 조치 옵션 | 워크로드 재시작, 실행할 파드 수 조정, 파드 삭제, 이전 이미지 복원 |
 | 노트: 런북과 메모리, Markdown 폴더 또는 Obsidian 볼트 *(실험적)* | 검색, 읽기, 목록, 최근 노트, 링크, 태그 | 작성, 내용 추가, 내용 수정, 휴지통으로 이동 |
-| Dev *(실험적)* | 프로젝트, 작업 상태, 로그, diff, 목록 | Git worktree에서 코딩 에이전트(Codex, Claude) 실행 |
+| Dev *(실험적)* | 프로젝트, 작업 상태, 로그, diff, 목록 | Git worktree에서 코딩 에이전트(Codex, Claude) 실행. 자기 작업 취소에는 새 승인이 필요 없음 |
 
 스코프는 사용자가 opsgate를 통해 수행할 수 있는 작업의 종류입니다. `ops:read`는 조회, `ops:write`는
 운영 대상과 노트 변경, `dev:run`은 코딩 에이전트 실행에 사용합니다. 허용 목록은 접근할
@@ -82,8 +89,9 @@ requests·limits 설정값은 Kubernetes 상세 조회로 확인할 수 있습�
 
 <img src="docs/images/ko/architecture.svg" alt="클라이언트 연결, 인증과 도구 처리, provider 및 OS 계정·RBAC 신뢰 경계를 보여 주는 opsgate 구조" width="830">
 
-AI 클라이언트가 조회 결과를 분석하고 다음 작업을 선택합니다. opsgate 자체는 AI 모델을
+AI 클라이언트가 조회 결과를 분석하고 다음 작업을 선택합니다. opsgate MCP 서버는 AI 모델을
 실행하거나 호출하지 않으며, 요청받은 도구의 권한과 대상을 검사하고 실행합니다.
+선택 기능인 별도 프로세스 `opsgate-analyzer`만 직접 지정한 모델을 호출합니다.
 
 Kubernetes 도구는 kubeconfig의 접속 정보나 클러스터 내부 인증으로 Kubernetes API에
 접속합니다. 따라서 로컬 PC에서 실행해도 네트워크 연결과 접근 권한이 있으면 원격
@@ -111,6 +119,7 @@ opsgate는 신원과 정책을 확인하고, 쓰기 작업을 계획한 뒤 승�
 선택적으로 승인 시간 창을 설정하면, 사용자가 특정 도구를 일정 시간 동안 승인할 수
 있습니다. 그동안 같은 사용자의 해당 도구 호출은 대상이나 인자가 달라도 추가 승인 요청을
 생략할 수 있습니다. 권한과 허용 대상 검사는 매번 수행하며, 기본값은 꺼짐입니다.
+`k8s_restore_image`에는 승인 시간 창이 적용되지 않습니다.
 
 <img src="docs/images/ko/approval-flow.svg" alt="쓰기 호출의 계획, 승인 시간 창·클라이언트·웹 승인, 재호출 검증과 실행 및 거부 경로" width="830">
 
@@ -128,11 +137,15 @@ note provider를 활성화하면 AI에 조치 전 과거 기록을 검색하고,
 
 ## 빠른 시작: 로컬(stdio)
 
-Go 1.26 이상으로 빌드하세요.
+[릴리스](https://github.com/gkdis6/opsgate/releases)에서 압축 파일을 받아
+[검증](docs/ko/deploy.md#설치-전-릴리스-검증)한 뒤 쓰거나, Go 1.26 이상으로 빌드하세요.
 
 ```sh
 go install github.com/gkdis6/opsgate/cmd/opsgate@latest   # 또는: make build
 ```
+
+이 `go install`은 `opsgate`만 빌드합니다. 선택 기능인 analyzer는 별도 명령
+`./cmd/opsgate-analyzer`입니다.
 
 현재 kubeconfig를 사용하는 설정 파일을 저장하세요. 아래 예제에서는 `/path/opsgate.yaml`을 사용합니다.
 
@@ -197,8 +210,6 @@ providers:
 kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 ```
 
-`opsgate -h`는 명령과 플래그 목록을, `opsgate help <명령>`은 해당 명령의 도움말을 보여 줍니다. `opsgate version` 또는 `-version`은 빌드 버전을 출력합니다. 도움말과 명령 성공은 종료 코드 0, 잘못된 명령·플래그나 불필요한 인자는 설정을 읽기 전에 2, 실행 중 오류는 1을 반환합니다. 도움말은 stdout, 오류는 stderr로 출력합니다.
-
 1. 처음 시작하면 패스키가 없는 사용자마다 일회용 등록 링크(24시간 유효)가 로그에
    남습니다. 링크를 열고 **Create passkey**를 누르세요. 링크를 새로 만들려면
    `kubectl -n opsgate exec deploy/opsgate -- /opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`를 실행하세요.
@@ -211,7 +222,7 @@ kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 생성된 파일은 클라이언트 리다이렉트 호스트(`allowed_redirect_hosts`)를 이미
 제한합니다. 외부에 공개하기 전에 확인하세요. GitHub, Google 등 다른 로그인 방식은
 [인증 문서](docs/ko/authentication.md)에, 프록시 경로·릴리스 검증은
-[배포 문서](docs/ko/deploy.md)에 있습니다.
+[배포 문서](docs/ko/deploy.md)에 있습니다. 명령과 플래그 목록은 `opsgate -h`로 볼 수 있습니다.
 
 
 
@@ -219,44 +230,7 @@ kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 
 MCP 서버와 함께 `opsgate watch`를 실행하면 Kubernetes의 문제와 변경 알림을
 받을 수 있습니다. Kubernetes API를 감시하고 Discord, 커스텀 JSON 웹훅,
-SMTP 이메일로 직접 전송하므로 n8n은 선택 사항입니다. 받은 알림을 MCP
-클라이언트에 붙여넣으면 opsgate 조회 도구로 해당 리소스의 원인을 조사할 수 있습니다.
-
-### 알림에서 원인 분석으로
-
-받은 알림과 함께 다음처럼 요청할 수 있습니다.
-
-> 이 알림을 opsgate MCP로 조사해줘. 관련 운영 기록, 리소스 상태와 이벤트,
-> 현재·직전 컨테이너 로그를 확인하고, 확인된 원인과 추정 원인,
-> 추가 확인 사항을 구분해서 알려줘.
-
-조사 흐름의 예시는 다음과 같습니다.
-
-1. Notes provider가 켜져 있으면 서비스·증상·오류 내용으로 운영 노트와 과거 장애 기록을 검색합니다.
-2. 알림의 클러스터·namespace·리소스와 발생 시각을 기준으로 Pod·워크로드 상태와 Kubernetes 이벤트를 확인합니다.
-3. 로그 조회가 허용된 경우 현재 로그와 `previous: true`로 읽은 직전 컨테이너 로그를 비교해 장애 시점을 추적합니다.
-4. 로그·이벤트 등 근거와 함께 확인된 원인, 추정 원인, 추가로 필요한 확인을 구분해 설명합니다.
-
-분석은 MCP 클라이언트의 AI가 조회 도구를 호출해 수행하며, watch는 알림을
-전달합니다. 조사 범위는 활성화된 provider와 접근 정책에 따라 달라집니다.
-현재 Kubernetes 모드의 도구 범위에는 호스트 자원·systemd 로그 조회가 포함되지
-않습니다. Pod 삭제나 로그·이벤트 만료로 근거가 남아 있지 않으면 근본 원인까지
-확정하지 못할 수 있습니다. 재시작 등 변경은 별도 승인 절차를 따릅니다.
-
-### 자동 분석 연결 (선택)
-
-별도 `opsgate-analyzer` 프로세스가 서명된 watch 알림을 받아, 모델이 조회 전용
-MCP 도구로 조사하게 한 뒤 Discord에 분석 결과를 보낼 수 있습니다. 반복 알림을
-묶고 조사 한도를 적용하며 쓰기 도구는 호출하지 않습니다. 모델과 자격 증명 파일은
-직접 지정합니다. 일반 watch 알림과 대화형 MCP 사용에는 모델이 필요하지 않습니다.
-`model.backend`로 OpenAI 호환 Chat Completions 또는 설치된 Claude Code(`claude -p`)·Codex(`codex exec`) CLI를 선택하는 실험 기능입니다. CLI 방식은 실행 계정의 CLI 인증을
-사용하므로 별도 모델 API 키 파일이 필요하지 않습니다.
-[자동 분석 문서](docs/ko/analyzer.md)를 참고하세요.
-
-즉시 Discord 알림의 원인 설명은 출력별 `language: ko` 또는 `en`으로 선택합니다.
-분석 보고서는 `report.language`와 `report.suggest_actions`로 언어와 권장 조치를
-설정합니다. 조치는 제안만 하며 자동 실행하지 않습니다. 오류 코드와 원문 근거는
-그대로 유지합니다. [언어·조치 설정](docs/ko/analyzer.md#알림-언어와-권장-조치)을 참고하세요.
+SMTP 이메일로 직접 전송하므로 n8n은 선택 사항입니다.
 
 ### 전송 설정
 
@@ -264,10 +238,11 @@ Kubernetes provider가 켜진 설정에 다음 내용을 추가하세요.
 
 ```yaml
 watch:
+  problems_only: true # 선택: 경고만 받기
   outputs:
     - name: discord
       type: discord
-      language: ko # ko or en
+      language: ko # ko 또는 en
       url_file: /etc/opsgate/discord-webhook-url
     - name: custom
       type: webhook
@@ -287,12 +262,56 @@ Secret을 파일로 마운트해 사용하세요.
 opsgate watch -config opsgate.yaml
 ```
 
+`watch.problems_only: true`는 재시작, `OOMKilled`, 이미지 받기 실패, 롤아웃 정체 같은
+경고만 남깁니다. 이미지, replica, ConfigMap 키 변경, 오브젝트 생성·삭제, 노드 복구 같은
+변경 알림은 모든 전송 대상에서 빠집니다. 출력 하나에 설정하면 그 대상에만 적용됩니다.
+알림 이유를 하나씩 골라 끌 수는 없습니다.
+
 각 대상은 별도 큐·쿨다운·재시도를 사용합니다. Discord 메시지에는 발생 시각(UTC),
 클러스터, namespace/리소스, 오류 이유와 요약이 포함되며, 긴 배치는 Discord 제한에
 맞춰 잘림을 표시합니다. 커스텀 템플릿은 `json` 함수로 값을 안전하게 인코딩하고
 유효한 JSON을 만들어야 합니다. 기존 `watch.webhook_url`과 `watch.email`도
 새 전송 대상과 함께 사용할 수 있습니다. 전송 제한, HMAC 서명과 전체 설정은
 [watch 알림 문서](docs/ko/watch.md)를 참고하세요.
+
+### 알림 조사하기
+
+받은 알림을 MCP 클라이언트에 붙여넣고 다음처럼 요청할 수 있습니다.
+
+> 이 알림을 opsgate MCP로 조사해줘. 관련 운영 기록, 리소스 상태와 이벤트,
+> 현재·직전 컨테이너 로그를 확인하고, 확인된 원인과 추정 원인,
+> 추가 확인 사항을 구분해서 알려줘.
+
+조사는 클라이언트의 AI가 조회 도구로 수행합니다. 확인할 수 있는 근거는 활성화된 provider와
+접근 정책에 따라 달라지며, Pod 삭제나 로그·이벤트 만료로 원인을 확정하지 못할 수 있습니다.
+변경은 일반 승인 절차를 따릅니다.
+
+### 자동 분석 (선택)
+
+실험 기능인 별도 프로세스 `opsgate-analyzer`는 서명된 watch 알림을 받아, 모델이 허용 목록의
+조회 전용 MCP 도구로 조사하게 한 뒤 Discord에 보고서를 보냅니다. 알림을 먼저 보내고
+보고서는 별도 메시지로 보내므로 분석 때문에 알림이 늦어지지 않습니다. 반복 알림을 묶고
+조사 한도를 적용하며, 쓰기 도구를 호출하거나 자신의 제안을 실행하지 않습니다.
+`model.backend`로 OpenAI 호환 API나 설치된 Claude Code·Codex CLI를 선택합니다. 일반 watch와
+MCP 사용에는 모델이 필요하지 않습니다.
+
+**데이터가 클러스터 밖으로 나갑니다.** 알림 내용과 도구 결과는 analyzer가 읽을 수 있는 로그와
+노트를 포함해 선택한 모델 제공자로, 보고서는 Discord로 전송됩니다. 먼저 마스킹하지만 모든
+비밀 값을 찾아낼 수는 없습니다. 이 서비스들에 보내도 되는 데이터만 접근을 허용하세요.
+
+보고서 언어와 조치 제안은 `report.language`와 `report.suggest_actions`로 설정합니다.
+[자동 분석 문서](docs/ko/analyzer.md)를 참고하세요.
+
+### 실패한 이미지 복원 (선택)
+
+Kubernetes 클러스터에 `restore_image`(`namespace/deployment` 허용 목록)와
+`action_approval_url`을 설정하면 켜집니다. 파드가 `ImagePullBackOff`, `ErrImagePull`,
+`InvalidImageName`으로 실패할 때, 같은 Deployment의 준비된 ReplicaSet에 다른 이미지가 있으면
+`k8s_remediation_options`가 승인 링크를 돌려줍니다. analyzer는 이 링크를 보고서에 붙일 수 있습니다.
+
+링크를 열려면 로그인해야 하고, 그때 새로 계산한 계획이 표시됩니다. 사람이 승인하기 전에는
+아무것도 바뀌지 않으며, 패치 직전에 계획을 다시 확인합니다. 해당 컨테이너의 이미지만 바뀌고
+설정은 되돌리지 않습니다.
 
 
 
@@ -306,6 +325,8 @@ opsgate watch -config opsgate.yaml
 - HTTP에서는 `approval.web`이 켜져 있으면 기본적으로 브라우저 승인을 요구합니다.
   `approval.require_web: false`를 명시하면 클라이언트 내 확인을 허용하며, 침해된 클라이언트가
   자기 쓰기를 스스로 승인할 수 있습니다. HTTP 시작 시 경고를 남깁니다.
+- 선택 기능인 analyzer는 알림과 조사한 근거를 선택한 모델 제공자로 보냅니다. 마스킹으로
+  노출을 줄이지만 완전히 막는 것은 아닙니다.
 
 자세한 내용: [보안 정책](docs/ko/security.md)
 
@@ -335,5 +356,3 @@ opsgate watch -config opsgate.yaml
 [CONTRIBUTING.md](CONTRIBUTING.md), [행동 강령](CODE_OF_CONDUCT.md),
 [변경 이력](CHANGELOG.md)을 참고하세요. 라이선스는 [Apache-2.0](LICENSE)이며,
 저작권은 2026 The opsgate Authors에 있습니다.
-
-장애 알림은 먼저 전송하고, 선택적 분석기가 원인·근거·권장 조치를 별도 메시지로 보냅니다. 분석 지연은 최초 알림을 막지 않습니다.

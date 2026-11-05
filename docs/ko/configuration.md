@@ -293,3 +293,7 @@ Discord 출력은 `watch.outputs[].language: ko|en`(기본 en), 분석 보고서
 Kubernetes `restore_image: ["namespace/deployment"]`와
 `action_approval_url: https://mcp.example.com`을 설정하면 검증된 이전 이미지 복원 승인을
 활성화합니다. 기본 비활성이며 [분석기 문서](analyzer.md)를 참고하세요.
+
+## 명령줄
+
+`opsgate -h`는 명령과 플래그 목록을, `opsgate help <명령>`은 해당 명령의 도움말을 보여 줍니다. `opsgate version` 또는 `-version`은 빌드 버전을 출력합니다. 도움말과 명령 성공은 종료 코드 0, 잘못된 명령·플래그나 불필요한 인자는 설정을 읽기 전에 2, 실행 중 오류는 1을 반환합니다. 도움말은 stdout, 오류는 stderr로 출력합니다.

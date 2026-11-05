@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 942" role="img" aria-labelledby="title desc" lang="ko">
-<title id="title">opsgate 동작 구조</title>
-<desc id="desc">MCP 클라이언트는 로컬 stdio 또는 TLS 리버스 프록시를 거치는 HTTPS로 연결합니다. opsgate는 인증, 스코프와 정책 검사, 도구 래퍼의 계획·승인·실행, 출력 마스킹과 크기 제한, JSONL 감사를 적용합니다. Kubernetes·노트와 별도 dev runner는 OS 계정과 RBAC로 제한합니다. 셸 도구는 없습니다.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 1222" role="img" aria-labelledby="title desc" lang="ko">
+<title id="title">opsgate 구조와 자동 알림 조사</title>
+<desc id="desc">MCP 클라이언트는 로컬 stdio 또는 TLS 리버스 프록시를 거치는 HTTPS로 연결합니다. opsgate는 인증, 스코프와 정책 검사, 도구 래퍼의 계획·승인·실행, 출력 마스킹과 크기 제한, JSONL 감사를 적용합니다. Kubernetes·노트와 별도 dev runner는 OS 계정과 RBAC로 제한합니다. 셸 도구는 없습니다. 별도 analyzer 파드는 서명된 watch 알림을 받아 모델과 읽기 전용 MCP 도구로 조사하고, 즉시 알림과 별도로 Discord 및 선택 사항인 webhook에 보고합니다.</desc>
 <style>
 svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
 text { fill: #202936; }
@@ -115,4 +115,33 @@ text { fill: #202936; }
 <text x="32" y="846" class="small muted">프로세스당 전송 방식 하나.</text>
 <text x="32" y="869" class="small muted">provider와 쓰기는 별도로 활성화합니다.</text>
 <text x="32" y="892" class="small muted">승인된 작업에도 권한 제한이 적용됩니다.</text>
+<text x="24" y="966" class="head">선택 사항: 자동 알림 조사</text>
+<rect x="24" y="990" width="210" height="64" rx="9" class="box"/>
+<text x="40" y="1017" class="head">opsgate watch</text>
+<text x="40" y="1040" class="small">서명된 기본 JSON</text>
+<path d="M234 1022 H282" class="line"/>
+<rect x="282" y="990" width="280" height="64" rx="9" class="accent"/>
+<text x="298" y="1017" class="head">opsgate-analyzer</text>
+<text x="298" y="1040" class="small">별도 파드 · 모델 조사</text>
+<path d="M129 1054 V1110" class="line"/>
+<text x="140" y="1085" class="small">즉시 알림</text>
+<rect x="24" y="1110" width="210" height="66" rx="9" class="box"/>
+<text x="40" y="1137" class="head">알림 출력</text>
+<text x="40" y="1160" class="small">Discord / webhook / SMTP</text>
+<path d="M562 1022 H604" class="line"/>
+<rect x="604" y="990" width="202" height="64" rx="9" class="box"/>
+<text x="620" y="1017" class="head">별도 보고서</text>
+<text x="620" y="1040" class="small">Discord + 선택 webhook</text>
+<path d="M414 1054 V1110" class="line"/>
+<path d="M434 1110 V1054" class="line return"/>
+<rect x="282" y="1110" width="280" height="88" rx="9" class="box"/>
+<text x="298" y="1137" class="head">읽기 전용 MCP reader</text>
+<text x="298" y="1160" class="small">같은 파드 · 루프백 · ops:read</text>
+<text x="298" y="1183" class="small">Kubernetes / note 읽기 도구만</text>
+<path d="M520 1054 V1082 H695 V1110" class="line"/>
+<path d="M715 1110 V1068 H540 V1054" class="line return"/>
+<rect x="604" y="1110" width="202" height="88" rx="9" class="box"/>
+<text x="620" y="1137" class="head">모델 제공자</text>
+<text x="620" y="1160" class="small">API 또는 CLI 백엔드</text>
+<text x="620" y="1183" class="small muted">클러스터 밖 · 마스킹 후 전달</text>
 </svg>

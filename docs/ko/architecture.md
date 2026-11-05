@@ -2,7 +2,7 @@
 
 [English](../architecture.md)
 
-<img src="../images/ko/architecture.svg" alt="opsgate 구조, provider와 신뢰 경계" width="830">
+<img src="../images/ko/architecture.svg" alt="opsgate 구조, provider, 신뢰 경계와 알림 조사" width="830">
 
 opsgate는 Go로 작성한 MCP 서버입니다. 설정된 운영 작업을 provider의 도구로 제공하고, 각 도구에 공통 인가, 출력 처리, 감사 기능을 적용합니다.
 
@@ -44,11 +44,19 @@ HTTP 리스너는 일반 HTTP로 통신하므로, 외부에 HTTPS로 제공하�
 
 프로세스마다 전송 방식을 하나만 선택하며, 기본값은 stdio입니다. HTTP를 사용하려면 인증 모드를 명시해야 하고, `dev:run` 도구를 쓰는 호출자에게도 `ops:read`가 있어야 합니다.
 
+## 자동 알림 조사
+
+`opsgate-analyzer`는 선택 사항인 실험적 별도 프로세스입니다. `opsgate watch`는 독립된 webhook 출력으로 HMAC 서명한 기본 JSON 배치를 analyzer의 `/alerts`에 보냅니다. 즉시 알림은 모델을 기다리지 않습니다. analyzer는 모델과 읽기 전용 MCP 도구로 제한된 조사를 수행하고, 결과 또는 실패 보고서를 Discord와 선택 사항인 서명 webhook으로 보냅니다. [참조 매니페스트](../../deploy/kubernetes/opsgate-analyzer.yaml)는 별도 파드에서 analyzer와 루프백 MCP reader 컨테이너를 함께 실행하며, 설정과 자격 증명을 준비하기 전에는 복제본 수가 0입니다. 자세한 내용은 [자동 알림 조사](analyzer.md)를 참고하세요.
+
 ## 패키지
 
 | 패키지 | 역할 |
 | --- | --- |
 | `cmd/opsgate` | 설정을 읽고 프로세스를 구성하며, `init`, `config show`, `-gen-token`, `passkey invite`, `watch`, `dev-runner`를 지원합니다. |
+| `cmd/opsgate-analyzer` | analyzer 설정을 읽고 `opsgate-analyzer` 수신기와 조사 worker를 시작하며, `-check`로 설정과 자격 증명을 확인합니다. |
+| `internal/analyzer` | 서명 배치 수신, 큐, 모델 어댑터, 제한된 읽기 전용 MCP 조사, 보고서 전송을 담당합니다. |
+| `internal/alert` | watch 알림을 묶고 중복을 줄이며, webhook, Discord, SMTP로 전송합니다. |
+| `internal/buildinfo` | 빌드 시 주입한 버전 또는 Go 빌드 메타데이터에서 실행 파일 버전을 제공합니다. |
 | `internal/config` | YAML 문서 하나를 읽어 기본값에 덮어쓰고, 알 수 없는 키를 거부하며 설정 검증과 스코프 정의를 담당합니다. |
 | `internal/httpserver` | HTTP 라우팅, Host/CORS 검사, 보안 헤더, 접근 로그, 프로토콜 선택을 담당합니다. |
 | `internal/authn` | 고정 Bearer 토큰과 외부 JWT를 검증하며, 외부 JWT 검증에는 검색으로 찾은 JWKS를 사용합니다. |
@@ -59,7 +67,7 @@ HTTP 리스너는 일반 HTTP로 통신하므로, 외부에 HTTPS로 제공하�
 | `internal/redact` | 정규식과 직접 스캔으로 알려진 비밀값 패턴을 마스킹하지만, 안전장치일 뿐 모든 비밀값을 찾아내지는 못합니다. |
 | `internal/audit` | 파일 또는 stderr에 JSONL 감사 이벤트를 추가합니다. |
 | `internal/ui` | 동의, 승인, 패스키, 관리 페이지의 공통 레이아웃을 제공합니다. |
-| `internal/provider/kube` | Kubernetes 오브젝트, 이벤트, 로그를 제공하고, 네임스페이스 정책과 허용 목록에 따라 rollout restart, scale, 파드 삭제를 실행합니다. |
+| `internal/provider/kube` | Kubernetes 오브젝트, 이벤트, 로그를 제공하고, 네임스페이스 정책과 허용 목록에 따라 rollout restart, scale, 파드 삭제, 이미지 복원을 실행하고 읽기 전용 복구 선택지를 제공합니다. |
 | `internal/provider/note` | Markdown 볼트를 검색하고 읽으며, 선택 사항인 create/append/replace/trash 도구에서는 내용/diff 미리보기와 스냅샷 검사를 사용합니다. |
 | `internal/provider/dev`, `internal/devrunner` | 별도 runner에 요청을 보내면, runner가 설정된 프로젝트/에이전트를 선택해 Git worktree에서 작업을 실행합니다. |
 
@@ -91,6 +99,10 @@ HTTP 리스너는 일반 HTTP로 통신하므로, 외부에 HTTPS로 제공하�
 승인이 필요한 쓰기는 계획(Plan) → 승인 → 실행(Apply) 순서로 진행합니다. 일회성 승인은 사용자, 전송 방식, 도구, 마스킹 전 인자 해시, 계획 요약에 묶입니다. 승인 시간 창은 선택 사항이며, 사용하면 특정 사용자, 도구, 대상 조합에 의도적으로 더 넓은 접근 권한을 줍니다. [사람의 승인](approval.md)을 참고하세요.
 
 로그, 노트, 이벤트, 에이전트 출력은 신뢰할 수 없는 데이터로 취급하세요. 마스킹은 비밀값이 실수로 드러날 가능성을 줄이지만, 프롬프트 인젝션을 막거나 그 텍스트를 안전하게 따를 수 있는 지시로 만들지는 않습니다.
+
+analyzer는 `k8s_clusters`, `k8s_overview`, `k8s_list`, `k8s_get`, `k8s_events`, `k8s_logs`, `k8s_service_check`, `k8s_remediation_options`, `note_search`, `note_read`, `note_recent`, `note_list`, `note_links`, `note_tags`만 호출하며, `readOnlyHint`도 요구합니다. 호출 직전에 정책을 다시 검사하고, 승인 시간 창으로 이 목록을 넓힐 수 없습니다. 전용 reader의 `ops:read` 토큰, 도구 정책, 네임스페이스 정책과 읽기 전용 RBAC가 추가로 범위를 제한합니다.
+
+analyzer는 공유 HMAC 키, MCP Bearer 토큰, Discord webhook URL, API 백엔드의 모델 API 키 또는 CLI 백엔드 실행 계정의 로그인 자격 증명에 접근합니다. 선택 사항인 보고서 전달에는 별도 HMAC 키를 사용합니다. 참조 파드의 ServiceAccount는 `opsgate-readonly`에 연결됩니다. `/alerts`는 공개 ingress 없이 Service로 제공하므로 watch만 접근하도록 네트워크를 제한하세요. reader에는 루프백으로, 선택한 모델 제공자와 Discord 및 설정된 전달 수신기에는 외부 통신이 필요합니다. 참조 매니페스트는 NetworkPolicy를 정의하지 않습니다. 알림과 도구 출력은 모델에 보내기 전에 마스킹하고 보고서는 Discord 전송 전에 마스킹하지만, 민감한 정보를 모두 찾아낸다는 보장은 없습니다. 선택한 모델 제공자와 Discord에 전달해도 되는 데이터만 허용하세요. [자동 알림 조사](analyzer.md)를 참고하세요.
 
 `dev-runner`는 자체 설정, 프로젝트, 에이전트 명령을 사용하는 별도 계정으로 실행하세요. 서버는 Unix 소켓으로 runner와 통신합니다. Linux에서 runner는 `SO_PEERCRED`로 연결 상대의 자격 증명을 검사하고, 자신과 UID가 같거나 설정된 소켓 그룹에 속한 호출자를 허용합니다. 에이전트가 실행할 수 있는 작업의 범위는 runner 계정과 설정된 에이전트 샌드박스가 결정하며, 요청한 사람의 OS 권한을 따르지는 않습니다. [개발 도구](dev.md)와 [보안 정책](security.md)을 참고하세요.
 

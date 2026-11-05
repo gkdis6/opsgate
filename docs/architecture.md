@@ -2,7 +2,7 @@
 
 [한국어](ko/architecture.md)
 
-<img src="images/architecture.svg" alt="opsgate architecture, providers and trust boundaries" width="830">
+<img src="images/architecture.svg" alt="opsgate architecture, providers, trust boundaries and alert investigation" width="830">
 
 opsgate is a Go MCP server. It exposes configured operations through providers and applies shared authorization, output handling and auditing around their tools.
 
@@ -44,11 +44,19 @@ For `/mcp`, `Mcp-Protocol-Version` values lexically at or above `2026-07-28` sel
 
 The command selects one transport per process. stdio is the default. HTTP requires an explicit authentication mode and `ops:read` even for callers using `dev:run` tools.
 
+## Automatic alert investigation
+
+`opsgate-analyzer` is an optional, experimental separate process. `opsgate watch` sends HMAC-signed native JSON batches to its `/alerts` endpoint through an independent webhook output; immediate notifications do not wait for the model. The analyzer uses a model and read-only MCP tools for bounded investigations, then sends a result or failure report to Discord and an optional signed webhook. The [reference manifest](../deploy/kubernetes/opsgate-analyzer.yaml) runs the analyzer and a loopback MCP reader container together in their own pod, with zero replicas until configuration and credentials are supplied. See [Automatic alert investigation](analyzer.md).
+
 ## Packages
 
 | Package | Responsibility |
 | --- | --- |
 | `cmd/opsgate` | Loads configuration and assembles the process; supports `init`, `config show`, `-gen-token`, `passkey invite`, `watch` and `dev-runner` |
+| `cmd/opsgate-analyzer` | Loads analyzer configuration and starts the `opsgate-analyzer` receiver and investigation worker; `-check` checks configuration and credentials |
+| `internal/analyzer` | Signed batch reception, queueing, model adapters, bounded read-only MCP investigations and report delivery |
+| `internal/alert` | Watch alert batching, deduplication and webhook, Discord and SMTP delivery |
+| `internal/buildinfo` | Executable version from build-time injection or Go build metadata |
 | `internal/config` | Loads one YAML document over defaults, rejects unknown keys, validates configuration and defines scopes |
 | `internal/httpserver` | HTTP routing, Host/CORS checks, security headers, access logs and protocol selection |
 | `internal/authn` | Static bearer verification and external JWT verification through discovered JWKS |
@@ -59,7 +67,7 @@ The command selects one transport per process. stdio is the default. HTTP requir
 | `internal/redact` | Masks known secret patterns using regular expressions and direct scanning; masking is a safety net, not complete secret detection |
 | `internal/audit` | Appends JSONL audit events to a file or stderr |
 | `internal/ui` | Shared page layout for consent, approval, passkeys and administration |
-| `internal/provider/kube` | Kubernetes objects, events and logs; allowlisted rollout restarts, scaling and pod deletion within namespace policy |
+| `internal/provider/kube` | Kubernetes objects, events and logs; allowlisted rollout restarts, scaling, pod deletion and image restoration within namespace policy; read-only remediation options |
 | `internal/provider/note` | Searches and reads a Markdown vault; optional create/append/replace/trash tools with content/diff previews and snapshot checks |
 | `internal/provider/dev`, `internal/devrunner` | Sends requests to a separate runner; the runner chooses configured projects/agents and executes tasks in Git worktrees |
 
@@ -91,6 +99,10 @@ Access is constrained by several independent layers: token/local scopes, server 
 Approved writes follow Plan → confirmation → Apply. A one-call confirmation binds the user, transport, tool, unredacted argument hash and plan summary. An optional approval window deliberately grants broader access for one user, tool and target. See [Human approval](approval.md).
 
 Treat logs, notes, events and agent output as untrusted data. Masking reduces accidental exposure; it does not prevent prompt injection or make that text safe to follow as instructions.
+
+The analyzer calls only `k8s_clusters`, `k8s_overview`, `k8s_list`, `k8s_get`, `k8s_events`, `k8s_logs`, `k8s_service_check`, `k8s_remediation_options`, `note_search`, `note_read`, `note_recent`, `note_list`, `note_links`, `note_tags`, and also requires `readOnlyHint`. Policy is checked again before execution; approval windows cannot expand this list. A dedicated reader’s `ops:read` token, tool policies, namespace policies and read-only RBAC further constrain access.
+
+The analyzer has the shared HMAC key, MCP bearer token, Discord webhook URL, and either a model API key for the API backend or the execution account’s CLI login credentials for CLI backends. Optional report forwarding uses a separate HMAC key. The reference pod’s ServiceAccount is bound to `opsgate-readonly`. Its `/alerts` Service has no public ingress; restrict network access to watch. It needs loopback access to the reader and outbound access to the selected model provider, Discord and any configured forwarding receiver. The reference manifest defines no NetworkPolicy. Alert text and tool output are masked before sending to the model, and reports before Discord, but masking cannot guarantee detection of all sensitive content: allow only data intended for the selected model provider and Discord to receive. See [Automatic alert investigation](analyzer.md).
 
 Run `dev-runner` under a separate account with its own configuration, projects and agent commands. The server communicates over a Unix socket. On Linux, the runner checks peer credentials with `SO_PEERCRED`, accepting its own UID or callers in the configured socket group. Agent execution is limited by the runner account and any configured agent sandbox, not by the requesting person's OS permissions. See [Development tools](dev.md) and the [security policy](../SECURITY.md).
 

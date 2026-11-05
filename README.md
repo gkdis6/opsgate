@@ -218,6 +218,49 @@ release verification are in [deployment](docs/deploy.md).
 
 
 
+## Watch alerts
+
+Run `opsgate watch` alongside the MCP server to receive Kubernetes problem and
+change notifications. It watches the Kubernetes API and sends alerts directly
+to Discord, custom JSON webhooks or SMTP email. n8n is optional. Paste an alert
+into an MCP client to investigate the resource with opsgate's read tools.
+
+Add the following to a configuration with the Kubernetes provider enabled:
+
+```yaml
+watch:
+  outputs:
+    - name: discord
+      type: discord
+      url_file: /etc/opsgate/discord-webhook-url
+    - name: custom
+      type: webhook
+      url: https://alerts.example.com/ingest
+      header_files:
+        Authorization: /etc/opsgate/alerts-authorization
+      body_template: |
+        {"message": {{json .Text}}, "sent_at": {{json .SentAt}}, "alerts": {{json .Alerts}}}
+```
+
+Keep the destinations you need. Store the Discord channel's incoming webhook URL
+in `url_file`; the authorization file contains the full header value, such as
+`Bearer TOKEN`. Files are read at startup, so restart watch after changing them.
+In Kubernetes, mount these files from Secrets.
+
+```sh
+opsgate watch -config opsgate.yaml
+```
+
+Each destination has its own queue, cooldown and retries. Discord embeds include
+UTC occurrence times, cluster, namespace/resource, reason and summary; long
+batches are visibly truncated to fit Discord's limit. Custom templates use the
+`json` helper to escape values and must produce valid JSON. Existing
+`watch.webhook_url` and `watch.email` settings remain supported alongside outputs.
+See [watch alerts](docs/watch.md) for delivery limits, HMAC signatures and all
+configuration options.
+
+
+
 ## Security model in brief
 
 - One instance is one trust group: `ops:read` covers every enabled provider. Use
@@ -246,14 +289,10 @@ Full details: [SECURITY.md](SECURITY.md).
 | [Notes](docs/notes.md) | Runbooks and incident memory in a Markdown folder |
 | [Deployment](docs/deploy.md) | Release verification, Kubernetes, reverse proxy |
 | [Dev provider](docs/dev.md) | Running coding agents through the separate runner |
-| [Watch alerts](docs/watch.md) | Separate `opsgate watch` process sending Kubernetes alerts to a webhook, email or both |
+| [Watch alerts](docs/watch.md) | Kubernetes alerts to Discord, custom JSON webhooks and email through a separate `opsgate watch` process |
 | [Roadmap](docs/roadmap.md) | What is done and what may come |
 
 
-
-Watch supports direct Discord delivery and custom JSON webhook templates through
-`watch.outputs`, with independent queues and retries; n8n is optional. See
-[watch alerts](docs/watch.md#direct-discord-and-custom-webhooks).
 
 ## Contributing and license
 

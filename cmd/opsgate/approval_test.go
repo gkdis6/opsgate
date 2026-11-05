@@ -172,7 +172,7 @@ func TestHTTPElicitationWarning(t *testing.T) {
 		{name: "static", settings: "auth:\n  mode: static\n", warn: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg, err := config.Parse([]byte("mode: kubernetes\nhttp:\n  public_url: https://ops.example\n  listen: 127.0.0.1:99999\n"+tc.settings), "warning")
+			cfg, err := config.Parse([]byte("mode: kubernetes\nhttp:\n  public_url: https://ops.example\n  listen: 127.0.0.1:99999\nproviders:\n  kubernetes:\n    enabled: false\n"+tc.settings), "warning")
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -305,7 +305,7 @@ MCP use need no model.
 
 **Data leaves your cluster.** Alert text and tool output, including logs and notes
 the analyzer can read, go to the model provider you select, and reports go to
-Discord. Both are redacted first, but redaction cannot detect every secret. Allow
+Discord and optionally a configured forward receiver. Alert string values are masked before JSON encoding for every model backend; reports are masked before either notification sink. Redaction cannot detect every secret. Allow
 access only to data you intend those services to receive.
 
 Report language and action proposals are set with `report.language` and
@@ -316,8 +316,7 @@ Report language and action proposals are set with `report.language` and
 Set `restore_image` (a `namespace/deployment` allowlist) and `action_approval_url`
 on a Kubernetes cluster to enable this. For a Pod failing with `ImagePullBackOff`,
 `ErrImagePull` or `InvalidImageName`, `k8s_remediation_options` returns an approval
-link when a currently ready ReplicaSet of the same Deployment supplies a different
-image. The analyzer can attach the link to its report.
+link when a non-deleting ReplicaSet of the same Deployment has a ready owned Pod whose target container is ready and running the proposed image. Readiness does not guarantee application health, and image tags can change in the registry. The analyzer can attach the link to its report.
 
 Opening the link needs sign-in and shows a fresh plan. Nothing changes until a
 person approves, and the plan is checked again before the patch. Only that

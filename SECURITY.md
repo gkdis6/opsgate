@@ -2,7 +2,7 @@
 
 [한국어](docs/ko/security.md)
 
-opsgate implements remote HTTP, authentication and human-approved writes and is preparing for its first public release. The optional note and dev providers are experimental. It has not yet been security-reviewed by third parties. Review the implementation you deploy.
+opsgate is a released 0.2.x project implementing remote HTTP, authentication and human-approved writes. The optional note and dev providers are experimental. It has not yet been security-reviewed by third parties. Review the implementation you deploy.
 
 ## Threat model
 
@@ -57,7 +57,16 @@ Raw write JSON defaults to 16 KiB; note create/append/replace allow 528 KiB (256
 
 `approval.require_web` defaults to `true` when `approval.web` is enabled, including by a mode with builtin auth. Explicit `approval.require_web: false` opts in to elicitation: a compromised client can approve its own writes, and the server cannot establish that a real person clicked a client-controlled prompt. External/static auth and `approval.web: false` keep `require_web` false by default because no web channel is available. HTTP startup warns when elicitation is allowed. When the file omits `require_web`, `-transport stdio` allows elicitation even with a mode, since the user starts the process locally and there is no web channel. Explicit `true` still denies stdio writes. `config show` prints the HTTP default explicitly; its `require_web: true` must be removed or set to `false` to allow stdio writes. Prompt injection can still cause the model to *request* writes. Humans must read the summary and target before approving. Approval does not make an operation safe or guarantee the target's state remains unchanged; OS privileges, RBAC and narrow allowlists remain essential. Audit records include plans, approval methods, pending outcomes, web decisions (with only an approval ID prefix) and denied multi round-trip verifications, but audit delivery is not a prerequisite for execution.
 
-## Vault provider
+## Known limitations
+
+- Anonymous authorization traffic can evict pending connection authorizations and force affected clients to restart sign-in.
+- For multiline quoted secret assignments, masking covers only the first line.
+- Dependency scanners may report GO-2026-5932 for the pinned `x/crypto` module, although opsgate does not import or call its affected OpenPGP packages.
+- Task log and diff reads fail when the complete source exceeds 20 MiB.
+- Without an existing approval window, stdio refuses note writes whose preview needs more than about 8 KiB of review.
+- Email retries can deliver duplicate messages if the connection drops during DATA.
+
+## Note provider
 
 Vault access is confined with `os.Root`, excludes dot paths and sync-conflict
 copies, and applies configured exclusions. Safe in-vault symlinks are supported.

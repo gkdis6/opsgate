@@ -296,8 +296,7 @@ opsgate watch -config opsgate.yaml
 MCP 사용에는 모델이 필요하지 않습니다.
 
 **데이터가 클러스터 밖으로 나갑니다.** 알림 내용과 도구 결과는 analyzer가 읽을 수 있는 로그와
-노트를 포함해 선택한 모델 제공자로, 보고서는 Discord로 전송됩니다. 먼저 마스킹하지만 모든
-비밀 값을 찾아낼 수는 없습니다. 이 서비스들에 보내도 되는 데이터만 접근을 허용하세요.
+노트를 포함해 선택한 모델 제공자로, 보고서는 Discord와 선택적으로 설정한 전달 수신자로 전송됩니다. 모든 모델 backend에서 알림 문자열을 JSON으로 인코딩하기 전에 마스킹하고, 두 알림 전송 경로에 보내기 전에 보고서를 마스킹합니다. 모든 비밀 값을 찾아낼 수는 없습니다. 이 서비스들에 보내도 되는 데이터만 접근을 허용하세요.
 
 보고서 언어와 조치 제안은 `report.language`와 `report.suggest_actions`로 설정합니다.
 [자동 분석 문서](docs/ko/analyzer.md)를 참고하세요.
@@ -306,8 +305,7 @@ MCP 사용에는 모델이 필요하지 않습니다.
 
 Kubernetes 클러스터에 `restore_image`(`namespace/deployment` 허용 목록)와
 `action_approval_url`을 설정하면 켜집니다. 파드가 `ImagePullBackOff`, `ErrImagePull`,
-`InvalidImageName`으로 실패할 때, 같은 Deployment의 준비된 ReplicaSet에 다른 이미지가 있으면
-`k8s_remediation_options`가 승인 링크를 돌려줍니다. analyzer는 이 링크를 보고서에 붙일 수 있습니다.
+`InvalidImageName`으로 실패할 때, 같은 Deployment의 삭제 중이 아닌 ReplicaSet이 소유한 준비된 파드에서 대상 컨테이너가 준비되어 제안 이미지를 실행 중이면 `k8s_remediation_options`가 승인 링크를 돌려줍니다. 준비 상태는 애플리케이션 정상 동작을 보장하지 않으며 레지스트리의 이미지 태그는 바뀔 수 있습니다. analyzer는 이 링크를 보고서에 붙일 수 있습니다.
 
 링크를 열려면 로그인해야 하고, 그때 새로 계산한 계획이 표시됩니다. 사람이 승인하기 전에는
 아무것도 바뀌지 않으며, 패치 직전에 계획을 다시 확인합니다. 해당 컨테이너의 이미지만 바뀌고

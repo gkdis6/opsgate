@@ -173,9 +173,7 @@ approval with built-in sign-in. Other writes cannot run this way.
 `text` can be forwarded to chat as is. `suppressed` counts repeats folded into
 the alert: the same alert repeated within one batch, or a warning repeated
 during its cooldown. Info alerts are never held back by the cooldown. Repeats
-within one batch are merged and keep the latest summary. Summaries are
-sanitized like tool output: control characters are removed, known secret
-patterns are masked and text is cut at 300 characters. Messages from the
+within one batch are merged and keep the latest summary. All cluster-controlled alert text, including `reason`, `summary` and hints, is masked before delivery or deduplication. Control characters become spaces; text is limited to 300 Unicode characters plus a truncation ellipsis. Direct JSON and custom templates receive these same sanitized fields; ordinary machine-readable reasons remain unchanged. Messages from the
 cluster are still untrusted data.
 
 With `secret_file`, every POST carries:

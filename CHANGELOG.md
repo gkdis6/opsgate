@@ -7,6 +7,29 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Removed
+
+- Remove `watch.webhook_url`, `watch.secret_file` and `watch.allow_private_http`; configurations using them fail with migration guidance. Use `watch.outputs` for webhook destinations; the default JSON body and HMAC signature stay the same. `watch.email` remains available.
+
+  Before:
+  ```yaml
+  watch:
+    webhook_url: https://hooks.example.com/watch
+    secret_file: /etc/opsgate/watch/key
+    allow_private_http: false
+  ```
+
+  After:
+  ```yaml
+  watch:
+    outputs:
+      - name: webhook
+        type: webhook
+        url: https://hooks.example.com/watch
+        secret_file: /etc/opsgate/watch/key
+        allow_private_http: false
+  ```
+
 ## [0.2.1] - 2026-11-06
 
 ### Security

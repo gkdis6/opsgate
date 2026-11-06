@@ -134,8 +134,12 @@ providers:
 # one message per batch interval, up to 288/day at 5m or 96/day at 15m,
 # especially if other services share the account.
 # watch:
-#   webhook_url: https://n8n.example.com/webhook/opsgate-watch  # optional
 #   outputs:                         # optional; independent direct destinations
+#     - name: webhook
+#       type: webhook
+#       url: https://n8n.example.com/webhook/opsgate-watch
+#       secret_file: /etc/opsgate/watch-secret  # optional HMAC key, >= 16 bytes
+#       allow_private_http: false
 #     - name: discord
 #       type: discord
 #       url_file: /etc/opsgate/discord-webhook-url
@@ -156,7 +160,6 @@ providers:
 #     batch: 5m                      # default; 1m–1h
 #     problems_only: false           # warnings only for email when true
 #   approval_url: https://mcp.example.com   # optional; links restart suggestions to approval
-#   secret_file: /etc/opsgate/watch-secret  # optional HMAC key
 #   problems_only: false
 #   batch: 30s
 #   cooldown: 15m

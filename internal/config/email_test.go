@@ -63,7 +63,7 @@ func TestWatchEmailValidation(t *testing.T) {
 func TestWatchEmailLoad(t *testing.T) {
 	const prefix = "providers:\n  kubernetes:\n    enabled: true\nwatch:\n"
 	const email = "  email:\n    host: smtp.example.com\n    from: alerts@example.com\n    to: [me@example.com]\n"
-	for _, channels := range []string{"  webhook_url: https://hooks.example.com/watch\n", email, "  webhook_url: https://hooks.example.com/watch\n" + email} {
+	for _, channels := range []string{"  outputs:\n    - name: hook\n      type: webhook\n      url: https://hooks.example.com/watch\n", email, "  outputs:\n    - name: hook\n      type: webhook\n      url: https://hooks.example.com/watch\n" + email} {
 		cfg, err := Parse([]byte(prefix+channels), "test")
 		if err != nil {
 			t.Fatal(err)
@@ -94,7 +94,7 @@ func TestWatchEmailLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.ValidateWatch(); err == nil || !strings.Contains(err.Error(), "watch.webhook_url") || !strings.Contains(err.Error(), "watch.email.host") {
+	if err := cfg.ValidateWatch(); err == nil || !strings.Contains(err.Error(), "watch.outputs") || !strings.Contains(err.Error(), "watch.email.host") {
 		t.Fatal(err)
 	}
 	for _, field := range []string{"port: 587", "username: alerts@example.com", "password_file: /etc/opsgate/password", "from: alerts@example.com", "to: [me@example.com]", "batch: 5m", "problems_only: false"} {

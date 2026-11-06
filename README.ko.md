@@ -287,8 +287,8 @@ opsgate watch -config opsgate.yaml
 각 대상은 별도 큐·쿨다운·재시도를 사용합니다. Discord 메시지에는 발생 시각(UTC),
 클러스터, namespace/리소스, 오류 이유와 요약이 포함되며, 긴 배치는 Discord 제한에
 맞춰 잘림을 표시합니다. 커스텀 템플릿은 `json` 함수로 값을 안전하게 인코딩하고
-유효한 JSON을 만들어야 합니다. 기존 `watch.webhook_url`과 `watch.email`도
-새 전송 대상과 함께 사용할 수 있습니다. 전송 제한, HMAC 서명과 전체 설정은
+유효한 JSON을 만들어야 합니다. 전송 대상은 `watch.outputs`와 `watch.email`로
+설정합니다. 전송 제한, HMAC 서명과 전체 설정은
 [watch 알림 문서](docs/ko/watch.md)를 참고하세요.
 
 ### 알림 조사하기

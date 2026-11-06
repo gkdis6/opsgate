@@ -189,14 +189,11 @@ Client registration can be restricted with `allowed_redirect_hosts`. With a none
 
 ## Watch alerts
 
-The `watch` section is read only by `opsgate watch`, a separate process; the MCP server ignores it. `opsgate watch` requires `providers.kubernetes.enabled` and at least one of `watch.webhook_url`, `watch.outputs` and `watch.email.host`.
+The `watch` section is read only by `opsgate watch`, a separate process; the MCP server ignores it. `opsgate watch` requires `providers.kubernetes.enabled` and at least one of `watch.outputs` and `watch.email.host`.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `webhook_url` | empty | https, or http to a loopback address; no credentials or fragment |
-| `allow_private_http` | `false` | Also allow http to private receivers (Service names, private IPs); connections must reach private addresses |
 | `approval_url` | empty | Public https origin of the opsgate server; adds an approval link to restart suggestions |
-| `secret_file` | empty | Optional key (at least 16 bytes) for the `X-Opsgate-Signature` HMAC |
 | `clusters` | all | Configured cluster names to watch |
 | `problems_only` | `false` | Produce warnings only for every channel |
 | `batch` | `30s` | Webhook batch interval (1s–10m) |
@@ -213,8 +210,8 @@ The `watch` section is read only by `opsgate watch`, a separate process; the MCP
 
 ### Direct webhook destinations
 
-`watch.outputs` is an optional list of up to 20 named destinations. The legacy
-`webhook_url` and SMTP settings still work, including alongside outputs.
+`watch.outputs` is an optional list of up to 20 named destinations, alongside
+`watch.email` for SMTP delivery.
 Each destination has an independent bounded queue, cooldown and retry state;
 a failing receiver does not block the others. Outputs use `watch.batch`,
 `watch.cooldown` and `watch.max_alerts`. Global `watch.problems_only` applies
@@ -225,7 +222,7 @@ before fan-out; an output can additionally select warnings only.
 | `name` | required | Unique 1–64 ASCII letters, digits, `_` or `-`; identifies delivery errors |
 | `type` | `webhook` | `webhook` for native/custom JSON; `discord` for Discord embeds |
 | `language` | `en` | `ko` or `en`; inherits `watch.language`; adds webhook `display` fields while preserving raw reason/summary |
-| `url` | empty | Receiver URL, with the same scheme restrictions as `webhook_url` |
+| `url` | empty | Receiver URL: https or loopback http; private http requires `allow_private_http`; no credentials or fragments |
 | `url_file` | empty | Read and trim the receiver URL at startup; set exactly one of `url` and `url_file` |
 | `headers` | empty | Static HTTP headers; prefer files for credentials |
 | `header_files` | empty | Header name to file path; read and trim each value at startup |
@@ -253,8 +250,8 @@ The authorization file contains the full value, for example `Bearer TOKEN`.
 Files are loaded once at startup; restart watch after rotating them. Unreadable
 files, invalid URLs, header values or template syntax fail startup. Files keep
 credentials out of effective configuration output; inline URLs and headers are
-shown as configured. Output settings do not inherit the legacy webhook's key
-or private-HTTP flag. Routing/framing headers such as `Host` and `Content-Length`, and
+shown as configured. Configure the HMAC key and private-HTTP flag per output.
+Routing/framing headers such as `Host` and `Content-Length`, and
 `X-Opsgate-Signature`, are reserved; duplicate header names are rejected case-insensitively.
 
 Templates receive the exported Go fields of `alert.Batch`: `.Source`, `.SentAt`,

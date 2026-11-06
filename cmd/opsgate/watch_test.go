@@ -1,7 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,7 +30,7 @@ func TestWatchPasswordStartup(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		got, err := watchDispatchers(cfg.Watch, nil)
+		got, err := watchDispatchers(cfg.Watch)
 		if value == "  test-password\n" {
 			if err != nil || len(got) != 1 {
 				t.Fatalf("dispatchers=%v err=%v", got, err)
@@ -62,9 +68,8 @@ func TestWatchOutputStartup(t *testing.T) {
 	}
 	o := config.WatchOutput{Name: "discord", Type: "discord", URLFile: urlFile, HeaderFiles: map[string]string{"Authorization": headerFile}, SecretFile: secretFile}
 	w := config.Default().Watch
-	w.WebhookURL = "https://example.com/hook"
 	w.Outputs = []config.WatchOutput{o}
-	if ds, err := watchDispatchers(w, nil); err != nil || len(ds) != 2 {
+	if ds, err := watchDispatchers(w); err != nil || len(ds) != 1 {
 		t.Fatalf("dispatchers=%v err=%v", ds, err)
 	}
 	for _, value := range []string{"", "https://user:private-token@discord.com", "http://example.com/private-token", "https://discord.com/private-token#fragment"} {
@@ -103,7 +108,7 @@ func TestWatchOutputDeliveryIsolation(t *testing.T) {
 	w := config.Default().Watch
 	w.Batch = time.Hour
 	w.Outputs = []config.WatchOutput{{Name: "slow", URL: slow.URL}, {Name: "fast", URL: fast.URL}}
-	ds, err := watchDispatchers(w, nil)
+	ds, err := watchDispatchers(w)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,4 +131,37 @@ func TestWatchOutputDeliveryIsolation(t *testing.T) {
 	// The deferred release also handles test failures; wait after explicitly releasing.
 	release <- struct{}{}
 	wg.Wait()
+}
+
+func TestWatchWebhookOutputWire(t *testing.T) {
+	secret := []byte("0123456789abcdef")
+	batch := &alert.Batch{SentAt: time.Date(2026, 11, 6, 1, 2, 3, 0, time.UTC), Alerts: []alert.Alert{{Cluster: "main", Kind: "Pod", Name: "web", Severity: alert.Warning, Summary: "memory exceeded"}}, Dropped: 2}
+	want, err := json.Marshal(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil || !bytes.Equal(body, want) {
+			t.Errorf("body = %s, err = %v, want %s", body, err, want)
+		}
+		mac := hmac.New(sha256.New, secret)
+		mac.Write(want)
+		if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" || r.Header.Get("X-Opsgate-Signature") != "sha256="+hex.EncodeToString(mac.Sum(nil)) {
+			t.Errorf("unexpected request: %s %v", r.Method, r.Header)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	path := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(path, append(secret, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sender, err := watchOutputSender(config.WatchOutput{Name: "hook", Type: "webhook", URL: srv.URL, SecretFile: path, AllowPrivateHTTP: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retry, err := sender.Send(context.Background(), batch); err != nil || retry {
+		t.Fatalf("Send() = %v, %v", retry, err)
+	}
 }

@@ -84,7 +84,7 @@ func writeKind(kind string, daemon bool) (resource, error) {
 
 func (r *registry) registerWrites(s *mcp.Server, env *tool.Env, note string) {
 	if r.any(func(p *provider) bool { return len(p.cfg.RestoreImage) > 0 }) {
-		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_restore_image", Title: "Restore previous healthy container image", Description: "After human approval, restore only a Deployment container image from a currently ready owned ReplicaSet. Exact expected image and source are rechecked. No approval window.", Direct: true}, clusterWrite(r, (*provider).planRestoreImage, (*provider).applyRestoreImage))
+		tool.AddWrite(s, env, tool.WriteSpec{Name: "k8s_restore_image", Title: "Restore image observed in a ready Pod", Description: "After human approval, restore only a Deployment container image from a non-deleting owned ReplicaSet with a ready owned Pod whose target container is ready and running the reported image. Readiness does not guarantee application health or immutable tags. Exact expected image and source evidence are rechecked. No approval window.", Direct: true}, clusterWrite(r, (*provider).planRestoreImage, (*provider).applyRestoreImage))
 	}
 
 	if r.any(func(p *provider) bool { return len(p.cfg.RolloutRestart) > 0 }) {

@@ -65,7 +65,7 @@ func TestEffectiveRoundTrip(t *testing.T) {
 		"",
 		"mode: kubernetes\napproval:\n  window: 30m\n  window_tools: [\"note_*\"]\n",
 		"mode: kubernetes\nproviders:\n  kubernetes:\n    enabled: true\n    clusters:\n      - name: prod\n        namespaces: [apps]\n",
-		"watch:\n  webhook_url: https://hooks.example.com/x\n",
+		"watch:\n  outputs:\n    - name: hook\n      type: webhook\n      url: https://hooks.example.com/x\n",
 	} {
 		c, err := Parse([]byte(in), "in")
 		if err != nil {

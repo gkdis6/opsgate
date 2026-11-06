@@ -196,14 +196,11 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 
 ## Watch 알림
 
-`watch` 섹션은 별도 프로세스인 `opsgate watch`만 읽고, MCP 서버는 무시합니다. `opsgate watch`를 실행하려면 `providers.kubernetes.enabled`를 켜고 `watch.webhook_url`, `watch.outputs`, `watch.email.host` 중 하나 이상을 설정해야 합니다.
+`watch` 섹션은 별도 프로세스인 `opsgate watch`만 읽고, MCP 서버는 무시합니다. `opsgate watch`를 실행하려면 `providers.kubernetes.enabled`를 켜고 `watch.outputs`, `watch.email.host` 중 하나 이상을 설정해야 합니다.
 
 | 키 | 기본값 | 의미 |
 | --- | --- | --- |
-| `webhook_url` | 없음 | https이거나 루프백 주소로 가는 http. 자격 증명과 프래그먼트는 쓸 수 없습니다 |
 | `approval_url` | 없음 | opsgate 서버의 공개 https 오리진. 설정하면 재시작 제안에 승인 링크를 붙입니다 |
-| `allow_private_http` | `false` | 사설 네트워크(Service 이름, 사설 IP)로 가는 http도 허용합니다. 연결은 사설 주소에 닿아야 합니다 |
-| `secret_file` | 없음 | 선택. `X-Opsgate-Signature` HMAC 키(16바이트 이상) |
 | `clusters` | 전체 | watch할 클러스터 이름 |
 | `problems_only` | `false` | 모든 채널에 대해 경고만 생성합니다 |
 | `batch` | `30s` | Webhook 알림을 모아 보내는 간격 (1s–10m) |
@@ -265,8 +262,8 @@ runner는 별도 YAML 파일을 사용하며, `providers` 아래에 중첩하지
 
 ### 여러 웹훅 대상에 직접 전송
 
-`watch.outputs`는 최대 20개의 전송 대상을 받으며, 기존 웹훅·이메일과 함께 쓸 수
-있습니다. `type: discord`는 n8n 없이 Discord로 직접 전송하고, `type: webhook`은
+`watch.outputs`는 최대 20개의 전송 대상을 받으며, SMTP 전송을 위한
+`watch.email`과 함께 쓸 수 있습니다. `type: discord`는 n8n 없이 Discord로 직접 전송하고, `type: webhook`은
 원본 JSON이나 `body_template`으로 만든 JSON을 POST합니다.
 각 대상은 별도 큐·쿨다운·재시도를 사용합니다.
 
@@ -274,6 +271,7 @@ runner는 별도 YAML 파일을 사용하며, `providers` 아래에 중첩하지
 `type`(기본 `webhook`), `url` 또는 `url_file`(둘 중 하나 필수), `headers`,
 `header_files`, `secret_file`, `body_template`(최대 64 KiB),
 `allow_private_http`(기본 false), `problems_only`(기본 false)입니다.
+각 대상의 `url`은 https 또는 루프백 http여야 하며 자격 증명이나 프래그먼트는 허용하지 않습니다. 사설 http는 대상에 `allow_private_http: true`를 설정해야 합니다. `secret_file`은 앞뒤 공백 제거 후 16바이트 이상인 HMAC 키입니다.
 공통 `watch.batch`, `watch.cooldown`, `watch.max_alerts`를 사용합니다.
 
 [한글 사용 예시와 제한](watch.md#discord-직접-전송과-커스텀-웹훅),

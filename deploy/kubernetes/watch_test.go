@@ -50,6 +50,9 @@ func TestWatchManifest(t *testing.T) {
 	if err := cfg.ValidateWatch(); err != nil {
 		t.Fatal(err)
 	}
+	if len(cfg.Watch.Outputs) != 1 || cfg.Watch.Outputs[0].Type != "webhook" || cfg.Watch.Outputs[0].SecretFile != "/etc/opsgate/watch/key" {
+		t.Fatalf("unexpected webhook output: %+v", cfg.Watch.Outputs)
+	}
 	if spec.Replicas == nil || *spec.Replicas != 1 || spec.Strategy.Type != appsv1.RecreateDeploymentStrategyType {
 		t.Fatal("watch must run as a single replica with the Recreate strategy")
 	}

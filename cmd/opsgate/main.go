@@ -2,7 +2,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -185,17 +184,7 @@ func (c *application) runWatch(args []string) error {
 		return err
 	}
 	w := cfg.Watch
-	var secret []byte
-	if w.SecretFile != "" {
-		b, err := os.ReadFile(w.SecretFile)
-		if err != nil {
-			return fmt.Errorf("watch.secret_file: %w", err)
-		}
-		if secret = bytes.TrimSpace(b); len(secret) < 16 {
-			return fmt.Errorf("watch.secret_file must hold at least 16 bytes")
-		}
-	}
-	dispatchers, err := watchDispatchers(w, secret)
+	dispatchers, err := watchDispatchers(w)
 	if err != nil {
 		return err
 	}
@@ -233,12 +222,8 @@ func addApprovalLink(a *alert.Alert, base string) {
 }
 
 // watchDispatchers loads credentials before any watchers start.
-func watchDispatchers(w config.Watch, secret []byte) ([]*alert.Dispatcher, error) {
+func watchDispatchers(w config.Watch) ([]*alert.Dispatcher, error) {
 	var result []*alert.Dispatcher
-	if w.WebhookURL != "" {
-		privateOnly := strings.HasPrefix(strings.ToLower(w.WebhookURL), "http:")
-		result = append(result, alert.New(alert.Options{Language: w.Language, URL: w.WebhookURL, Secret: secret, Batch: w.Batch, Cooldown: w.Cooldown, MaxAlerts: w.MaxAlerts, PrivateOnly: privateOnly}))
-	}
 	for _, o := range w.Outputs {
 		if o.Language == "" {
 			o.Language = w.Language

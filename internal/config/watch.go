@@ -17,23 +17,12 @@ import (
 type Watch struct {
 	Language string        `yaml:"language"`
 	Outputs  []WatchOutput `yaml:"outputs,omitempty"`
-	// WebhookURL receives alert batches as JSON POSTs, e.g. an n8n webhook
-	// that forwards them to chat. Outputs and Email can also deliver alerts.
-	WebhookURL string `yaml:"webhook_url"`
-	// Email delivers alerts by SMTP, alongside or instead of the webhook.
+	// Email delivers alerts by SMTP.
 	Email WatchEmail `yaml:"email,omitempty"`
-	// AllowPrivateHTTP also permits http to receivers without TLS on a
-	// private network, such as a Kubernetes Service name or ClusterIP.
-	// Every connection must then reach a private or loopback address after
-	// DNS resolution, and alerts cross that network unencrypted.
-	AllowPrivateHTTP bool `yaml:"allow_private_http"`
 	// ApprovalURL is the public https origin of the opsgate server. When set,
 	// restart suggestions link to its approval page. The link holds no secret:
 	// opening it still needs sign-in and approval.
 	ApprovalURL string `yaml:"approval_url"`
-	// SecretFile optionally holds a key used to sign each POST with
-	// HMAC-SHA256 (X-Opsgate-Signature).
-	SecretFile string `yaml:"secret_file"`
 	// Clusters limits watching to these configured cluster names; empty
 	// watches every configured cluster.
 	Clusters []string `yaml:"clusters"`
@@ -124,9 +113,6 @@ func (w Watch) validate(k Kubernetes) error {
 		}
 		outputs[o.Name] = true
 	}
-	if w.WebhookURL != "" && !validWatchURL(w.WebhookURL, w.AllowPrivateHTTP) {
-		return fmt.Errorf("watch.webhook_url must use https or loopback http (or private http with allow_private_http) without credentials or fragments")
-	}
 
 	if w.ApprovalURL != "" {
 		u, err := url.Parse(w.ApprovalURL)
@@ -171,8 +157,8 @@ func (c Config) ValidateWatch() error {
 	if !c.Providers.Kubernetes.Enabled {
 		return fmt.Errorf("opsgate watch requires providers.kubernetes.enabled")
 	}
-	if c.Watch.WebhookURL == "" && c.Watch.Email.Host == "" && len(c.Watch.Outputs) == 0 {
-		return fmt.Errorf("opsgate watch requires watch.webhook_url, watch.outputs or watch.email.host")
+	if c.Watch.Email.Host == "" && len(c.Watch.Outputs) == 0 {
+		return fmt.Errorf("opsgate watch requires watch.outputs or watch.email.host")
 	}
 	return nil
 }

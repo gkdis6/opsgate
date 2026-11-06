@@ -254,6 +254,13 @@ func Parse(data []byte, name string) (Config, error) {
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return Default(), fmt.Errorf("parse %s: %w", name, err)
 	}
+	if watch, ok := lookup(&root, "watch").(map[string]any); ok {
+		for _, key := range []string{"webhook_url", "secret_file", "allow_private_http"} {
+			if _, exists := watch[key]; exists {
+				return Default(), fmt.Errorf("watch.%s was removed; move it to watch.outputs as {name: ..., type: webhook, url: ..., secret_file: ..., allow_private_http: ...}", key)
+			}
+		}
+	}
 	mode, _ := lookup(&root, "mode").(string)
 	cfg, err := DefaultFor(mode)
 	if err != nil {

@@ -294,9 +294,8 @@ filtered.
 Each destination has its own queue, cooldown and retries. Discord embeds include
 UTC occurrence times, cluster, namespace/resource, reason and summary; long
 batches are visibly truncated to fit Discord's limit. Custom templates use the
-`json` helper to escape values and must produce valid JSON. Existing
-`watch.webhook_url` and `watch.email` settings remain supported alongside outputs.
-See [watch alerts](docs/watch.md) for delivery limits, HMAC signatures and all
+`json` helper to escape values and must produce valid JSON. Configure destinations
+through `watch.outputs` and `watch.email`. See [watch alerts](docs/watch.md) for delivery limits, HMAC signatures and all
 configuration options.
 
 ### Investigating an alert

@@ -19,7 +19,12 @@ It reads `providers.kubernetes` for clusters and namespace policy and
 
 ```yaml
 watch:
-  webhook_url: https://n8n.example.com/webhook/opsgate-watch  # optional
+  outputs:
+    - name: webhook
+      type: webhook
+      url: https://n8n.example.com/webhook/opsgate-watch
+      secret_file: /etc/opsgate/watch-secret  # optional HMAC key, >= 16 bytes
+      allow_private_http: false
   email:                           # optional; enabled by host
     host: smtp.example.com
     port: 587                      # default; 465 uses implicit TLS
@@ -29,8 +34,6 @@ watch:
     to: [me@example.com]
     batch: 5m                      # default; 1m–1h
     problems_only: false           # warnings only for email when true
-  allow_private_http: false  # true also allows http to private receivers
-  secret_file: /etc/opsgate/watch-secret   # optional HMAC key, >= 16 bytes
   clusters: []          # default: every configured cluster
   problems_only: false  # true sends warnings only
   batch: 30s            # gather alerts into one POST (1s–10m)
@@ -38,8 +41,8 @@ watch:
   max_alerts: 50        # alerts per channel batch (1–500); the rest count as dropped
 ```
 
-`webhook_url` must use https, or http to a loopback address, and must not
-contain credentials or a fragment. With `allow_private_http: true`, plain http to a private
+Each output’s `url` must use https, or http to a loopback address, and must not
+contain credentials or a fragment. With output-level `allow_private_http: true`, plain http to a private
 network is also accepted, such as a Service name
 (`http://n8n.n8n.svc.cluster.local:5678/...`) or a
 private IP address. Every connection must then reach a private or loopback address after DNS
@@ -47,6 +50,8 @@ resolution, and proxy settings are ignored so the checked address is the
 receiver's. A public IP literal is still refused. Alerts cross that network
 unencrypted. A secret query key in
 the URL is never logged.
+
+`watch.webhook_url`, `watch.secret_file` and `watch.allow_private_http` were removed. Configurations containing these keys are rejected. Move them into a `type: webhook` entry in `watch.outputs`, using `url`, `secret_file` and `allow_private_http` on that output. The default webhook JSON body and HMAC signature are preserved.
 
 ## Email delivery
 
@@ -176,7 +181,7 @@ during its cooldown. Info alerts are never held back by the cooldown. Repeats
 within one batch are merged and keep the latest summary. All cluster-controlled alert text, including `reason`, `summary` and hints, is masked before delivery or deduplication. Control characters become spaces; text is limited to 300 Unicode characters plus a truncation ellipsis. Direct JSON and custom templates receive these same sanitized fields; ordinary machine-readable reasons remain unchanged. Messages from the
 cluster are still untrusted data.
 
-With `secret_file`, every POST carries:
+With an output’s `secret_file`, every POST carries:
 
 ```text
 X-Opsgate-Signature: sha256=<hex HMAC-SHA256(secret, raw body)>
@@ -215,8 +220,7 @@ are not reported.
 ## Direct Discord and custom webhooks
 
 Use `watch.outputs` to deliver directly to Discord or custom JSON endpoints,
-without n8n. Destinations run independently alongside the existing webhook and
-email settings. See [configuration](configuration.md#direct-webhook-destinations)
+without n8n. Destinations run independently alongside `watch.email`. See [configuration](configuration.md#direct-webhook-destinations)
 for all fields, template variables, credential files and delivery limits.
 
 ```yaml

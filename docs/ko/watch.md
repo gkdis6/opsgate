@@ -12,7 +12,12 @@ opsgate watch -config /etc/opsgate/opsgate.yaml
 
 ```yaml
 watch:
-  webhook_url: https://n8n.example.com/webhook/opsgate-watch  # 선택
+  outputs:
+    - name: webhook
+      type: webhook
+      url: https://n8n.example.com/webhook/opsgate-watch
+      secret_file: /etc/opsgate/watch-secret  # 선택. HMAC 키, 16바이트 이상
+      allow_private_http: false
   email:                           # 선택. host를 설정하면 활성화됩니다
     host: smtp.example.com
     port: 587                      # 기본값. 465는 연결 즉시 TLS를 사용합니다
@@ -22,8 +27,6 @@ watch:
     to: [me@example.com]
     batch: 5m                      # 기본값. 1m–1h
     problems_only: false           # true면 이메일로는 경고만 보냅니다
-  allow_private_http: false  # true면 사설 네트워크로 가는 http도 허용합니다
-  secret_file: /etc/opsgate/watch-secret   # 선택. HMAC 키, 16바이트 이상
   clusters: []          # 기본값: 설정된 모든 클러스터
   problems_only: false  # true면 경고만 보냅니다
   batch: 30s            # 이 시간 동안 모은 알림을 한 번에 보냅니다 (1s–10m)
@@ -31,7 +34,9 @@ watch:
   max_alerts: 50        # 한 번에 보내는 최대 알림 수 (1–500). 넘치면 dropped로 셉니다
 ```
 
-`webhook_url`은 https이거나 루프백 주소로 가는 http여야 하고, 자격 증명이나 프래그먼트를 넣을 수 없습니다. `allow_private_http: true`로 두면 Service 이름(`http://n8n.n8n.svc.cluster.local:5678/...`)이나 사설 IP 주소처럼 사설 네트워크로 가는 http도 허용합니다. 이때 모든 연결은 DNS 조회 후 사설 주소나 루프백 주소에 닿아야 하고, 검사한 주소가 실제 수신 측 주소가 되도록 프록시 설정은 무시합니다. 공인 IP를 직접 적으면 여전히 거부합니다. 알림은 그 네트워크를 암호화 없이 지나갑니다. URL 쿼리에 비밀 키를 넣어도 로그에는 남지 않습니다.
+각 출력의 `url`은 https이거나 루프백 주소로 가는 http여야 하고, 자격 증명이나 프래그먼트를 넣을 수 없습니다. 출력에 `allow_private_http: true`로 두면 Service 이름(`http://n8n.n8n.svc.cluster.local:5678/...`)이나 사설 IP 주소처럼 사설 네트워크로 가는 http도 허용합니다. 이때 모든 연결은 DNS 조회 후 사설 주소나 루프백 주소에 닿아야 하고, 검사한 주소가 실제 수신 측 주소가 되도록 프록시 설정은 무시합니다. 공인 IP를 직접 적으면 여전히 거부합니다. 알림은 그 네트워크를 암호화 없이 지나갑니다. URL 쿼리에 비밀 키를 넣어도 로그에는 남지 않습니다.
+
+`watch.webhook_url`, `watch.secret_file`, `watch.allow_private_http`는 제거되었습니다. 이 키가 있으면 설정을 거부합니다. `watch.outputs`의 `type: webhook` 항목으로 옮기고 `url`, `secret_file`, `allow_private_http`를 대상별로 설정하세요. 기본 웹훅 JSON 본문과 HMAC 서명은 유지됩니다.
 
 ## 이메일 전송
 
@@ -113,7 +118,7 @@ watch는 제안만 합니다. 쓰기 권한이 없고, 제안을 자동으로 �
 
 `text`는 그대로 채팅에 전달하면 됩니다. `suppressed`는 이 알림에 합쳐진 반복 횟수입니다. 한 묶음 안에서 같은 알림이 반복됐거나, 쿨다운 동안 같은 경고가 반복된 횟수입니다. 정보 알림은 쿨다운으로 막지 않고, 한 묶음 안에서 반복되면 가장 최근 요약으로 합칩니다. `reason`·`summary`·힌트를 포함한 클러스터의 모든 알림 텍스트는 전송과 중복 식별 전에 마스킹합니다. 제어 문자는 공백으로 바꾸고 텍스트는 유니코드 300자와 생략 표시로 제한합니다. 직접 JSON과 사용자 템플릿에도 같은 정리된 필드를 전달하며, 일반적인 기계 판독용 이유 코드는 바꾸지 않습니다. 그래도 클러스터에서 온 메시지는 신뢰할 수 없는 데이터로 다뤄야 합니다.
 
-`secret_file`을 설정하면 모든 POST에 다음 헤더가 붙습니다.
+출력에 `secret_file`을 설정하면 모든 POST에 다음 헤더가 붙습니다.
 
 ```text
 X-Opsgate-Signature: sha256=<hex HMAC-SHA256(secret, 원본 본문)>
@@ -139,7 +144,7 @@ watch 오류(예: RBAC 권한 부족)는 로그에 남고 client-go가 다시 �
 ## Discord 직접 전송과 커스텀 웹훅
 
 `watch.outputs`로 n8n 없이 Discord나 원하는 JSON 수신 서버에 직접 보낼 수
-있습니다. 기존 `webhook_url`, 이메일과 함께 쓸 수 있고, 각 대상은 별도 큐,
+있습니다. `watch.email`과 함께 쓸 수 있고, 각 대상은 별도 큐,
 쿨다운과 재시도를 사용하므로 느린 대상이 다른 전송을 막지 않습니다.
 전체 설정은 [설정 문서](../configuration.md#direct-webhook-destinations)를 참고하세요.
 
@@ -177,8 +182,7 @@ namespace/이름, 오류 이유·요약, 반복 횟수, 힌트와 재시작 제�
 `type: webhook`과 템플릿으로 Discord 형식을 직접 만들 수도 있지만, 이 경우
 길이 제한과 멘션 설정도 직접 처리해야 합니다.
 
-각 대상의 `secret_file`은 변환 후 실제 HTTP 본문을 HMAC 서명합니다. 기존
-웹훅의 키나 `allow_private_http`는 새 대상에 상속되지 않습니다. 대상별로
+각 대상의 `secret_file`은 변환 후 실제 HTTP 본문을 HMAC 서명합니다. 대상별로
 `headers`, `header_files`, `allow_private_http`, `problems_only`를 지정할 수 있고,
 공통 `watch.batch`, `watch.cooldown`, `watch.max_alerts`가 적용됩니다. 전역
 `watch.problems_only`가 켜져 있으면 모든 대상에서 정보 알림을 제외합니다.

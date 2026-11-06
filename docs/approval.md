@@ -81,7 +81,7 @@ The initial call returns a text tool result with a link, an expiry and instructi
 {"kind":"deployment","namespace":"default","name":"web","approval_id":"<id from the pending result>"}
 ```
 
-The page displays the plan line by line, highlights diff lines, and includes masked arguments. Only the exact requesting user can view or decide it. Decisions are protected by CSRF checks and cross-origin protection, are accepted once, and use a strict script-free Content Security Policy.
+The page displays the plan line by line, highlights diff lines only after consecutive `--- ` and `+++ ` headers (shown muted), and includes masked arguments. Only the exact requesting user can view or decide it. Decisions are protected by CSRF checks and cross-origin protection, are accepted once, and use a strict script-free Content Security Policy.
 
 The retry must match user, transport, tool, target, per-call approval requirement, canonical unredacted argument hash (excluding `approval_id`) and the newly calculated summary. A one-call approval is marked used before Apply, so an Apply failure requires a new approval. An active window is checked earlier and deliberately does not impose this one-call binding.
 

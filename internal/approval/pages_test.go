@@ -13,7 +13,7 @@ func TestApprovalPagesEscaping(t *testing.T) {
 		t.Run(page, func(t *testing.T) {
 			m, mux := windowManager(windowConfig(), nil)
 			r := approvalRequest()
-			r.Summary = "Change <script>summary</script>\n+<img src=x>\n-removed\n@@ hunk\n context"
+			r.Summary = "Change <script>summary</script>\n--- note.md\n+++ note.md\n+<img src=x>\n-removed\n@@ hunk\n context"
 			r.Args["extra"] = "<script>args</script>"
 			id := pendingID(t, m, r)
 			user := r.Caller.User

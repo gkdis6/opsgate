@@ -196,9 +196,17 @@ type planLine struct{ Text, Class string }
 func planLines(summary string) []planLine {
 	lines := strings.Split(summary, "\n")
 	out := make([]planLine, 0, len(lines))
-	for _, line := range lines {
+	inDiff := false
+	for i, line := range lines {
 		class := ""
+		header := strings.HasPrefix(line, "--- ") && i+1 < len(lines) && strings.HasPrefix(lines[i+1], "+++ ")
+		if header {
+			inDiff = true
+		}
 		switch {
+		case !inDiff:
+		case header || (i > 0 && strings.HasPrefix(lines[i-1], "--- ") && strings.HasPrefix(line, "+++ ")):
+			class = "hunk"
 		case strings.HasPrefix(line, "+"):
 			class = "added"
 		case strings.HasPrefix(line, "-"):

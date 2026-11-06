@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gkdis6/opsgate/internal/tool"
 	appsv1 "k8s.io/api/apps/v1"
@@ -25,11 +26,90 @@ func restoreFixture() (*provider, *fake.Clientset, restoreImageInput) {
 	bad.Status.ReadyReplicas = 0
 	bad.Spec.Template.Spec.Containers[0].Image = "registry.example/app:bad"
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web-failed", Namespace: "prod", UID: "pod-uid", OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: bad.Name, UID: bad.UID, Controller: &controller}}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "registry.example/app:bad"}}}, Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{Name: "app", State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}}}}}}
-	p, client := writeProvider(d, good, bad, pod)
+	ready := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web-ready", Namespace: "prod", UID: "ready-uid", OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: good.Name, UID: good.UID, Controller: &controller}}}, Spec: good.Spec.Template.Spec, Status: corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}, ContainerStatuses: []corev1.ContainerStatus{{Name: "app", Ready: true, Image: "registry.example/app:good", ImageID: "containerd://sha256:" + strings.Repeat("a", 64), State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}}}}}
+	p, client := writeProvider(d, good, bad, pod, ready)
 	p.cfg.RestoreImage = []string{"prod/web"}
 	p.cfg.Name = "main"
 	p.cfg.ActionApprovalURL = "https://ops.example"
 	return p, client, restoreImageInput{Namespace: "prod", Name: "web", Container: "app", ExpectedImage: "registry.example/app:bad", Image: "registry.example/app:good"}
+}
+
+func TestRestoreRequiresReadyOwnedRunningImage(t *testing.T) {
+	for _, scenario := range []string{"missing pod", "wrong owner", "wrong kind", "deleting pod", "pod unready", "container unready", "not running", "stale template", "wrong status image", "missing imageID", "deleting RS"} {
+		t.Run(scenario, func(t *testing.T) {
+			p, client, in := restoreFixture()
+			ctx := context.Background()
+			approved, err := p.planRestoreImage(ctx, tool.Caller{}, in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pod, _ := client.CoreV1().Pods("prod").Get(ctx, "web-ready", metav1.GetOptions{})
+			switch scenario {
+			case "missing pod":
+				_ = client.CoreV1().Pods("prod").Delete(ctx, pod.Name, metav1.DeleteOptions{})
+			case "wrong owner":
+				pod.OwnerReferences[0].UID = "other"
+			case "wrong kind":
+				pod.OwnerReferences[0].Kind = "Deployment"
+			case "deleting pod":
+				at := metav1.NewTime(time.Now())
+				pod.DeletionTimestamp = &at
+			case "pod unready":
+				pod.Status.Conditions[0].Status = corev1.ConditionFalse
+			case "container unready":
+				pod.Status.ContainerStatuses[0].Ready = false
+			case "not running":
+				pod.Status.ContainerStatuses[0].State = corev1.ContainerState{}
+			case "stale template":
+				pod.Spec.Containers[0].Image = "registry.example/app:old"
+			case "wrong status image":
+				pod.Status.ContainerStatuses[0].Image = "registry.example/app:old"
+			case "missing imageID":
+				pod.Status.ContainerStatuses[0].ImageID = ""
+			case "deleting RS":
+				rs, _ := client.AppsV1().ReplicaSets("prod").Get(ctx, "web-good", metav1.GetOptions{})
+				at := metav1.NewTime(time.Now())
+				rs.DeletionTimestamp = &at
+				_, _ = client.AppsV1().ReplicaSets("prod").Update(ctx, rs, metav1.UpdateOptions{})
+			}
+			if scenario != "missing pod" {
+				_, _ = client.CoreV1().Pods("prod").Update(ctx, pod, metav1.UpdateOptions{})
+			}
+			client.ClearActions()
+			if _, err := p.planRestoreImage(ctx, tool.Caller{}, in); err == nil {
+				t.Error("unsafe source planned")
+			}
+			if _, err := p.applyRestoreImage(ctx, tool.Caller{}, in, approved); err == nil {
+				t.Error("unsafe source applied")
+			}
+			for _, a := range client.Actions() {
+				if a.GetVerb() == "patch" {
+					t.Error("refused restore patched Deployment")
+				}
+			}
+		})
+	}
+}
+
+func TestRestoreReportedImageIdentity(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("a", 64)
+	other := "sha256:" + strings.Repeat("b", 64)
+	for _, tc := range []struct {
+		template, reported, id string
+		ok                     bool
+	}{
+		{"nginx", "docker.io/library/nginx:latest", "containerd://" + digest, true},
+		{"nginx:1.27", "index.docker.io/library/nginx:1.27", "docker-pullable://docker.io/library/nginx@" + digest, true},
+		{"registry.example/app@" + digest, "registry.example/app@" + digest, "containerd://" + digest, true},
+		{"registry.example/app@" + digest, "registry.example/app@" + digest, "containerd://" + other, false},
+		{"registry.example/app:good", "registry.example/app:other", "containerd://" + digest, false},
+		{"index.evil.example/app:good", "evil.example/app:good", "containerd://" + digest, false},
+		{"nginx:good", "nginx:good", "opaque-runtime-id", false},
+	} {
+		if got := reportedImageMatches(tc.template, tc.reported, tc.id); got != tc.ok {
+			t.Errorf("%q / %q / %q: %v", tc.template, tc.reported, tc.id, got)
+		}
+	}
 }
 func TestVerifiedRestoreOptionsAndApply(t *testing.T) {
 	p, client, in := restoreFixture()

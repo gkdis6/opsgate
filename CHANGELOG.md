@@ -7,6 +7,10 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Render new note previews as unified diffs from `/dev/null` and color approval summary lines only after paired diff headers, so plain text lists are not shown as deletions.
+
 ### Removed
 
 - Remove `watch.webhook_url`, `watch.secret_file` and `watch.allow_private_http`; configurations using them fail with migration guidance. Use `watch.outputs` for webhook destinations; the default JSON body and HMAC signature stay the same. `watch.email` remains available.

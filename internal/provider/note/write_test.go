@@ -21,7 +21,7 @@ func TestWritePlansAndApply(t *testing.T) {
 	}{
 		{"create", "", "new\n", func(p *provider) (tool.Plan, error) {
 			return p.planCreate(context.Background(), tool.Caller{}, createInput{Path: "new/folder/📚", Content: "new\n"})
-		}, []string{"create note new/folder/📚.md", "current sha256: absent", "new content:\nnew\n"}},
+		}, []string{"create note new/folder/📚.md", "current sha256: absent", "--- /dev/null\n+++ new/folder/📚.md\n@@ -0,0 +1,1 @@\n+new\n"}},
 		{"append", "before\n", "before\nnew\n", func(p *provider) (tool.Plan, error) {
 			return p.planAppend(context.Background(), tool.Caller{}, appendInput{Path: "note", Content: "new"})
 		}, []string{"append note note.md", "current sha256:", "+new", "--- note.md"}},
@@ -389,7 +389,7 @@ func TestWriteLimitsAndPreview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan.Summary) > 8<<10 || !strings.Contains(plan.Summary, "… ") || !strings.Contains(plan.Summary, " more lines") {
+	if !plan.FullReviewRequired || len(plan.Summary) > 8<<10 || !strings.Contains(plan.Summary, "… ") || !strings.Contains(plan.Summary, " more lines") {
 		t.Fatalf("length=%d summary=%s", len(plan.Summary), plan.Summary)
 	}
 	plan, err = p.planAppend(context.Background(), tool.Caller{}, appendInput{Path: "note", Content: "new"})

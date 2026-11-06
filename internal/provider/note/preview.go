@@ -27,12 +27,11 @@ func preview(d writePlan, before, after string) tool.Plan {
 		header += "destination: " + d.destination + " (retain in local trash)\n"
 		header += "if changed during the move, check the error for the recovery location\n"
 	}
-	var body string
+	oldName := d.name
 	if d.action == "create" {
-		body = "new content:\n" + after
-	} else {
-		body = unifiedDiff(d.name, before, after)
+		oldName = "/dev/null"
 	}
+	body := unifiedDiff(oldName, d.name, before, after)
 	body, truncated := truncatePreview(body, max(0, (8<<10)-len(header)-80))
 	return tool.Plan{Summary: header + body, FullReviewRequired: truncated, Data: d}
 }
@@ -53,7 +52,7 @@ func truncatePreview(text string, maxBytes int) (string, bool) {
 	return text[:cut] + fmt.Sprintf("\n… %d more lines\n", more), true
 }
 
-func unifiedDiff(name, before, after string) string {
+func unifiedDiff(oldName, newName, before, after string) string {
 	split := func(text string) []string {
 		if text == "" {
 			return nil
@@ -74,7 +73,7 @@ func unifiedDiff(name, before, after string) string {
 		suffix++
 	}
 	var out strings.Builder
-	fmt.Fprintf(&out, "--- %s\n+++ %s\n", name, name)
+	fmt.Fprintf(&out, "--- %s\n+++ %s\n", oldName, newName)
 	if before == after {
 		return out.String()
 	}

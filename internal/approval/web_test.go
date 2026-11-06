@@ -355,3 +355,29 @@ func TestApprovalDecisionAudit(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanLines(t *testing.T) {
+	for _, tc := range []struct {
+		name, summary string
+		classes       []string
+	}{
+		{"plain", "summary\n- item\n+ item\n@@ text\n---", []string{"", "", "", "", ""}},
+		{"replace", "--- note.md\n+++ note.md\n@@ -1,2 +1,2 @@\n-old\n+new\n context\n… 5 more lines", []string{"hunk", "hunk", "hunk", "removed", "added", "", ""}},
+		{"create", "--- /dev/null\n+++ note.md\n@@ -0,0 +1,3 @@\n+---\n+- item\n+-A INPUT", []string{"hunk", "hunk", "hunk", "added", "added", "added"}},
+		{"before diff", "- description\n+ description\n--- note.md\n+++ note.md\n@@ -1,1 +1,1 @@\n-old\n+new", []string{"", "", "hunk", "hunk", "hunk", "removed", "added"}},
+		{"unpaired headers", "--- note.md\ntext\n+++ note.md\n- item\n+ item\n--- last", []string{"", "", "", "", "", ""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := planLines(tc.summary)
+			text := strings.Split(tc.summary, "\n")
+			if len(got) != len(tc.classes) {
+				t.Fatalf("got %d lines, want %d", len(got), len(tc.classes))
+			}
+			for i, line := range got {
+				if line.Text != text[i] || line.Class != tc.classes[i] {
+					t.Errorf("line %d = %+v, want text %q class %q", i, line, text[i], tc.classes[i])
+				}
+			}
+		})
+	}
+}

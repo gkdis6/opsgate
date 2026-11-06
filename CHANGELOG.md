@@ -7,6 +7,8 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-06
+
 ### Fixed
 
 - Render new note previews as unified diffs from `/dev/null` and color approval summary lines only after paired diff headers, so plain text lists are not shown as deletions.

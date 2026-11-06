@@ -2,7 +2,7 @@
 
 [한국어](ko/roadmap.md)
 
-The features below are implemented through v0.2.0. They have not yet been security-reviewed by third parties. There are no promised dates for future work.
+The features below are implemented through v0.3.0. They have not yet been security-reviewed by third parties. There are no promised dates for future work.
 
 ## Done
 

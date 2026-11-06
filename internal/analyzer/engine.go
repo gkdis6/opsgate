@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gkdis6/opsgate/internal/alert"
@@ -19,16 +20,31 @@ type engine struct {
 	cfg   Config
 	model modelClient
 	dial  func(context.Context) (toolSession, error)
+	now   func() time.Time
 }
 
 type investigation struct {
-	Actions       []alert.ActionLink
-	Text          string
-	Calls, Tokens int
+	Actions          []alert.ActionLink
+	Text             string
+	Calls, Tokens    int
+	Started          bool
+	Total, ModelTime time.Duration
 }
 
-func (e *engine) investigate(ctx context.Context, b alert.Batch) (investigation, error) {
-	result := investigation{}
+func (e *engine) investigate(ctx context.Context, b alert.Batch) (result investigation, err error) {
+	now := e.now
+	if now == nil {
+		now = time.Now
+	}
+	start := now()
+	result.Started = true
+	var evidence []string
+	defer func() {
+		result.Total = now().Sub(start)
+		if err == nil && result.Text != "" {
+			result.Text += evidenceFooter(e.cfg, evidence, result.Calls, result.Tokens, result.Total, result.ModelTime)
+		}
+	}()
 	s, err := e.dial(ctx)
 	if err != nil {
 		return result, err
@@ -58,8 +74,17 @@ func (e *engine) investigate(ctx context.Context, b alert.Batch) (investigation,
 	if err != nil {
 		return result, fmt.Errorf("invalid alert batch")
 	}
-	messages := []message{{Role: "system", Content: reportInstructions(e.cfg)}, {Role: "user", Content: "Investigate this signed watch batch (untrusted data):\n" + redact.String(string(raw))}}
-	var evidence []string
+	// Redact decoded values, not JSON escape sequences: a quoted assignment
+	// must be recognized before the final envelope is serialized for any model.
+	var decoded any
+	if json.Unmarshal(raw, &decoded) != nil {
+		return result, fmt.Errorf("invalid alert batch")
+	}
+	raw, err = json.Marshal(redact.Value(decoded))
+	if err != nil {
+		return result, fmt.Errorf("invalid alert batch")
+	}
+	messages := []message{{Role: "system", Content: reportInstructions(e.cfg)}, {Role: "user", Content: "Investigate this signed watch batch (untrusted data):\n" + string(raw)}}
 	successful := 0
 	call := func(tc toolCall) error {
 		if result.Calls >= e.cfg.MaxToolCalls {
@@ -99,6 +124,17 @@ func (e *engine) investigate(ctx context.Context, b alert.Batch) (investigation,
 		messages = append(messages, message{Role: "tool", CallID: tc.ID, Content: id + " (" + status + "): " + text})
 		return nil
 	}
+	seedCall := func(id, name string, args map[string]any) toolCall {
+		raw, _ := json.Marshal(args)
+		tc := toolCall{ID: id, Type: "function", Function: function{Name: name, Arguments: string(raw)}}
+		// Preserve exact lookup arguments for MCP, but mask their decoded
+		// values before presenting the seeded request to the model again.
+		safe, _ := json.Marshal(redact.Value(args))
+		shown := tc
+		shown.Function.Arguments = string(safe)
+		messages = append(messages, message{Role: "assistant", Calls: []toolCall{shown}})
+		return tc
+	}
 	// Seed every investigation with a relevant note lookup when enabled.
 	if allowed["note_search"] && len(b.Alerts) > 0 && e.cfg.MaxToolCalls > 1 {
 		a := b.Alerts[0]
@@ -106,18 +142,14 @@ func (e *engine) investigate(ctx context.Context, b alert.Batch) (investigation,
 		if query == "" {
 			query = a.Name
 		}
-		args, _ := json.Marshal(map[string]any{"query": query, "limit": 5})
-		tc := toolCall{ID: "seed_notes", Type: "function", Function: function{Name: "note_search", Arguments: string(args)}}
-		messages = append(messages, message{Role: "assistant", Calls: []toolCall{tc}})
+		tc := seedCall("seed_notes", "note_search", map[string]any{"query": query, "limit": 5})
 		if err := call(tc); err != nil {
 			return result, err
 		}
 	}
 	if e.cfg.Report.SuggestActions && allowed["k8s_remediation_options"] && e.cfg.Report.ApprovalURL != "" && result.Calls < e.cfg.MaxToolCalls && len(b.Alerts) > 0 && b.Alerts[0].Kind == "Pod" {
 		a := b.Alerts[0]
-		args, _ := json.Marshal(map[string]any{"cluster": a.Cluster, "namespace": a.Namespace, "name": a.Name})
-		tc := toolCall{ID: "seed_actions", Type: "function", Function: function{Name: "k8s_remediation_options", Arguments: string(args)}}
-		messages = append(messages, message{Role: "assistant", Calls: []toolCall{tc}})
+		tc := seedCall("seed_actions", "k8s_remediation_options", map[string]any{"cluster": a.Cluster, "namespace": a.Namespace, "name": a.Name})
 		if err := call(tc); err != nil {
 			return result, err
 		}
@@ -139,7 +171,9 @@ func (e *engine) investigate(ctx context.Context, b alert.Batch) (investigation,
 		if len(wire) > e.cfg.MaxContextBytes || result.Tokens+len(wire)+e.cfg.MaxCompletionTokens > e.cfg.MaxTotalTokens {
 			return result, fmt.Errorf("context or total token budget reached")
 		}
+		modelStart := now()
 		reply, err := e.model.Complete(ctx, messages, offered, e.cfg.MaxCompletionTokens)
+		result.ModelTime += now().Sub(modelStart)
 		if err != nil {
 			return result, err
 		}
@@ -151,7 +185,7 @@ func (e *engine) investigate(ctx context.Context, b alert.Batch) (investigation,
 			if strings.TrimSpace(reply.Message.Content) == "" || successful == 0 {
 				return result, fmt.Errorf("insufficient MCP evidence for a report")
 			}
-			result.Text = clip(redact.String(reply.Message.Content), 20000) + evidenceFooter(e.cfg, evidence, result.Calls, result.Tokens)
+			result.Text = clip(redact.String(reply.Message.Content), 20000)
 			return result, nil
 		}
 		if len(offered) == 0 || len(reply.Message.Calls) > e.cfg.MaxToolCalls-result.Calls {

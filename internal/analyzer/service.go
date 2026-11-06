@@ -81,12 +81,13 @@ func New(c Config) (*Service, error) {
 		}
 	}
 	s.notify = func(ctx context.Context, text string, actions []alert.ActionLink) error {
+		text = redact.String(text)
 		// Forward independently before Discord delivery so a Discord outage cannot suppress Telegram.
 		var forwardErr error
 		if forward != nil {
 			_, forwardErr = forward.Send(ctx, &alert.Batch{Source: "opsgate-analyzer", SentAt: time.Now().UTC(), Language: c.Report.Language, Text: text, Actions: actions})
 		}
-		for i, part := range chunks(redact.String(text), 1900) {
+		for i, part := range chunks(text, 1900) {
 			var last error
 			for attempt, wait := range []time.Duration{0, time.Second, 4 * time.Second} {
 				if wait > 0 {

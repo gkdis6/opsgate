@@ -55,6 +55,9 @@ func cliFixture() int {
 		}
 	}
 	mode := value("--model")
+	if mode == "masked-alert" && strings.Contains(string(raw), "alertcanary") {
+		return 99
+	}
 	switch mode {
 	case "timeout":
 		time.Sleep(30 * time.Second)
@@ -95,7 +98,7 @@ func cliFixture() int {
 		fmt.Print(`{"type":"result","subtype":"success","structured_output":{"content":"","tool_calls":[{"name":"k8s_rollout_restart","arguments":"{}"}]},"usage":{"input_tokens":10,"output_tokens":20}}`)
 		return 0
 	}
-	if mode == "tools" || mode == "pipeline" && !ready {
+	if mode == "tools" || (mode == "pipeline" || mode == "masked-alert") && !ready {
 		fmt.Print(`{"type":"result","subtype":"success","is_error":false,"structured_output":{"content":"","tool_calls":[{"name":"k8s_get","arguments":"{\"kind\":\"pods\",\"name\":\"web\",\"namespace\":\"apps\"}"}]},"usage":{"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":30,"cache_creation_input_tokens":40}}`)
 	} else {
 		fmt.Print(`{"type":"result","subtype":"success","is_error":false,"structured_output":{"content":"확인: OOMKilled [E1]","tool_calls":[]},"usage":{"input_tokens":10,"output_tokens":20}}`)

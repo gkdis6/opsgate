@@ -8,10 +8,12 @@ import (
 	"errors"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gkdis6/opsgate/internal/alert"
 )
@@ -19,25 +21,28 @@ import (
 type pending struct {
 	batch alert.Batch
 	due   time.Time
+	bytes int
 }
 
 // Service is a bounded, in-memory investigation queue and webhook handler.
 // One worker serializes investigations, limiting model spending and MCP load.
 type Service struct {
-	cfg         Config
-	secret      []byte
-	mu          sync.Mutex
-	jobs        map[string]*pending
-	seen        map[[32]byte]time.Time
-	cooldown    map[string]time.Time
-	now         func() time.Time
-	investigate func(context.Context, alert.Batch) (investigation, error)
-	notify      func(context.Context, string, []alert.ActionLink) error
-	ready       func(context.Context) error
+	cfg                          Config
+	secret                       []byte
+	mu                           sync.Mutex
+	jobs                         map[string]*pending
+	seen                         map[[32]byte]time.Time
+	cooldown                     map[string]time.Time
+	queuedBytes                  int
+	jobByteLimit, queueByteLimit int
+	now                          func() time.Time
+	investigate                  func(context.Context, alert.Batch) (investigation, error)
+	notify                       func(context.Context, string, []alert.ActionLink) error
+	ready                        func(context.Context) error
 }
 
 func newService(c Config, key []byte) *Service {
-	return &Service{cfg: c, secret: key, jobs: map[string]*pending{}, seen: map[[32]byte]time.Time{}, cooldown: map[string]time.Time{}, now: time.Now}
+	return &Service{cfg: c, secret: key, jobs: map[string]*pending{}, seen: map[[32]byte]time.Time{}, cooldown: map[string]time.Time{}, now: time.Now, jobByteLimit: 64 << 10, queueByteLimit: 8 << 20}
 }
 
 // Handler exposes only /alerts and /healthz. Alert bodies are capped at 1 MiB.
@@ -80,6 +85,10 @@ func (s *Service) receive(w http.ResponseWriter, r *http.Request) {
 	}
 	groups := map[string][]alert.Alert{}
 	for _, a := range b.Alerts {
+		if !alertFieldsFit(a) {
+			http.Error(w, "alert field too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		if a.Cluster == "" || a.Name == "" || a.Kind == "" || a.Reason == "" || a.Time.IsZero() || a.Suppressed < 0 || a.Severity != alert.Warning && a.Severity != alert.Info {
 			http.Error(w, "invalid alert", http.StatusBadRequest)
 			return
@@ -87,6 +96,10 @@ func (s *Service) receive(w http.ResponseWriter, r *http.Request) {
 		if s.cfg.WarningsOnly && a.Severity != alert.Warning {
 			continue
 		}
+		// Localized display duplicates source evidence; the engine does not use
+		// it. Batch text/actions/language are likewise never retained in jobs.
+		a.Display = nil
+		a.Key = ""
 		key := strings.Join([]string{a.Cluster, a.Kind, a.Namespace, a.Name}, "/")
 		groups[key] = append(groups[key], a)
 	}
@@ -118,27 +131,72 @@ func (s *Service) receive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "investigation queue full", http.StatusServiceUnavailable)
 		return
 	}
+	// Stage complete copies first: neither a rejected insertion nor a larger
+	// replacement may partially alter the queue or its retained-byte charge.
+	updates := map[string]*pending{}
+	total := s.queuedBytes
 	for key, alerts := range groups {
 		if now.Before(s.cooldown[key]) {
 			continue
 		}
-		j := s.jobs[key]
-		if j == nil {
-			j = &pending{batch: alert.Batch{Source: b.Source, SentAt: b.SentAt, Dropped: b.Dropped}, due: now.Add(s.cfg.BatchWindow)}
-			s.jobs[key] = j
+		j := &pending{batch: alert.Batch{Source: b.Source, SentAt: b.SentAt, Dropped: b.Dropped}, due: now.Add(s.cfg.BatchWindow)}
+		if old := s.jobs[key]; old != nil {
+			*j = *old
+			j.batch.Alerts = append([]alert.Alert(nil), old.batch.Alerts...)
+			total -= old.bytes
 		}
 		for _, a := range alerts {
 			mergeAlert(&j.batch, a)
 		}
+		wire, _ := json.Marshal(j.batch)
+		// Serialized bytes account for strings (including escaping), plus a
+		// conservative allowance for retained structs, slices and map entries.
+		j.bytes = len(wire) + len(key) + 512 + 256*len(j.batch.Alerts)
+		total += j.bytes
+		if j.bytes > s.jobByteLimit {
+			w.Header().Set("Retry-After", "5")
+			http.Error(w, "investigation byte budget full", http.StatusServiceUnavailable)
+			return
+		}
+		updates[key] = j
 	}
+	if total > s.queueByteLimit {
+		w.Header().Set("Retry-After", "5")
+		http.Error(w, "investigation byte budget full", http.StatusServiceUnavailable)
+		return
+	}
+	for key, j := range updates {
+		s.jobs[key] = j
+	}
+	s.queuedBytes = total
 	s.seen[digest] = now.Add(10 * time.Minute)
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func alertFieldsFit(a alert.Alert) bool {
+	if len(a.Cluster) > 63 || len(a.Kind) > 64 || len(a.Namespace) > 63 || len(a.Name) > 253 {
+		return false
+	}
+	// Watch emits at most 300 Unicode characters and a truncation ellipsis.
+	for _, text := range []string{a.Reason, a.Summary, a.Hint} {
+		if len(text) > 1203 || utf8.RuneCountInString(text) > 301 {
+			return false
+		}
+	}
+	if r := a.Restart; r != nil {
+		return len(r.Kind) <= 64 && len(r.Namespace) <= 63 && len(r.Name) <= 253 && len(r.URL) <= 4096
+	}
+	return true
 }
 
 func mergeAlert(b *alert.Batch, a alert.Alert) {
 	for i, old := range b.Alerts {
 		if old.Reason == a.Reason && old.Summary == a.Summary {
-			a.Suppressed += old.Suppressed + 1
+			if old.Suppressed == math.MaxInt || a.Suppressed > math.MaxInt-old.Suppressed-1 {
+				a.Suppressed = math.MaxInt
+			} else {
+				a.Suppressed += old.Suppressed + 1
+			}
 			b.Alerts[i] = a
 			return
 		}
@@ -165,6 +223,7 @@ func (s *Service) take() (alert.Batch, bool) {
 		return alert.Batch{}, false
 	}
 	delete(s.jobs, key)
+	s.queuedBytes -= selected.bytes
 	s.cooldown[key] = now.Add(s.cfg.Cooldown)
 	return selected.batch, true
 }

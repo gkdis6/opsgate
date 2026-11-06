@@ -86,6 +86,24 @@ and memory requests or limits. Those resource settings can be inspected with
 Kubernetes detail tools. See the [tool reference](docs/tools.md) for arguments
 and limits.
 
+### Kubernetes changes and where to approve them
+
+Every Kubernetes change is off until its allowlist names the target. A person
+always approves; the table shows where the approval can start.
+
+| Change | Enable with | From an MCP client | Ready-made approval link |
+| --- | --- | --- | --- |
+| Rollout restart | `rollout_restart` | yes | in a watch alert's restart suggestion, with `watch.approval_url` ([conditions](docs/watch.md#hints-and-restart-suggestions)) |
+| Scale | `scale`, capped by `max_replicas` | yes | none |
+| Delete a pod | `delete_pod` | yes | none |
+| Restore a previous image | `restore_image` and `action_approval_url` | yes | from `k8s_remediation_options`; the analyzer adds it to its report as a button ([details](#restoring-a-failed-image-optional)) |
+
+A ready-made link opens a fresh plan after browser sign-in; nothing changes until
+someone presses Approve, and approval windows never cover these links. Analyzer
+reports may also recommend other fixes, such as editing a Deployment, as text
+only. The analyzer never runs a change, and only links the server has verified
+become buttons.
+
 
 
 ## How it works

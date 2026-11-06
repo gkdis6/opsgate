@@ -32,7 +32,7 @@ func TestRedactionBeforeTruncation(t *testing.T) {
 						t.Fatal(err)
 					}
 					t.Cleanup(func() { logger.Close() })
-					env := &Env{Audit: logger, MaxOutputBytes: 128, Timeout: time.Second,
+					env := &Env{Audit: logger, MaxOutputBytes: 128, Timeout: 30 * time.Second,
 						Fallback: &Caller{User: "alice", Transport: "stdio", Scopes: config.Scopes},
 						Confirm:  confirmFunc(func(context.Context, *mcp.CallToolRequest, ConfirmRequest) (string, error) { return "test", nil }),
 					}

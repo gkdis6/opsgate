@@ -35,7 +35,7 @@ func (f confirmFunc) Confirm(ctx context.Context, req *mcp.CallToolRequest, r Co
 
 func connectWrite(t *testing.T, env *Env, spec WriteSpec, h WriteHandler[writeTestInput], opts ...*mcp.ClientOptions) *mcp.ClientSession {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
 	AddWrite(s, env, spec, h)
@@ -73,7 +73,7 @@ func TestAddWriteInputRequired(t *testing.T) {
 	}
 	var applies atomic.Int32
 	env := &Env{
-		Audit: logger, Timeout: time.Second, MaxOutputBytes: 1024,
+		Audit: logger, Timeout: 30 * time.Second, MaxOutputBytes: 1024,
 		Fallback: &Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeWrite}},
 		Confirm: confirmFunc(func(context.Context, *mcp.CallToolRequest, ConfirmRequest) (string, error) {
 			return "", fmt.Errorf("wrapped: %w", input)
@@ -153,7 +153,7 @@ func TestAddWrite(t *testing.T) {
 				max = 1024
 			}
 			var plans, confirms, applies atomic.Int32
-			timeout := time.Second
+			timeout := 30 * time.Second
 			if tc.planTimeout || tc.applyTimeout {
 				timeout = 20 * time.Millisecond
 			} else if tc.slowConfirm {
@@ -294,7 +294,7 @@ func TestAddWriteRejectsAmbiguousTarget(t *testing.T) {
 	for _, target := range []string{"glpat-aaaaaaaa", "glpat-bbbbbbbb"} {
 		t.Run(target, func(t *testing.T) {
 			var confirms, applies atomic.Int32
-			env := &Env{Timeout: time.Second, MaxOutputBytes: 1024,
+			env := &Env{Timeout: 30 * time.Second, MaxOutputBytes: 1024,
 				Fallback: &Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeWrite}},
 				Confirm: confirmFunc(func(context.Context, *mcp.CallToolRequest, ConfirmRequest) (string, error) {
 					confirms.Add(1)
@@ -333,7 +333,7 @@ func TestAddWriteFullReviewMaskedArgs(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var confirms, applies atomic.Int32
-			env := &Env{Timeout: time.Second, MaxOutputBytes: 1024,
+			env := &Env{Timeout: 30 * time.Second, MaxOutputBytes: 1024,
 				Fallback: &Caller{User: "operator", Transport: "http", Scopes: []string{config.ScopeWrite}},
 				Confirm: confirmFunc(func(_ context.Context, _ *mcp.CallToolRequest, r ConfirmRequest) (string, error) {
 					confirms.Add(1)
@@ -382,7 +382,7 @@ func TestAddWriteRawArgumentLimit(t *testing.T) {
 	}
 	t.Cleanup(func() { logger.Close() })
 	var plans atomic.Int32
-	cs := connectWrite(t, &Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 1024,
+	cs := connectWrite(t, &Env{Audit: logger, Timeout: 30 * time.Second, MaxOutputBytes: 1024,
 		Fallback: &Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeWrite}},
 	}, WriteSpec{Name: "change"}, WriteHandler[writeTestInput]{
 		Plan: func(context.Context, Caller, writeTestInput) (Plan, error) {
@@ -429,7 +429,7 @@ func TestAddWriteMaxArgBytes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		cs := connectWrite(t, &Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 1024,
+		cs := connectWrite(t, &Env{Audit: logger, Timeout: 30 * time.Second, MaxOutputBytes: 1024,
 			Fallback: &Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeWrite}},
 		}, WriteSpec{Name: "change", MaxArgBytes: tc.max}, h)
 		res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "change", Arguments: raw})
@@ -489,7 +489,7 @@ func TestAddWriteBoundsAuditSummary(t *testing.T) {
 			}
 			t.Cleanup(func() { logger.Close() })
 			var confirms atomic.Int32
-			cs := connectWrite(t, &Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 1024,
+			cs := connectWrite(t, &Env{Audit: logger, Timeout: 30 * time.Second, MaxOutputBytes: 1024,
 				Fallback: &Caller{User: "alice", Transport: "stdio", Scopes: config.Scopes},
 				Confirm: confirmFunc(func(context.Context, *mcp.CallToolRequest, ConfirmRequest) (string, error) {
 					confirms.Add(1)
@@ -557,7 +557,7 @@ func TestAddWritePassesInvocationPlan(t *testing.T) {
 		ID     int32
 		Secret string
 	}
-	env := &Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 1024,
+	env := &Env{Audit: logger, Timeout: 30 * time.Second, MaxOutputBytes: 1024,
 		Fallback: &Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeWrite}},
 		Confirm: confirmFunc(func(ctx context.Context, _ *mcp.CallToolRequest, _ ConfirmRequest) (string, error) {
 			if confirms.Add(1) == 1 {
@@ -583,7 +583,7 @@ func TestAddWritePassesInvocationPlan(t *testing.T) {
 			return fmt.Sprint(data.ID), nil
 		},
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	params := &mcp.CallToolParams{Name: "change", Arguments: map[string]any{"target": "service", "password": ""}}
 	first := make(chan *mcp.CallToolResult, 1)

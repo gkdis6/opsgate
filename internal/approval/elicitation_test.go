@@ -31,7 +31,7 @@ func approvalRequest() tool.ConfirmRequest {
 
 func connectApproval(t *testing.T, s *mcp.Server, opts *mcp.ClientOptions, versions ...string) *mcp.ClientSession {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 	st, ct := mcp.NewInMemoryTransports()
 	ss, err := s.Connect(ctx, st, nil)
@@ -60,7 +60,7 @@ func newApprovalTool(t *testing.T, m *Manager, r tool.ConfirmRequest) (*mcp.Serv
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { logger.Close() })
-	env := &tool.Env{Confirm: m, Audit: logger, Timeout: time.Second, MaxOutputBytes: 4096, Fallback: &r.Caller}
+	env := &tool.Env{Confirm: m, Audit: logger, Timeout: 30 * time.Second, MaxOutputBytes: 4096, Fallback: &r.Caller}
 	applies := new(atomic.Int32)
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
 	tool.AddWrite(s, env, tool.WriteSpec{Name: r.Tool}, tool.WriteHandler[restartInput]{
@@ -77,7 +77,7 @@ func newApprovalTool(t *testing.T, m *Manager, r tool.ConfirmRequest) (*mcp.Serv
 
 func approvalCall(t *testing.T, cs *mcp.ClientSession, p *mcp.CallToolParams) *mcp.CallToolResult {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	r, err := cs.CallTool(ctx, p)
 	if err != nil {

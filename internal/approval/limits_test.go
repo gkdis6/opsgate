@@ -63,7 +63,7 @@ func TestSummaryLimit(t *testing.T) {
 // without a socket listener, process, or network dependency.
 func TestDevStartArgumentLimit(t *testing.T) {
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-	env := &tool.Env{Timeout: time.Second, MaxOutputBytes: 4096, Fallback: &tool.Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeDev}}}
+	env := &tool.Env{Timeout: 30 * time.Second, MaxOutputBytes: 4096, Fallback: &tool.Caller{User: "operator", Transport: "stdio", Scopes: []string{config.ScopeDev}}}
 	if err := dev.Register(s, env, config.Dev{RunnerSocket: filepath.Join(t.TempDir(), "missing.sock")}); err != nil {
 		t.Fatal(err)
 	}

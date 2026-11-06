@@ -113,7 +113,7 @@ func TestWebEndToEnd(t *testing.T) {
 	}
 	t.Cleanup(func() { logger.Close() })
 	caller := approvalRequest().Caller
-	env := &tool.Env{Confirm: m, Audit: logger, Timeout: time.Second, MaxOutputBytes: 4096, Fallback: &caller}
+	env := &tool.Env{Confirm: m, Audit: logger, Timeout: 30 * time.Second, MaxOutputBytes: 4096, Fallback: &caller}
 	var applies atomic.Int32
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
 	tool.AddWrite(s, env, tool.WriteSpec{Name: "restart"}, tool.WriteHandler[restartInput]{

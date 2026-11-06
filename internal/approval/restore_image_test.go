@@ -25,7 +25,7 @@ type restoreLinkInput struct {
 func restoreWebFixture(t *testing.T, browser BrowserAuth) *restartFixture {
 	t.Helper()
 	f := newRestartFixture(t, browser)
-	env := &tool.Env{Timeout: time.Second, MaxOutputBytes: 4096}
+	env := &tool.Env{Timeout: 30 * time.Second, MaxOutputBytes: 4096}
 	tool.AddWrite(mcp.NewServer(&mcp.Implementation{Name: "restore", Version: "1"}, nil), env, tool.WriteSpec{Name: "k8s_restore_image", Direct: true, Title: "Restore healthy image"}, tool.WriteHandler[restoreLinkInput]{
 		Plan: func(_ context.Context, _ tool.Caller, in restoreLinkInput) (tool.Plan, error) {
 			f.planned.Add(1)

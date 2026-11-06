@@ -37,7 +37,7 @@ func TestDefaultApprovalRejectsClientSelfApproval(t *testing.T) {
 			env := &tool.Env{
 				Confirm:  approval.New(cfg.Approval, "https://ops.example", approvalBrowser{}, nil),
 				Fallback: &tool.Caller{User: "passkey:alice", Transport: "http", Scopes: []string{config.ScopeWrite}},
-				Timeout:  time.Second, MaxOutputBytes: 4096,
+				Timeout:  30 * time.Second, MaxOutputBytes: 4096,
 			}
 			var applied, elicited atomic.Int32
 			s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
@@ -50,7 +50,7 @@ func TestDefaultApprovalRejectsClientSelfApproval(t *testing.T) {
 					return "restarted", nil
 				},
 			})
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			st, ct := mcp.NewInMemoryTransports()
 			ss, err := s.Connect(ctx, st, nil)

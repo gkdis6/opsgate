@@ -7,6 +7,8 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-06
+
 ### Security
 
 - Mask and bound all cluster-controlled watch alert text before delivery and deduplication, including direct JSON and custom templates.

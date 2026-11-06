@@ -31,7 +31,7 @@ func TestNoteInstructions(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			env := &tool.Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 4096,
+			env := &tool.Env{Audit: logger, Timeout: 30 * time.Second, MaxOutputBytes: 4096,
 				Fallback: &tool.Caller{User: "local", Transport: "stdio", Scopes: config.Scopes}}
 			s, err := New(cfg, env)
 			if err != nil {

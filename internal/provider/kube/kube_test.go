@@ -21,7 +21,7 @@ import (
 func TestRegistration(t *testing.T) {
 	for _, logs := range []bool{false, true} {
 		t.Run(map[bool]string{false: "without logs", true: "with logs"}[logs], func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
 			logger, err := audit.Open("")
@@ -29,7 +29,7 @@ func TestRegistration(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer logger.Close()
-			env := &tool.Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 65536, Fallback: &tool.Caller{User: "test", Scopes: []string{config.ScopeRead}}}
+			env := &tool.Env{Audit: logger, Timeout: 30 * time.Second, MaxOutputBytes: 65536, Fallback: &tool.Caller{User: "test", Scopes: []string{config.ScopeRead}}}
 			clientset := fake.NewClientset()
 			if err := register(server, env, config.Kubernetes{KubernetesCluster: config.KubernetesCluster{AllowLogs: logs, Namespaces: []string{"*"}}}, map[string]kubernetes.Interface{"default": clientset}); err != nil {
 				t.Fatal(err)

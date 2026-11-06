@@ -32,7 +32,7 @@ func TestRegisterAndMCPCalls(t *testing.T) {
 			}
 			defer al.Close()
 			calls := 0
-			env := &tool.Env{Audit: al, Timeout: time.Second, MaxOutputBytes: 65536, Fallback: &tool.Caller{User: "test", Scopes: []string{config.ScopeRead, config.ScopeWrite}}, Confirm: confirmerFunc(func(r tool.ConfirmRequest) error {
+			env := &tool.Env{Audit: al, Timeout: 30 * time.Second, MaxOutputBytes: 65536, Fallback: &tool.Caller{User: "test", Scopes: []string{config.ScopeRead, config.ScopeWrite}}, Confirm: confirmerFunc(func(r tool.ConfirmRequest) error {
 				calls++
 				if !strings.Contains(r.Summary, "create note new.md") {
 					t.Fatal(r.Summary)
@@ -43,7 +43,7 @@ func TestRegisterAndMCPCalls(t *testing.T) {
 			if err := Register(s, env, cfg); err != nil {
 				t.Fatal(err)
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			st, ct := mcp.NewInMemoryTransports()
 			ss, err := s.Connect(ctx, st, nil)

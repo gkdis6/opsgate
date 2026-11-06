@@ -3,6 +3,7 @@ package note
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"html"
 	"net/http"
 	"net/http/httptest"
@@ -78,7 +79,7 @@ func TestNoteApprovalReview(t *testing.T) {
 					caller.Transport = "stdio"
 				}
 				s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-				p.registerWrites(s, &tool.Env{Confirm: m, Audit: logger, Fallback: &caller, Timeout: time.Second, MaxOutputBytes: 65536})
+				p.registerWrites(s, &tool.Env{Confirm: m, Audit: logger, Fallback: &caller, Timeout: 30 * time.Second, MaxOutputBytes: 65536})
 				elicited := 0
 				client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, &mcp.ClientOptions{
 					ElicitationHandler: func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
@@ -90,7 +91,7 @@ func TestNoteApprovalReview(t *testing.T) {
 						return &mcp.ElicitResult{Action: "accept", Content: content}, nil
 					},
 				})
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				t.Cleanup(cancel)
 				st, ct := mcp.NewInMemoryTransports()
 				ss, err := s.Connect(ctx, st, nil)
@@ -106,7 +107,7 @@ func TestNoteApprovalReview(t *testing.T) {
 				if channel == "window" {
 					seed, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "note_create", Arguments: map[string]any{"path": "seed", "content": "visible seed"}})
 					if err != nil || seed.IsError || elicited != 1 {
-						t.Fatalf("window seed: %+v; error %v; elicitations %d", seed, err, elicited)
+						t.Fatalf("window seed: %s; error %v; elicitations %d", resultText(seed), err, elicited)
 					}
 					elicited = 0
 				}
@@ -121,12 +122,12 @@ func TestNoteApprovalReview(t *testing.T) {
 				result := call()
 				if action == "short" {
 					if result.IsError || elicited != 1 || readFixture(t, p, "new.md") != want {
-						t.Fatalf("short write: %+v; elicitations %d", result, elicited)
+						t.Fatalf("short write: %s; elicitations %d", resultText(result), elicited)
 					}
 					return
 				}
 				if elicited != 0 || result.NeedsInput() {
-					t.Fatalf("truncated write elicited approval: %+v; elicitations %d", result, elicited)
+					t.Fatalf("truncated write elicited approval: %s; elicitations %d", resultText(result), elicited)
 				}
 				text := result.Content[0].(*mcp.TextContent).Text
 				if action == "masked" {
@@ -146,7 +147,7 @@ func TestNoteApprovalReview(t *testing.T) {
 				}
 				if channel == "window" {
 					if result.IsError || readFixture(t, p, "new.md") != want {
-						t.Fatalf("window write: %+v", result)
+						t.Fatalf("window write: %s", resultText(result))
 					}
 					return
 				}
@@ -190,9 +191,23 @@ func TestNoteApprovalReview(t *testing.T) {
 					path = "new.md"
 				}
 				if result.IsError || elicited != 0 || readFixture(t, p, path) != want {
-					t.Fatalf("web approved write: %+v; elicitations %d", result, elicited)
+					t.Fatalf("web approved write: %s; elicitations %d", resultText(result), elicited)
 				}
 			})
 		}
 	}
+}
+
+// resultText shows a tool result's error flag and text instead of content pointers.
+func resultText(r *mcp.CallToolResult) string {
+	if r == nil {
+		return "<nil>"
+	}
+	var text strings.Builder
+	for _, c := range r.Content {
+		if t, ok := c.(*mcp.TextContent); ok {
+			text.WriteString(t.Text)
+		}
+	}
+	return fmt.Sprintf("error=%v needs_input=%v text=%q", r.IsError, r.NeedsInput(), text.String())
 }

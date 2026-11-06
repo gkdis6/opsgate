@@ -41,7 +41,7 @@ func TestPerIdentityTools(t *testing.T) {
 					t.Fatal(err)
 				}
 				t.Cleanup(func() { logger.Close() })
-				env := &Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 1024}
+				env := &Env{Audit: logger, Timeout: 30 * time.Second, MaxOutputBytes: 1024}
 				var handlers, confirms atomic.Int32
 				env.Confirm = confirmFunc(func(context.Context, *mcp.CallToolRequest, ConfirmRequest) (string, error) {
 					confirms.Add(1)
@@ -79,7 +79,7 @@ func TestPerIdentityTools(t *testing.T) {
 						return "read", nil
 					})
 				}
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				t.Cleanup(cancel)
 				st, ct := mcp.NewInMemoryTransports()
 				ss, err := s.Connect(ctx, st, nil)

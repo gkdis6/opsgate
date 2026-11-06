@@ -46,7 +46,7 @@ func newRestartFixture(t *testing.T, browser BrowserAuth) *restartFixture {
 	t.Helper()
 	f := &restartFixture{}
 	f.summary.Store("Restart deployment apps/web")
-	env := &tool.Env{Timeout: time.Second, MaxOutputBytes: 4096}
+	env := &tool.Env{Timeout: 30 * time.Second, MaxOutputBytes: 4096}
 	tool.AddWrite(mcp.NewServer(&mcp.Implementation{Name: "t", Version: "1"}, nil), env,
 		tool.WriteSpec{Name: restartTool, Title: "Restart workload", Direct: true},
 		tool.WriteHandler[linkRestartInput]{

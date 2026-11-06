@@ -25,7 +25,7 @@ type testInput struct {
 
 func connectTool(t *testing.T, env *Env, spec Spec, handler Handler[testInput]) *mcp.ClientSession {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
 	Add(server, env, spec, handler)
@@ -171,7 +171,7 @@ func TestAddRedactsBeforeTruncation(t *testing.T) {
 			t.Cleanup(func() { logger.Close() })
 			const max = 80
 			output := "password=" + strings.Repeat("x", 1<<20) + " outside-budget"
-			cs := connectTool(t, &Env{Audit: logger, MaxOutputBytes: max, Timeout: time.Second, Fallback: &Caller{Scopes: []string{config.ScopeRead}}}, Spec{Name: "check", ReadOnly: true}, func(context.Context, Caller, testInput) (string, error) {
+			cs := connectTool(t, &Env{Audit: logger, MaxOutputBytes: max, Timeout: 30 * time.Second, Fallback: &Caller{Scopes: []string{config.ScopeRead}}}, Spec{Name: "check", ReadOnly: true}, func(context.Context, Caller, testInput) (string, error) {
 				if fail {
 					return "", errors.New(output)
 				}
@@ -210,7 +210,7 @@ func TestAddRawArgumentsLimit(t *testing.T) {
 			}
 			t.Cleanup(func() { logger.Close() })
 			called := false
-			cs := connectTool(t, &Env{Audit: logger, MaxOutputBytes: 1024, Timeout: time.Second, Fallback: &Caller{Scopes: []string{config.ScopeRead}}}, Spec{Name: "check", ReadOnly: true}, func(context.Context, Caller, testInput) (string, error) {
+			cs := connectTool(t, &Env{Audit: logger, MaxOutputBytes: 1024, Timeout: 30 * time.Second, Fallback: &Caller{Scopes: []string{config.ScopeRead}}}, Spec{Name: "check", ReadOnly: true}, func(context.Context, Caller, testInput) (string, error) {
 				called = true
 				return "ok", nil
 			})

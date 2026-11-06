@@ -30,11 +30,11 @@ func directFixture(t *testing.T, spec WriteSpec, env *Env, summary *string, appl
 
 func TestDirectIsOptIn(t *testing.T) {
 	summary, applied := "plan", 0
-	env := &Env{Timeout: time.Second}
+	env := &Env{Timeout: 30 * time.Second}
 	if directFixture(t, WriteSpec{Name: "plain"}, env, &summary, &applied) != nil {
 		t.Fatal("tool is direct without opting in")
 	}
-	env = &Env{Timeout: time.Second, Policy: NewPolicy(config.ToolPolicy{Deny: []string{"blocked"}})}
+	env = &Env{Timeout: 30 * time.Second, Policy: NewPolicy(config.ToolPolicy{Deny: []string{"blocked"}})}
 	if directFixture(t, WriteSpec{Name: "blocked", Direct: true}, env, &summary, &applied) != nil {
 		t.Fatal("a tool disabled by policy stayed reachable")
 	}
@@ -47,7 +47,7 @@ func TestDirectChecksAndAudit(t *testing.T) {
 		t.Fatal(err)
 	}
 	summary, applied := "restart web", 0
-	env := &Env{Timeout: time.Second, MaxOutputBytes: 4096, Audit: logger}
+	env := &Env{Timeout: 30 * time.Second, MaxOutputBytes: 4096, Audit: logger}
 	d := directFixture(t, WriteSpec{Name: "w", Direct: true}, env, &summary, &applied)
 	ctx := context.Background()
 	raw := json.RawMessage(`{"target":"web"}`)

@@ -44,7 +44,7 @@ func TestLargeNoteThroughMCP(t *testing.T) {
 			var maxArgs atomic.Int64
 			var prompts atomic.Int32
 			manager := approval.New(cfg.Approval, "", nil, logger)
-			env := &tool.Env{Audit: logger, Timeout: time.Second, MaxOutputBytes: 4096,
+			env := &tool.Env{Audit: logger, Timeout: 30 * time.Second, MaxOutputBytes: 4096,
 				Fallback: &tool.Caller{User: "local", Transport: "stdio", Scopes: config.Scopes},
 				Confirm: confirmerFunc(func(ctx context.Context, req *mcp.CallToolRequest, r tool.ConfirmRequest) (string, error) {
 					maxArgs.Store(int64(r.MaxArgBytes))

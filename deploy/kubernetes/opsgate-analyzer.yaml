@@ -61,7 +61,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: analyzer
-          image: ghcr.io/gkdis6/opsgate:v0.2.0 # Replace with a verified release tag AND its digest.
+          image: ghcr.io/gkdis6/opsgate:v0.2.1 # Replace with a verified release tag AND its digest.
           command: [/opsgate-analyzer, -config, /etc/analyzer/analyzer.yaml]
           ports:
             - containerPort: 8080
@@ -92,7 +92,7 @@ spec:
               mountPath: /etc/analyzer-discord
               readOnly: true
         - name: reader
-          image: ghcr.io/gkdis6/opsgate:v0.2.0 # Same pinned release as analyzer.
+          image: ghcr.io/gkdis6/opsgate:v0.2.1 # Same pinned release as analyzer.
           command: [/opsgate, -transport, http, -config, /etc/reader/reader.yaml]
           securityContext:
             allowPrivilegeEscalation: false

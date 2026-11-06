@@ -17,7 +17,7 @@ func TestReportLanguagesAndProposals(t *testing.T) {
 			t.Errorf("missing policy %q", text)
 		}
 	}
-	footer := evidenceFooter(c, []string{"[E1] k8s_get"}, 1, 20)
+	footer := evidenceFooter(c, []string{"[E1] k8s_get"}, 1, 20, 0, 0)
 	if !strings.Contains(footer, "조회 근거") {
 		t.Fatal(footer)
 	}
@@ -29,7 +29,7 @@ func TestReportLanguagesAndProposals(t *testing.T) {
 	if !strings.Contains(text, "Analysis failed") || strings.Contains(text, "분석 실패") {
 		t.Fatal(text)
 	}
-	if !strings.Contains(evidenceFooter(c, nil, 1, 20), "Evidence:") {
+	if !strings.Contains(evidenceFooter(c, nil, 1, 20, 0, 0), "Evidence:") {
 		t.Fatal("English footer missing")
 	}
 	c.Report.SuggestActions = false

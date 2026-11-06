@@ -75,6 +75,9 @@ func codexFixture() int {
 		return 98
 	}
 	mode := value("--model")
+	if mode == "masked-alert" && strings.Contains(string(raw), "alertcanary") {
+		return 99
+	}
 	switch mode {
 	case "timeout":
 		time.Sleep(30 * time.Second)
@@ -107,7 +110,7 @@ func codexFixture() int {
 	}
 	content := "확인된 사실: OOMKilled [E2]"
 	calls := []map[string]string{}
-	if mode == "tools" || mode == "pipeline" && !ready {
+	if mode == "tools" || (mode == "pipeline" || mode == "masked-alert") && !ready {
 		content = ""
 		calls = append(calls, map[string]string{"name": "k8s_get", "arguments": `{"kind":"pods","name":"web","namespace":"apps"}`})
 	}

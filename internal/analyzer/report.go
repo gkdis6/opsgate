@@ -20,11 +20,25 @@ func reportInstructions(c Config) string {
 	return instructions + "\n" + language + "\n" + actions
 }
 
-func evidenceFooter(c Config, evidence []string, calls, tokens int) string {
+func evidenceFooter(c Config, evidence []string, calls, tokens int, total, model time.Duration) string {
 	if c.Report.Language == "en" {
-		return "\n\nEvidence:\n" + strings.Join(evidence, "\n") + fmt.Sprintf("\n%d reads · %d tokens · Model analysis does not guarantee a confirmed root cause.", calls, tokens)
+		return "\n\nEvidence:\n" + strings.Join(evidence, "\n") + fmt.Sprintf("\n%d reads · %d tokens · %s (model %s) · Model analysis does not guarantee a confirmed root cause.", calls, tokens, reportDuration(total, "en"), reportDuration(model, "en"))
 	}
-	return "\n\n조회 근거:\n" + strings.Join(evidence, "\n") + fmt.Sprintf("\n조회 %d회 · 사용 토큰 %d · 모델 분석 결과이며 원인 확정을 보장하지 않습니다.", calls, tokens)
+	return "\n\n조회 근거:\n" + strings.Join(evidence, "\n") + fmt.Sprintf("\n조회 %d회 · 사용 토큰 %d · 소요 %s (모델 %s) · 모델 분석 결과이며 원인 확정을 보장하지 않습니다.", calls, tokens, reportDuration(total, "ko"), reportDuration(model, "ko"))
+}
+
+func reportDuration(d time.Duration, language string) string {
+	seconds := max(int64(1), int64(d.Round(time.Second)/time.Second))
+	if language == "en" {
+		if seconds < 60 {
+			return fmt.Sprintf("%ds", seconds)
+		}
+		return fmt.Sprintf("%dm%ds", seconds/60, seconds%60)
+	}
+	if seconds < 60 {
+		return fmt.Sprintf("%d초", seconds)
+	}
+	return fmt.Sprintf("%d분 %d초", seconds/60, seconds%60)
 }
 
 func reportNotification(c Config, b alert.Batch, result investigation, status, code string) string {
@@ -33,6 +47,9 @@ func reportNotification(c Config, b alert.Batch, result investigation, status, c
 	if c.Report.Language == "en" {
 		if status == "failed" {
 			text = "Analysis failed or insufficient evidence (" + code + "): check investigation limits, model/MCP connectivity and read permissions. No cause was confirmed and no changes were made."
+			if result.Started {
+				text += "\nElapsed: " + reportDuration(result.Total, "en")
+			}
 		}
 		return fmt.Sprintf("opsgate automatic analysis [%s]\n%s %s %s/%s\nAlert occurred: %s\n\n%s", status, a.Cluster, a.Kind, a.Namespace, a.Name, a.Time.UTC().Format(time.RFC3339), text)
 	}
@@ -40,6 +57,9 @@ func reportNotification(c Config, b alert.Batch, result investigation, status, c
 	if status == "failed" {
 		label = "실패"
 		text = "분석 실패 또는 증거 부족 (" + code + "): 조사 한도, 모델/MCP 연결 및 조회 권한을 확인하세요. 원인은 확정되지 않았으며 변경은 수행하지 않았습니다."
+		if result.Started {
+			text += "\n소요 " + reportDuration(result.Total, "ko")
+		}
 	}
 	return fmt.Sprintf("opsgate 자동 분석 [%s]\n%s %s %s/%s\n알림 발생: %s\n\n%s", label, a.Cluster, a.Kind, a.Namespace, a.Name, a.Time.UTC().Format(time.RFC3339), text)
 }

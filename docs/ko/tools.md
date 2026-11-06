@@ -14,11 +14,11 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요하고, dev 도구에
 | `k8s_service_check` | 서비스 호스트 이름의 DNS 설정과 준비된 백엔드 점검(설정만 확인하며 DNS 질의·연결을 보내지 않고 NetworkPolicy는 평가하지 않음) | 필수 `namespace`(조회하는 쪽 네임스페이스), `host`(소문자 DNS 이름, 최대 253바이트, IP 주소 불가); 선택 `port`(서비스 포트 번호 또는 이름), `pod`(DNS 설정을 가져올 같은 네임스페이스의 파드); 클러스터 도메인은 `cluster.local`로 가정하고, 도메인까지 적은 이름은 다른 도메인도 허용; 조회 후보, Service, 선택자에 맞는 파드(최대 500개), EndpointSlice를 확인; 다른 허용 네임스페이스의 같은 이름 Service를 최대 10개 제안 |
 | `k8s_logs` | 파드 로그(하나 이상의 클러스터에서 `allow_logs=true`일 때 도구 등록) | 필수 `namespace`, `pod`; 일반/init/ephemeral 컨테이너를 통틀어 정확히 하나일 때만 `container` 생략 가능; `tail=200`, 1–`max_log_lines`로 보정(기본 상한 500); `since=""`(시간 필터 없음), 양수 Go 기간 표기(최대 168h); `previous=false`; `grep=""`, 문자열 그대로 대소문자 구분 없이 부분 검색; 스트림 상한 1 MiB |
 | `k8s_events` | 네임스페이스 이벤트 | `namespace=""`(허용된 모든 네임스페이스); `warnings_only=true`; `since="1h"`, 양수 Go 기간 표기(최대 168h); `limit=50`, 1–500으로 보정 |
-| `k8s_remediation_options` | 조회 전용: 파드가 이미지를 받지 못할 때, 같은 Deployment의 준비된 ReplicaSet에 다른 이미지가 있으면 이미지 복원 승인 링크 제공 | 필수 `namespace`, `name`(파드); `restore_image`와 `action_approval_url`을 설정하지 않으면 결과 없음; 링크 최대 5개 |
+| `k8s_remediation_options` | 조회 전용: 파드가 이미지를 받지 못할 때, 삭제 중이 아닌 소유 ReplicaSet의 준비된 파드에서 대상 컨테이너가 준비되어 보고된 이미지를 실행 중이면 이미지 복원 승인 링크 제공 | 필수 `namespace`, `name`(파드); `restore_image`와 `action_approval_url`을 설정하지 않으면 결과 없음; 링크 최대 5개 |
 | `k8s_rollout_restart` | 파드 템플릿을 갱신해 워크로드 재시작 | 필수 `kind`(deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` 허용 설정 필요 |
 | `k8s_scale` | 워크로드 복제본 수 설정 | 필수 `kind`(deployment/statefulset), `namespace`, `name`, `replicas`(0–`max_replicas`, 기본 상한 10); `scale` 허용 설정 필요 |
 | `k8s_delete_pod` | UID 사전 조건을 적용한 특정 파드 삭제 | 필수 `namespace`, `name`; `delete_pod` 허용 설정 필요 |
-| `k8s_restore_image` | 소유한 준비된 ReplicaSet의 이미지로 Deployment 컨테이너 이미지 복원. 이미지만 바뀌고 설정은 되돌리지 않음 | 필수 `namespace`, `name`(Deployment), `container`, `expected_image`(현재 이미지와 정확히 일치), `image`(복원할 이미지와 정확히 일치); `restore_image` 허용 설정 필요; 패치 직전 재확인; 승인 시간 창 없음 |
+| `k8s_restore_image` | 삭제 중이 아닌 소유 ReplicaSet의 준비된 파드에서 준비되어 실행 중인 컨테이너로 확인한 이미지로 Deployment 컨테이너 이미지 복원. 이미지만 바뀌고 설정은 되돌리지 않음 | 필수 `namespace`, `name`(Deployment), `container`, `expected_image`(현재 이미지와 정확히 일치), `image`(복원할 이미지와 정확히 일치); `restore_image` 허용 설정 필요; 패치 직전 재확인; 승인 시간 창 없음 |
 | `note_search` | 노트 내용/파일명에서 문자열 그대로 검색, 발췌문과 검색한 항목 수 제공 | 필수 `query`(1–4096 UTF-8 바이트); 선택 `folder`, `tag`, `case_sensitive=false`; `limit=20`, 최대 100 |
 | `note_read` | 노트 텍스트와 파일/줄 메타데이터 | 필수 `path`, `.md` 생략 가능; `offset_line=1`, `max_lines=400`, 최대 2000 |
 | `note_list` | 폴더를 먼저 표시한 뒤 .md/.canvas/.base 파일 표시 | `folder=""`(볼트 루트), `recursive=false`, `limit=200`, 최대 1000; 잘림 여부 보고 |
@@ -36,6 +36,8 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요하고, dev 도구에
 | `dev_task_diff` | 고정한 기준과 비교한 변경 통계와 패치(신뢰할 수 없는 데이터)(`dev:run`) | 필수 `id`; MCP 출력 상한 적용 전 최대 256 KiB |
 | `dev_task_list` | 보존된 작업을 최신순으로 표시(`dev:run`) | `limit=20`, 범위 1..100; 최종 메시지 제외 |
 | `dev_task_cancel` | 새 승인 없이 본인 작업 취소(runner 관리자는 모든 작업 취소 가능)(`dev:run`) | 필수 `id`; 상태 변경 및 실행 중인 프로세스 그룹 종료 |
+
+이미지 복원은 원본 파드의 컨트롤러 UID, 파드·컨테이너의 준비 및 실행 상태와 명세 이미지의 정확한 일치를 검사합니다. 상태 이미지 참조는 Docker Hub·기본 태그 표기를 정규화한 뒤 일치해야 하고, SHA-256/SHA-512 런타임 imageID가 필요하며 digest 고정 이미지는 그 값도 같아야 합니다. 실행 전에 다시 검사하고 namespace에 ReplicaSet이나 파드가 500개를 넘으면 안전하게 거부합니다. 준비 상태는 애플리케이션 정상 동작을 보장하지 않으며 레지스트리 태그는 바뀔 수 있습니다.
 
 노트 검색, 태그 및 링크 도구는 마스킹된 텍스트를 대상으로 동작합니다.
 

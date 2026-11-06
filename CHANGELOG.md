@@ -7,6 +7,21 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Security
+
+- Mask and bound all cluster-controlled watch alert text before delivery and deduplication, including direct JSON and custom templates.
+- Mask decoded alert strings before model JSON encoding so quoted and escaped secret assignments stay masked across API and CLI backends.
+- Mask analysis reports before both forwarding and Discord delivery.
+- Reject oversized alert fields and retain investigations within atomic per-job/global byte budgets, including replacements.
+- Require a ready owned Pod with a ready running container reporting the proposed image for image restore, and recheck source evidence before applying.
+- Mount Kubernetes ServiceAccount credentials only into the analyzer pod's reader container.
+
+### Changed
+
+- Analyzer retention is limited to 64 KiB per job and 8 MiB overall with fixed producer-compatible field caps; unused display/batch fields are discarded.
+- The reference analyzer pod uses an explicit reader-only projected token/CA/namespace volume instead of automatic ServiceAccount mounts.
+- Analysis reports show total investigation and cumulative model-call time; failure notices show elapsed total time.
+
 ## [0.2.0] - 2026-11-05
 
 ### Changed

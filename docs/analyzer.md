@@ -267,7 +267,7 @@ Repeated alerts are grouped by cluster/kind/namespace/name during the batch
 window, retaining up to 50 distinct reason/summary pairs. Excess alerts are
 counted as dropped. Exact batch replays are suppressed in memory for 10 minutes;
 resource cooldown starts when investigation starts, including failed investigations.
-A full queue returns 503 so watch can apply its bounded retry policy. One worker
+The receiver retains only source alert evidence, dropping localized `display` and unused batch `text`, `actions` and `language`. Fixed field caps match watch: cluster/namespace 63 bytes, kind 64 bytes, name 253 bytes, reason/summary/hint 301 Unicode characters and 1203 bytes, and restart URL 4096 bytes (restart identity uses the same caps). Oversized fields return 413. Retention is charged as serialized batch/key bytes plus conservative struct/map allowances, with fixed 64 KiB per job and 8 MiB globally, including replacements; dequeuing releases the charge. These budgets fit the reference pod's 256 MiB limit but do not bound every transient allocation or concurrent request. A full count or byte budget returns 503 atomically, so watch can apply its bounded retry policy. One worker
 processes incidents sequentially; no automatic model retries are performed.
 
 Requests are preflighted with a conservative byte estimate plus the next response
@@ -277,7 +277,7 @@ These controls bound work, but are not a provider billing or exact dollar-spend
 limit. `max_total_tokens` must exceed `max_completion_tokens`. The final summary requires at least one successful Kubernetes read.
 
 Reports ask the model to separate confirmed facts, hypotheses and outstanding
-checks, and append actual tool names, redacted arguments and evidence IDs.
+checks, and append actual tool names, redacted arguments and evidence IDs. The footer shows reads, tokens, total investigation wall time (including tool calls), and cumulative time inside model calls across API and CLI backends; for example `3 reads · 12345 tokens · 1m12s (model 48s)`. Durations round to whole seconds with a minimum of 1s; below a minute only seconds are shown. Failure/timeout notices also show elapsed total time once an investigation starts.
 The model can still misinterpret evidence; a citation is not proof of correctness.
 Failures produce an explicit failure/evidence-insufficient report rather than a
 claimed cause. No system changes are performed. Discord output groups complete paragraphs within 1900 UTF-16 units, with automatic mentions disabled.
@@ -285,11 +285,10 @@ Markdown links and code blocks that fit a message stay together. Oversized code 
 continue at line boundaries with balanced fences; long prose falls back to line or word boundaries. Network/429/5xx
 notification failures receive bounded retries, which can duplicate messages.
 
-Alert text and tool output are redacted before being sent to the model, and
-reports are redacted before Discord. This is not a guarantee that all sensitive
+Alert string values are masked before their final JSON encoding for every model backend, including quoted assignments and escaped text; tool output is masked before model use. Reports are masked once before both the optional forward receiver and Discord. This is not a guarantee that all sensitive
 content is detected: allow access only to data you intend the selected model
 provider and Discord to receive. Logs contain status, counts, timings and
-notification success, not provider bodies or credentials. The queue and replay
+notification success, not provider bodies or credentials. The reference analyzer pod disables automatic ServiceAccount token mounting and projects the token, CA and namespace only into the reader; the analyzer uses its MCP token and does not need direct Kubernetes credentials. The queue and replay
 cache are not persistent, pending work is lost on restart, and failed notifications
 are logged rather than stored. Durable jobs, multi-worker coordination, automatic
 remediation and other model protocols are outside this first version.
@@ -355,7 +354,7 @@ Global `watch.language: ko|en` adds localized `display` fields to webhook alerts
 
 `report.approval_url` enables verified image restoration links when the Kubernetes server
 also opts in with `restore_image` resource patterns and `action_approval_url`. The read tool
-checks Pod ownership and a currently ready prior ReplicaSet. Only its verified links become
+checks Pod ownership and a non-deleting Deployment-owned ReplicaSet with an actual non-deleting ready Pod owned by that exact ReplicaSet UID. Its target container must be ready/running, its spec image must equal the RS template, and its status image reference must match with only Docker Hub/default-tag spelling normalization. A SHA-256/SHA-512 runtime imageID is required; digest-pinned templates must match that runtime digest too. Checks are repeated at apply time; scans fail closed above 500 ReplicaSets or 500 Pods in the namespace. Readiness is not application health, and tags remain mutable. Only its verified links become
 buttons. The browser uses existing authentication, passkey verification, fresh plan review,
 and one-use approval. The write rechecks state and changes only the chosen container image.
 No approval window is opened. Arbitrary model commands and model-generated URLs never become

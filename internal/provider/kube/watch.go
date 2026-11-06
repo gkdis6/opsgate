@@ -149,12 +149,27 @@ func (w *watcher) send(alerts []alert.Alert) {
 			continue
 		}
 		a.Time = w.now().UTC()
-		a.Cluster = w.cluster
+		a.Cluster = clean(w.cluster)
+		a.Kind, a.Namespace, a.Name = clean(a.Kind), clean(a.Namespace), clean(a.Name)
+		a.Reason = clean(a.Reason)
 		a.Summary = clean(a.Summary)
+		a.Hint = clean(a.Hint)
+		if a.Display != nil {
+			d := *a.Display
+			d.Reason, d.Summary, d.Hint = clean(d.Reason), clean(d.Summary), clean(d.Hint)
+			a.Display = &d
+		}
+		if a.Restart != nil {
+			r := *a.Restart
+			r.Kind, r.Namespace, r.Name, r.URL = clean(r.Kind), clean(r.Namespace), clean(r.Name), clean(r.URL)
+			a.Restart = &r
+		}
 		if a.Key == "" {
 			a.Key = strings.Join([]string{a.Kind, a.Namespace, a.Name, a.Reason}, "/")
 		}
-		a.Key = w.cluster + "/" + a.Key
+		// Explicit detector keys include container identity. Preserve them while
+		// masking the complete value before truncation or cooldown/dedup use.
+		a.Key = cleanText(a.Cluster+"/"+a.Key, 2048)
 		w.emit(a)
 	}
 }

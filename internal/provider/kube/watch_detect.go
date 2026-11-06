@@ -141,9 +141,16 @@ func slimPodSpec(spec corev1.PodSpec) corev1.PodSpec {
 
 // clean bounds and redacts text taken from the cluster.
 func clean(s string) string {
+	return cleanText(s, 300)
+}
+
+func cleanText(s string, limit int) string {
+	if s == "" {
+		return ""
+	}
 	s = redact.String(display(s))
-	if utf8.RuneCountInString(s) > 300 {
-		s = string([]rune(s)[:300]) + "…"
+	if utf8.RuneCountInString(s) > limit {
+		s = string([]rune(s)[:limit]) + "…"
 	}
 	return s
 }

@@ -4,13 +4,16 @@
 
 [한국어](README.ko.md)
 
-**Let AI assistants help operate your clusters, without handing them a shell.**
+**Know when your server breaks, and fix it from wherever you are, without handing AI a shell.**
 
-opsgate is an open-source MCP server written in Go. It gives clients such as
-Claude, ChatGPT, Claude Code and Cursor a fixed set of operations tools for Kubernetes, with explicit policy, human-approved changes and
-an audit log.
+opsgate is an open-source operations gate, written in Go, for people who run
+servers on their own. It watches Kubernetes, alerts you when something fails,
+and lets you approve a fix with a passkey from your phone or computer. Once the
+service is back, AI clients such as Claude, ChatGPT, Claude Code and Cursor
+investigate the cause through opsgate's MCP server: a fixed set of tools with
+explicit policy, human-approved changes and an audit log.
 
-> **Status:** early release; notes, the dev provider, watch and the analyzer are
+> **Status:** early release; notes, watch and the analyzer are
 > experimental. Changes require user authorization, allowed targets and human approval. Read restrictions
 > and output redaction reduce sensitive data exposure. Third-party security review
 > is pending; the [security policy](SECURITY.md) explains the protections and
@@ -18,7 +21,39 @@ an audit log.
 
 
 
-## Why opsgate
+## The problem
+
+Running a server alone usually leaves two gaps:
+
+- **You find out late.** Without proper alerting, you hear about an outage from
+  users, or stumble on it yourself.
+- **You know the fix but cannot reach the server.** A phone SSH app works, but
+  typing commands on a phone in the middle of an outage is slow and error-prone.
+
+Giving an AI assistant a shell would close the second gap and open a worse one:
+a single wrong or irreversible command. opsgate closes both gaps and keeps every
+change in front of a person.
+
+
+
+## How it handles an incident
+
+1. **Know first.** `opsgate watch` follows the Kubernetes API and sends alerts to
+   Discord, webhooks or email as soon as something fails. See [watch alerts](#watch-alerts).
+2. **Stabilize from anywhere.** An alert, or the analyzer's report on it, can
+   carry a ready-made action: restarting a workload or restoring the last working
+   image. Opening it shows a fresh plan after sign-in, and approving runs it. A
+   phone browser and a passkey are enough.
+3. **Then find the cause.** With the service back, ask your AI client to
+   investigate through opsgate's read tools, or let the optional
+   [analyzer](docs/analyzer.md) make a first pass.
+4. **Remember it.** The optional note provider keeps runbooks and past incidents
+   in plain Markdown, and assistants are instructed to check them first and offer
+   to record the outcome. See [notes](docs/notes.md).
+
+
+
+## Design principles
 
 
 ### No arbitrary commands
@@ -37,6 +72,12 @@ Write tools first plan the exact change, then wait
 for human approval in the browser by default when web approval is available.
 Optional approval windows are explained below.
 
+### Nothing permanently deletes your data
+
+Note removal moves files to `.trash`. Pod deletion is the only delete action; it
+needs its own allowlist and approval, and the plan warns when no controller will
+recreate the pod.
+
 ### Remote access is authenticated
 
 A builtin OAuth 2.1 server works with
@@ -50,18 +91,26 @@ instructions embedded in logs or other results. Returned results are redacted
 and size-limited. The audit log records who called each tool and its outcome,
 with one JSON object per line.
 
-### It remembers what happened
 
-The optional note provider keeps runbooks and
-past incidents in plain Markdown. Assistants are instructed to consult past
-records and offer to record the outcome. See [notes](docs/notes.md).
 
-### Alerts can arrive with an investigation
+## Where it is heading
 
-`opsgate watch` sends Kubernetes alerts directly to Discord, webhooks or email.
-The optional analyzer then investigates with read-only tools and reports the
-likely cause. For a failed image it can offer a restore link, which still needs a
-person's approval. See [watch alerts](#watch-alerts).
+These are planned, not implemented. Order and details are in the
+[roadmap](docs/roadmap.md).
+
+- **An approval inbox with Web Push.** Approval requests reach your phone or
+  computer, whichever is at hand, and approving runs the action right away. Chat
+  and messenger alerts will only link to the inbox, so passkeys always work.
+- **The same path for MCP clients.** A change requested in a chat goes to the
+  inbox and runs on approval, without returning to the chat to say so.
+- **More choices per failure.** Each failure state offers the actions that fit
+  it, including ones the analyzer proposes. Every button comes from a fixed
+  catalog of allowlisted actions that never delete data, and shows whether a
+  rule or the AI suggested it.
+- **Alert groups by namespace,** each with its own channels, level and batching.
+- **An optional host provider** for systemd units and Docker or Compose
+  containers on servers without Kubernetes. It stays off unless you enable it.
+- **Undo buttons** for actions that can be reversed.
 
 
 
@@ -73,10 +122,9 @@ Providers are groups of tools; enable only the groups you need.
 | --- | --- | --- |
 | Kubernetes | clusters, overview, list, get, environment, service check, events, pod logs, remediation options | rollout restart, scale, delete pod, restore a previous image |
 | Notes: runbooks and memory, Markdown folder or Obsidian vault *(experimental)* | search, read, list, recent, links, tags | create, append, replace, move to `.trash` |
-| Dev *(experimental)* | projects, task status, log, diff, list | start a coding agent (Codex or Claude) in a Git worktree; cancelling your own task needs no new approval |
 
-Scopes define the kinds of work a user can perform through opsgate: `ops:read` for inspection,
-`ops:write` for operations and note changes, and `dev:run` for coding-agent tasks.
+Scopes define the kinds of work a user can perform through opsgate: `ops:read` for inspection
+and `ops:write` for operations and note changes.
 Allowlists restrict tools and targets such as Kubernetes workloads.
 A scope alone does not enable an operation prohibited by configuration.
 
@@ -345,7 +393,7 @@ container's image changes; configuration is not rolled back.
 
 - One instance is one trust group: `ops:read` covers every enabled provider. Use
   separate instances and OS accounts for things with different trust levels,
-  such as production operations, personal notes and coding agents.
+  such as production operations and personal notes.
 - Permission checks stack: scopes, server tool policy, per-user tool lists,
   provider allowlists, then OS permissions and Kubernetes RBAC.
 - HTTP requires browser approval by default when `approval.web` is enabled.
@@ -370,7 +418,6 @@ Full details: [SECURITY.md](SECURITY.md).
 | [Tools](docs/tools.md) | Tool arguments, limits, redaction |
 | [Notes](docs/notes.md) | Runbooks and incident memory in a Markdown folder |
 | [Deployment](docs/deploy.md) | Release verification, Kubernetes, reverse proxy |
-| [Dev provider](docs/dev.md) | Running coding agents through the separate runner |
 | [Watch alerts](docs/watch.md) | Kubernetes alerts to Discord, custom JSON webhooks and email through a separate `opsgate watch` process |
 | [Automatic investigation](docs/analyzer.md) | Optional model worker, read-only MCP authentication and investigation limits |
 | [Roadmap](docs/roadmap.md) | What is done and what may come |

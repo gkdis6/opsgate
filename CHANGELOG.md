@@ -7,6 +7,8 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-08
+
 ### Added
 
 - Tapping an approval notification opens `/approvals/next`, which redirects to the newest waiting approval or alert. Repeating a call whose approval is still waiting joins it instead of creating a second approval, and the page shows Applied / Not applied after approval. / 승인 알림을 누르면 `/approvals/next`가 가장 최근의 대기 중인 승인이나 알림으로 바로 이동합니다. 승인이 아직 대기 중일 때 같은 호출을 반복하면 새 승인을 만들지 않고 기존 승인에 합류하며, 승인한 뒤 페이지에 적용됨/적용 안 됨을 표시합니다.

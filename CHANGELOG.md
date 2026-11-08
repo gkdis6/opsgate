@@ -9,6 +9,8 @@ GitHub releases carry generated release notes.
 
 ### Added
 
+- Undo links for reversible actions: after `k8s_scale` or `k8s_restore_image` is applied, the approval page, inbox, MCP result and `approval_status` offer a catalog link back to the previous replica count or image. `k8s_restore_image` gains `revert: true`, limited to images in the Deployment's ReplicaSet history. / 되돌릴 수 있는 조치에 되돌리기 링크를 추가합니다. `k8s_scale`이나 `k8s_restore_image`를 실행하면 승인 페이지, 승인함, MCP 결과, `approval_status`에 이전 파드 수나 이전 이미지로 돌아가는 카탈로그 링크가 붙습니다. `k8s_restore_image`에 Deployment의 ReplicaSet 이력 이미지로 제한한 `revert: true`를 추가합니다.
+
 - Namespace alert groups with ordered routing, output selection, warning filters and independent batching/cooldown per group and output; unmatched alerts are counted locally. / namespace 알림 그룹에 순서별 경로, 출력 선택, 경고 필터와 그룹·출력별 묶음 및 cooldown을 추가하고 미일치 알림은 로컬 누락 개수로 집계합니다.
 
 - Optional signed watch-to-inbox notices with bounded per-user alert storage, CSRF-protected dismissal and coalesced payload-less phone push; choices stay behind live permission checks and human approval. / 서명된 watch 승인함 알림 선택 기능과 사용자별 제한된 경고 저장, CSRF로 보호한 해제, 묶음 내용 없는 휴대폰 푸시를 추가하며 현재 권한 검사와 사람 승인을 유지합니다.

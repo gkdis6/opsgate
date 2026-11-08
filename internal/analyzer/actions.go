@@ -56,8 +56,12 @@ func remediationLinks(c Config, out *mcp.CallToolResult) []alert.ActionLink {
 			if !strings.HasPrefix(u.Path, "/approve/action/") && !strings.HasPrefix(u.Path, "/approve/restore-image/") {
 				continue
 			}
-			entry, _, source, err := action.Parse(u)
+			entry, args, source, err := action.Parse(u)
 			if err != nil {
+				continue
+			}
+			// Reverting to an unverified image is only offered as an undo.
+			if revert, _ := args["revert"].(bool); revert {
 				continue
 			}
 			label := entry.Label(c.Report.Language)

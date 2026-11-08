@@ -26,7 +26,9 @@ func TestCatalogActionButtons(t *testing.T) {
 			entry, _ := action.Lookup(name)
 			args := map[string]any{}
 			for _, key := range entry.Arguments {
-				args[key] = "value"
+				if key != "revert" {
+					args[key] = "value"
+				}
 			}
 			if name == "k8s_scale" {
 				args["replicas"] = 2
@@ -188,5 +190,19 @@ func TestInvestigationCollectsRulesAndAI(t *testing.T) {
 	result, err := e.investigate(context.Background(), testBatch(time.Now()))
 	if err != nil || len(result.Actions) != 2 || result.Actions[0].Label != "Restart workload" || result.Actions[1].Label != "AI suggestion: Scale workload" {
 		t.Fatalf("actions=%v err=%v", result.Actions, err)
+	}
+}
+
+func TestRevertLinksAreNotButtons(t *testing.T) {
+	c := Config{}
+	c.Report.ApprovalURL = "https://ops.example"
+	c.Report.SuggestActions = true
+	args := map[string]any{"namespace": "apps", "name": "web", "container": "app", "expected_image": "app:2", "image": "app:1", "revert": true}
+	link, err := action.URL(c.Report.ApprovalURL, "k8s_restore_image", args, "rule")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := remediationLinks(c, actionResult(map[string]any{"url": link})); len(got) != 0 {
+		t.Fatalf("revert link became a button: %v", got)
 	}
 }

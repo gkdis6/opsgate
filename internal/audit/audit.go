@@ -20,11 +20,13 @@ type Event struct {
 	Outcome   string         `json:"outcome"` // "ok", "error", "denied", "pending"
 	Error     string         `json:"error,omitempty"`
 	// Write tools only: the plan shown to the human and how it was approved.
-	Plan       string `json:"plan,omitempty"`
-	Source     string `json:"source,omitempty"`
-	Approval   string `json:"approval,omitempty"`
-	DurationMS int64  `json:"duration_ms"`
-	OutputSize int    `json:"output_bytes"`
+	Plan     string `json:"plan,omitempty"`
+	Source   string `json:"source,omitempty"`
+	Approval string `json:"approval,omitempty"`
+	// Undo records that the result offered an undo link.
+	Undo       bool  `json:"undo,omitempty"`
+	DurationMS int64 `json:"duration_ms"`
+	OutputSize int   `json:"output_bytes"`
 }
 
 // Logger writes events. It is safe for concurrent use.

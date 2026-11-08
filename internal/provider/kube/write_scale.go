@@ -41,7 +41,11 @@ func (p *provider) planScale(ctx context.Context, _ tool.Caller, in scaleInput) 
 		return tool.Plan{}, err
 	}
 	summary := fmt.Sprintf("Scale %s %s/%s: %d → %d replicas (UID %q, resourceVersion %q)", in.Kind, in.Namespace, in.Name, scale.Spec.Replicas, in.Replicas, scale.UID, scale.ResourceVersion)
-	return identityPlan(scale.UID, scale.ResourceVersion, summary, false)
+	plan, err := identityPlan(scale.UID, scale.ResourceVersion, summary, false)
+	if err == nil && scale.Spec.Replicas != in.Replicas {
+		plan.Undo = &tool.Undo{Tool: "k8s_scale", Args: map[string]any{"cluster": p.cfg.Name, "kind": in.Kind, "namespace": in.Namespace, "name": in.Name, "replicas": scale.Spec.Replicas}}
+	}
+	return plan, err
 }
 
 func (p *provider) applyScale(ctx context.Context, _ tool.Caller, in scaleInput, plan tool.Plan) (string, error) {

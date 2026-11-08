@@ -66,7 +66,7 @@ func newDirect[In WriteInput](env *Env, spec WriteSpec, scope string, maxArgs, m
 		return in, plan, shown, args, err
 	}
 	// record audits the outcome and returns the bounded success text.
-	record := func(start time.Time, c Caller, args map[string]any, shown, text string, err error) string {
+	record := func(start time.Time, c Caller, args map[string]any, shown, text, undo string, err error) string {
 		ev := audit.Event{Time: start, User: c.User, Transport: c.Transport, Tool: spec.Name, Args: args, Plan: shown, Approval: "web", Source: c.Source,
 			Outcome: "ok", DurationMS: time.Since(start).Milliseconds()}
 		if err != nil {
@@ -80,6 +80,8 @@ func newDirect[In WriteInput](env *Env, spec WriteSpec, scope string, maxArgs, m
 		if err != nil {
 			ev.Error = text
 		} else {
+			text += undo
+			ev.Undo = undo != ""
 			ev.OutputSize = len(text)
 		}
 		env.Audit.Record(ev)
@@ -96,7 +98,7 @@ func newDirect[In WriteInput](env *Env, spec WriteSpec, scope string, maxArgs, m
 			_, plan, shown, args, err := prepare(ctx, c, raw, scope)
 			if err != nil {
 				// A plan that succeeds is audited by its approval and its run.
-				record(start, c, args, shown, "", err)
+				record(start, c, args, shown, "", "", err)
 				return Plan{}, "", err
 			}
 			return plan, shown, nil
@@ -104,7 +106,7 @@ func newDirect[In WriteInput](env *Env, spec WriteSpec, scope string, maxArgs, m
 		run: func(ctx context.Context, c Caller, raw json.RawMessage, approved string) (string, error) {
 			start := time.Now()
 			in, plan, shown, args, err := prepare(ctx, c, raw, scope)
-			var text string
+			var text, undo string
 			if err == nil && shown != approved {
 				err = Denied("the workload changed after this page opened; open the link again and review it")
 			}
@@ -112,8 +114,9 @@ func newDirect[In WriteInput](env *Env, spec WriteSpec, scope string, maxArgs, m
 				applyCtx, cancel := context.WithTimeout(ctx, env.Timeout)
 				defer cancel()
 				text, err = h.Apply(applyCtx, c, in, plan)
+				undo = env.undoLine(plan)
 			}
-			text = record(start, c, args, shown, text, err)
+			text = record(start, c, args, shown, text, undo, err)
 			if err != nil {
 				return "", err
 			}

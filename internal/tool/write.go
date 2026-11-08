@@ -59,6 +59,8 @@ type Plan struct {
 	// through the complete arguments, unless an approval window applies.
 	// The arguments must be unmasked even when a window applies.
 	FullReviewRequired bool
+	// Undo reverses this write once applied; results offer it as a link.
+	Undo *Undo `json:"-"`
 	// Data belongs to this invocation and is never shown or serialized.
 	Data any `json:"-"`
 }
@@ -162,6 +164,7 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 		start := time.Now()
 		var input *InputRequired
 		var completed *ApprovalResult
+		var applied *Plan
 		pendingRecorded := false
 		var args map[string]any
 		var argsHash [sha256.Size]byte
@@ -234,6 +237,7 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 			if err := applyCtx.Err(); err != nil {
 				return "", err
 			}
+			applied = &plan
 			return h.Apply(applyCtx, c, in, plan)
 		}()
 
@@ -266,6 +270,11 @@ func AddWrite[In WriteInput](s *mcp.Server, env *Env, spec WriteSpec, h WriteHan
 			ev.Error = text
 			env.Audit.Record(ev)
 			return errorResult(text), nil, nil
+		}
+		if applied != nil {
+			line := env.undoLine(*applied)
+			text += line
+			ev.Undo = line != ""
 		}
 		ev.OutputSize = len(text)
 		if !pendingRecorded || ev.Outcome != "pending" {
@@ -343,6 +352,9 @@ func runApproved[In WriteInput](ctx context.Context, env *Env, name, scope strin
 	if err != nil {
 		ev.Error = text
 	} else {
+		line := env.undoLine(plan)
+		text += line
+		ev.Undo = line != ""
 		ev.OutputSize = len(text)
 	}
 	env.Audit.Record(ev)

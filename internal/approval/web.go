@@ -158,6 +158,7 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 	if run != nil {
 		view.Result = m.runDirect(r.Context(), p, run)
 	}
+	view.Result, view.Undo, _ = m.splitUndo(view.Result)
 	if view.Direct && strings.HasPrefix(view.Result, notApplied) {
 		view.Status, view.PageTitle = "Not applied", "Not applied"
 	}
@@ -206,6 +207,8 @@ type approvalView struct {
 	Direct bool
 	MCP    bool
 	Result string
+	// Undo is a local catalog link that reverses the applied write.
+	Undo string
 	// FullReview opens the arguments because the summary omits content.
 	FullReview bool
 	Target     string
@@ -252,6 +255,7 @@ var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
 <div class="target plan" aria-label="Target and plan">{{range .Lines}}<span class="plan-line {{.Class}}">{{if .Text}}{{.Text}}{{else}} {{end}}</span>{{end}}</div>
 {{if .Status}}
 {{if .Result}}<p>{{.Result}}</p>{{end}}
+{{if .Undo}}<p><a class="button secondary" href="{{.Undo}}">Undo</a> <span class="note">Opens a new plan to approve; nothing changes until you approve it.</span></p>{{end}}
 {{if .MCP}}
 <p>You can return to your chat; the assistant receives the result when its call is still waiting or when it checks the approval.</p>{{end}}
 {{else}}

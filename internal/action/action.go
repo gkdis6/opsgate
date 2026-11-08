@@ -21,7 +21,7 @@ type Entry struct {
 
 var catalog = []Entry{
 	{"k8s_rollout_restart", []string{"cluster", "kind", "namespace", "name"}, "Restart workload", "워크로드 재시작", false},
-	{"k8s_restore_image", []string{"cluster", "namespace", "name", "container", "expected_image", "image"}, "Restore image", "이미지 복구", true},
+	{"k8s_restore_image", []string{"cluster", "namespace", "name", "container", "expected_image", "image", "revert"}, "Restore image", "이미지 복구", true},
 	{"k8s_scale", []string{"cluster", "kind", "namespace", "name", "replicas"}, "Scale workload", "워크로드 규모 조정", true},
 	{"k8s_delete_pod", []string{"cluster", "namespace", "name"}, "Delete controller-owned pod", "컨트롤러 소유 파드 삭제", false},
 }
@@ -53,6 +53,10 @@ func Source(value, fallback string) (string, error) {
 	return value, nil
 }
 
+// optional arguments may be omitted from a link: the cluster defaults on the
+// server, and revert selects a narrower restore mode only when present.
+func optional(key string) bool { return key == "cluster" || key == "revert" }
+
 // Validate rejects all fields outside the catalog, wrong scalar types and
 // values that redaction would mask. Provider Plan validates live targets.
 func Validate(name string, args map[string]any) error {
@@ -64,7 +68,7 @@ func Validate(name string, args map[string]any) error {
 		return fmt.Errorf("arguments must be an object")
 	}
 	for _, key := range e.Arguments {
-		if key != "cluster" {
+		if !optional(key) {
 			if _, exists := args[key]; !exists {
 				return fmt.Errorf("missing argument %q", key)
 			}
@@ -83,6 +87,10 @@ func Validate(name string, args map[string]any) error {
 			var n int32
 			if err != nil || json.Unmarshal(raw, &n) != nil || string(raw) == "null" {
 				return fmt.Errorf("replicas must be an integer")
+			}
+		} else if k == "revert" {
+			if _, ok := v.(bool); !ok {
+				return fmt.Errorf("revert must be true or false")
 			}
 		} else {
 			s, ok := v.(string)
@@ -111,6 +119,14 @@ func ParseQuery(name string, q url.Values) (map[string]any, string, error) {
 			if err != nil {
 				return nil, "", err
 			}
+			continue
+		}
+		if key == "revert" {
+			b, err := strconv.ParseBool(values[0])
+			if err != nil || (values[0] != "true" && values[0] != "false") {
+				return nil, "", fmt.Errorf("revert must be true or false")
+			}
+			args[key] = b
 			continue
 		}
 		if key == "replicas" {

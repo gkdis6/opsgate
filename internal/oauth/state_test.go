@@ -136,11 +136,11 @@ func TestFullStatePoolsLoad(t *testing.T) {
 		key := hash(fmt.Sprint(i))
 		f.s.families[key[:43]] = expires
 		if i < maxTokens/2 {
-			token := accessToken{ClientID: f.id, Subject: "github:alice", Family: key[:43], Scopes: []string{"ops:read", "ops:write", "dev:run"}, Expires: expires}
+			token := accessToken{ClientID: f.id, Subject: "github:alice", Family: key[:43], Scopes: []string{"ops:read", "ops:write"}, Expires: expires}
 			f.s.access[key] = &token
 			f.s.refresh[key] = &refreshToken{accessToken: token, Used: true, RetainUntil: expires}
 		}
-		f.s.codes[key] = &authorizationCode{ClientID: f.id, RedirectURI: "https://client.example/" + strings.Repeat("&", 490), Challenge: strings.Repeat("x", 128), Subject: "github:alice", Resource: f.s.resource, Family: key[:43], Scopes: []string{"ops:read", "ops:write", "dev:run"}, Expires: expires, RetainUntil: expires, Used: true}
+		f.s.codes[key] = &authorizationCode{ClientID: f.id, RedirectURI: "https://client.example/" + strings.Repeat("&", 490), Challenge: strings.Repeat("x", 128), Subject: "github:alice", Resource: f.s.resource, Family: key[:43], Scopes: []string{"ops:read", "ops:write"}, Expires: expires, RetainUntil: expires, Used: true}
 	}
 	if err := f.s.save(); err != nil {
 		t.Fatal(err)

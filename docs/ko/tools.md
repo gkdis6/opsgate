@@ -2,7 +2,7 @@
 
 [English](../tools.md)
 
-Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요하고, dev 도구에는 `dev:run`이 필요합니다. 각 도구는 provider를 활성화했을 때만 등록됩니다. Kubernetes 네임스페이스는 설정에 따라 필터링하며, 네임스페이스 거부 목록이 우선합니다. Kubernetes 시크릿을 다루는 도구는 없습니다. 읽기 전용 메타데이터와 로그에도 민감한 정보가 드러날 수 있습니다.
+Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. 각 도구는 provider를 활성화했을 때만 등록됩니다. Kubernetes 네임스페이스는 설정에 따라 필터링하며, 네임스페이스 거부 목록이 우선합니다. Kubernetes 시크릿을 다루는 도구는 없습니다. 읽기 전용 메타데이터와 로그에도 민감한 정보가 드러날 수 있습니다.
 
 | 도구 | 용도 | 주요 인자, 기본값, 제한 |
 | --- | --- | --- |
@@ -29,13 +29,6 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요하고, dev 도구에
 | `note_append` | 노트 끝이나 정확히 일치하는 제목이 하나뿐일 때 그 아래에 내용 추가 | 필수 `path`, `content`; 선택 `heading`(최대 1024바이트); 같은 쓰기 조건 |
 | `note_replace` | 정확한 부분 문자열 치환 | 필수 `path`, 비어 있지 않은 `old_text`, `new_text`; 치환 횟수는 `expected_count=1`과 일치해야 함; 같은 쓰기 조건 |
 | `note_trash` | 충돌 시 접미사를 붙여 로컬 .trash에 노트 보존 | 필수 `path`; 같은 쓰기 조건; 영구 삭제하지 않음 |
-| `dev_projects` | 코딩 프로젝트와 에이전트 허용 목록(`dev:run`) | 없음; runner 제한 포함 |
-| `dev_task_start` | 사람의 승인 후 에이전트 시작(`dev:run`) | 필수 `project`, `agent`, `prompt`; 선택 `approval_id`; 프롬프트 최대 32 KiB(MCP 인자 48 KiB, 승인 요약 64 KiB) |
-| `dev_task_status` | 본인 작업의 상태와 최종 메시지(runner 관리자는 모든 작업에 접근 가능)(`dev:run`) | 필수 `id` |
-| `dev_task_log` | 신뢰할 수 없는 작업 로그 페이지(`dev:run`) | 필수 `id`; `offset=0`(0–20 MiB), `limit=65536`, 최대 262144바이트; 원본 기준 `next_offset` |
-| `dev_task_diff` | 고정한 기준과 비교한 변경 통계와 패치(신뢰할 수 없는 데이터)(`dev:run`) | 필수 `id`; MCP 출력 상한 적용 전 최대 256 KiB |
-| `dev_task_list` | 보존된 작업을 최신순으로 표시(`dev:run`) | `limit=20`, 범위 1..100; 최종 메시지 제외 |
-| `dev_task_cancel` | 새 승인 없이 본인 작업 취소(runner 관리자는 모든 작업 취소 가능)(`dev:run`) | 필수 `id`; 상태 변경 및 실행 중인 프로세스 그룹 종료 |
 
 이미지 복원은 원본 파드의 컨트롤러 UID, 파드·컨테이너의 준비 및 실행 상태와 명세 이미지의 정확한 일치를 검사합니다. 상태 이미지 참조는 Docker Hub·기본 태그 표기를 정규화한 뒤 일치해야 하고, SHA-256/SHA-512 런타임 imageID가 필요하며 digest 고정 이미지는 그 값도 같아야 합니다. 실행 전에 다시 검사하고 namespace에 ReplicaSet이나 파드가 500개를 넘으면 안전하게 거부합니다. 준비 상태는 애플리케이션 정상 동작을 보장하지 않으며 레지스트리 태그는 바뀔 수 있습니다.
 
@@ -89,8 +82,8 @@ kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하
 
 ## 공통 제한
 
-승인이 필요한 도구 8개는 모두 브라우저에서 재시도할 때 쓰는 `approval_id`를 선택 인자로 받습니다. 첫 호출에서는 생략하세요. dev 작업 ID는 소문자 base32 문자 20개로 구성됩니다. 작업 상태, 로그, diff, 목록을 조회하거나 작업을 취소할 때는 요청자 본인의 작업인지 검사하며, runner 관리자는 모든 작업에 접근할 수 있습니다.
+승인이 필요한 도구는 모두 브라우저에서 재시도할 때 쓰는 `approval_id`를 선택 인자로 받습니다. 첫 호출에서는 생략하세요.
 
-읽기 도구와 `dev_task_cancel`은 원시 JSON 인자를 최대 16 KiB까지 받습니다. 쓰기 인자의 기본 상한도 16 KiB이지만, `note_create`, `note_append`, `note_replace`는 528 KiB, `dev_task_start`는 48 KiB까지 허용합니다. JSON 이스케이프도 이 크기에 포함됩니다. 승인 요약의 상한은 `max(64 KiB, argument limit + 16 KiB)`로, 기본 도구와 dev 작업 시작은 64 KiB, 노트 내용을 다루는 도구는 544 KiB입니다. 화면에 표시할 마스킹한 인자도 각 도구의 인자 제한을 넘을 수 없습니다. 노트 미리보기에는 별도로 약 8 KiB의 표시 제한이 있습니다.
+읽기 도구는 원시 JSON 인자를 최대 16 KiB까지 받습니다. 쓰기 인자의 기본 상한도 16 KiB이지만, `note_create`, `note_append`, `note_replace`는 528 KiB까지 허용합니다. JSON 이스케이프도 이 크기에 포함됩니다. 승인 요약의 상한은 `max(64 KiB, argument limit + 16 KiB)`로, 기본 도구는 64 KiB, 노트 내용을 다루는 도구는 544 KiB입니다. 화면에 표시할 마스킹한 인자도 각 도구의 인자 제한을 넘을 수 없습니다. 노트 미리보기에는 별도로 약 8 KiB의 표시 제한이 있습니다.
 
 공유 래퍼는 4 MiB를 초과하는 provider 출력을 통째로 생략합니다. 그 이하는 텍스트를 마스킹한 뒤 `server.max_output_bytes`(기본값 64 KiB)에 맞춰 자르며, 오류도 같은 방식으로 처리합니다. provider별 수집 제한이 더 작으면 그 제한도 적용됩니다. 제한 시간은 도구가 취소 신호를 따를 때 적용됩니다. 쓰기 작업은 계획(Plan)과 실행(Apply)에 각각 별도의 `server.tool_timeout`(기본값 30s)을 적용하며, 사람이 승인할 때까지 기다리는 시간은 제외합니다.

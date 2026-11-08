@@ -21,12 +21,10 @@ import (
 const (
 	ScopeRead  = "ops:read"
 	ScopeWrite = "ops:write"
-	// ScopeDev allows starting coding agents through the dev provider.
-	ScopeDev = "dev:run"
 )
 
 // Scopes lists every scope opsgate understands, in display order.
-var Scopes = []string{ScopeRead, ScopeWrite, ScopeDev}
+var Scopes = []string{ScopeRead, ScopeWrite}
 
 // KnownScope reports whether s is one of Scopes.
 func KnownScope(s string) bool { return slices.Contains(Scopes, s) }
@@ -204,18 +202,6 @@ type Approval struct {
 type Providers struct {
 	Kubernetes Kubernetes `yaml:"kubernetes"`
 	Note       Note       `yaml:"note"`
-	Dev        Dev        `yaml:"dev"`
-}
-
-// Dev lets clients start coding agents (Codex, Claude Code, ...) on the
-// host. opsgate never runs agents itself: it talks to `opsgate dev-runner`,
-// a separate process under its own account whose configuration (DevRunner)
-// alone decides which projects and agent commands exist. Starting a task
-// needs the dev:run scope and human approval.
-type Dev struct {
-	Enabled bool `yaml:"enabled"`
-	// RunnerSocket is the dev-runner's Unix socket.
-	RunnerSocket string `yaml:"runner_socket"`
 }
 
 // Note exposes a folder of Markdown notes (an Obsidian vault works as is)
@@ -253,6 +239,11 @@ func Parse(data []byte, name string) (Config, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return Default(), fmt.Errorf("parse %s: %w", name, err)
+	}
+	if providers, ok := lookup(&root, "providers").(map[string]any); ok {
+		if _, exists := providers["dev"]; exists {
+			return Default(), fmt.Errorf("providers.dev was removed in v0.4.0; delete this section")
+		}
 	}
 	if watch, ok := lookup(&root, "watch").(map[string]any); ok {
 		for _, key := range []string{"webhook_url", "secret_file", "allow_private_http"} {

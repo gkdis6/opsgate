@@ -24,7 +24,6 @@ import (
 	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/authn"
 	"github.com/gkdis6/opsgate/internal/config"
-	"github.com/gkdis6/opsgate/internal/devrunner"
 	"github.com/gkdis6/opsgate/internal/httpserver"
 	"github.com/gkdis6/opsgate/internal/oauth"
 	"github.com/gkdis6/opsgate/internal/provider/kube"
@@ -145,24 +144,6 @@ func printToken(out io.Writer) error {
 	sum := sha256.Sum256([]byte(tok))
 	_, err := fmt.Fprintf(out, "token:  %s\nsha256: %s\n", tok, hex.EncodeToString(sum[:]))
 	return err
-}
-
-func (c *application) runDevRunner(args []string) error {
-	fs := c.flags("dev-runner")
-	path := fs.String("config", "", "path to dev-runner.yaml (required)")
-	if err := c.parse(fs, args); err != nil {
-		return err
-	}
-	if *path == "" {
-		return usageError("missing required flag -config")
-	}
-	cfg, err := config.LoadDevRunner(*path)
-	if err != nil {
-		return err
-	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	return devrunner.Serve(ctx, cfg)
 }
 
 // runWatch watches Kubernetes and delivers alerts by webhook or email. It

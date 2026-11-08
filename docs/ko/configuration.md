@@ -45,7 +45,7 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 | `server.max_output_bytes` | `65536` | 도구 출력의 바이트 수 제한이며, 양수여야 합니다 |
 | `server.tool_timeout` | `30s` | 도구가 취소 신호를 따를 때 적용되는 호출 제한 시간입니다. 쓰기는 계획(Plan)과 실행(Apply)에 각각 따로 적용하며, 양수여야 합니다 |
 | `stdio.user` | `local` | 감사 로그의 사용자 식별 레이블이며, 신뢰 경계는 OS 사용자입니다 |
-| `stdio.scopes` | `[ops:read]` | ops:read, ops:write, dev:run을 허용합니다. 쓰기 스코프만으로 작업을 활성화하지는 않습니다 |
+| `stdio.scopes` | `[ops:read]` | ops:read, ops:write를 허용합니다. 쓰기 스코프만으로 작업을 활성화하지는 않습니다 |
 | `providers.kubernetes.enabled` | `false` | Kubernetes provider를 활성화합니다 |
 | `providers.kubernetes.clusters` | 생략 | 여러 클러스터의 연결·정책 목록입니다. 단일 클러스터 필드와 함께 사용할 수 없습니다 |
 | `providers.kubernetes.name` / `clusters[].name` | `default` / 필수 | 호출의 `cluster` 인자로 선택하는 이름입니다 |
@@ -63,7 +63,7 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 | `auth.builtin.state_file` | `""` | 클라이언트와 토큰 해시를 저장해 재시작 후에도 유지하는 파일이며, 권한은 0600입니다. 선택 사항으로, 비어 있으면 재시작 시 상태가 사라집니다 |
 | `auth.builtin.users` | `[]` | 허용할 업스트림 사용자 목록이며, 비어 있으면 모두 거부합니다 |
 | `auth.builtin.users[].subject` | `""` | passkey:name, github:login, email:verified-email 또는 oidc:sub(정확히 일치하는 OIDC subject)입니다 |
-| `auth.builtin.users[].scopes` | `[]` | 사용자에게 줄 스코프이며, ops:read, ops:write, dev:run을 사용합니다 |
+| `auth.builtin.users[].scopes` | `[]` | 사용자에게 줄 스코프이며, ops:read, ops:write를 사용합니다 |
 | `auth.builtin.upstream.provider` | `""` | passkey, github 또는 oidc입니다. passkey는 외부 인증 provider를 사용하지 않으며 클라이언트 ID나 비밀값이 필요하지 않습니다 |
 | `auth.builtin.upstream.issuer` | `""` | OIDC 사용 시 필수인 발급자이며, 예로 https://accounts.google.com 등이 있습니다 |
 | `auth.builtin.upstream.client_id` | `""` | 업스트림 애플리케이션의 클라이언트 ID입니다 |
@@ -96,8 +96,6 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 | `providers.note.exclude` | `[]` | 볼트 기준 상대 경로나 그 상위 경로에 일치하면 제외하는 추가 path.Match glob입니다. 점으로 시작하는 경로 구성 요소와 동기화 충돌 복사본은 항상 제외합니다 |
 | `providers.note.allow_write` | `false` | 노트 쓰기 도구 4개를 등록하며, 각 도구에는 ops:write와 사람의 승인이 필요합니다 |
 | `providers.note.max_note_bytes` | `1048576` | 노트별 읽기/쓰기 크기 제한이며, 양수여야 합니다. 내용 검색 시 제한을 넘는 노트는 건너뜁니다 |
-| `providers.dev.enabled` | `false` | dev provider를 활성화하며, 모든 도구에 dev:run이 필요합니다 |
-| `providers.dev.runner_socket` | `""` | 별도 dev-runner의 Unix 소켓 절대 경로입니다 |
 | `server.tools.allow` / `server.tools.deny` | `[]` / `[]` | 도구 이름의 `path.Match` glob입니다. allow가 비어 있으면 제공하는 모든 도구를 허용하고 deny가 우선하며, 제외한 도구는 tools/list에 표시하지 않습니다 |
 | `auth.builtin.users[].tools` | `[]` | 사용자가 호출할 수 있는 도구를 제한하는 도구 이름 glob이며, 비어 있으면 추가 제한이 없습니다 |
 | `auth.external.users[].tools` | `[]` | 매핑된 사용자가 호출할 수 있는 도구를 제한하는 도구 이름 glob이며, 비어 있으면 추가 제한이 없습니다 |
@@ -109,7 +107,7 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 
 서버 정책의 패턴은 활성화된 provider가 작업별 활성화 조건을 적용한 뒤 제공하는 도구와 일치해야 합니다. 일치하는 도구가 없으면 시작에 실패합니다. 사용자별/토큰별 도구 패턴은 구문을 검사한 뒤 호출할 때 적용하며, tools/list는 필터링하지 않습니다. 스코프, 서버 정책, 사용자별 도구 정책, provider 리소스 허용 목록을 모두 적용합니다. 도구 허용 목록이 비어 있으면 추가 제한을 두지 않으므로, 비어 있는 provider 리소스 허용 목록과는 의미가 다릅니다. 설정을 바꾸면 재시작하세요.
 
-모든 provider는 기본적으로 꺼져 있습니다. Kubernetes를 활성화하면 RBAC이 허용하는 범위에서 클러스터 범위 리소스를 읽을 수 있습니다. `ops:read`는 선택 사항인 실험 단계의 note provider를 포함해 활성화된 모든 읽기 provider에 적용됩니다. `dev:run`은 dev 도구에 적용되며, HTTP에서는 `ops:read`도 필요합니다. [신뢰 모델](security.md)을 참고하세요.
+모든 provider는 기본적으로 꺼져 있습니다. Kubernetes를 활성화하면 RBAC이 허용하는 범위에서 클러스터 범위 리소스를 읽을 수 있습니다. `ops:read`는 선택 사항인 실험 단계의 note provider를 포함해 활성화된 모든 읽기 provider에 적용됩니다. [신뢰 모델](security.md)을 참고하세요.
 
 노트 쓰기는 서버 계정으로 실행하므로, 생성하거나 다시 쓴 노트는 서버 계정이 소유합니다. 소유권을 넘기는 대신 ACL로 서버 계정에 접근 권한을 주고, 볼트 소유자가 이 파일을 교체할 수 있도록 파일이 있는 디렉터리의 쓰기 권한을 유지하세요. 볼트 소유자로 실행하는 동기화 도구는 자신이 소유하지 않은 파일에 chmod를 적용할 수 없습니다. Syncthing에서는 볼트 폴더의 Ignore Permissions 옵션을 설정하세요. 그렇지 않으면 다른 기기에서 권한만 바꾼 변경 사항을 반영할 때 "operation not permitted" 오류가 발생합니다.
 
@@ -178,7 +176,7 @@ OAuth GET 경로는 요청 본문을 거부하며, POST 본문 읽기에는 10�
 
 `static`은 SHA-256 다이제스트로 설정한 사전 공유 Bearer 토큰을 허용합니다. `opsgate -gen-token`으로 토큰과 다이제스트를 생성하고, 원본 토큰은 클라이언트의 비밀값 저장소에만 보관하세요. static 모드는 DCR이나 OAuth 로그인을 제공하지 않습니다.
 
-Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes 쓰기에는 별도의 작업 허용 목록이, 노트 쓰기에는 `allow_write`가 필요합니다. 이 쓰기 작업에는 `ops:write`, 실제 OS/RBAC 권한, 사람의 승인이 필요합니다. dev 도구에는 대신 `dev:run`이 필요하며, `dev_task_start`에는 사람의 승인도 필요합니다. HTTP 접근에는 `ops:read`도 필요하므로 원격 쓰기 사용자에게는 두 스코프가 모두 필요합니다. 네임스페이스 허용/거부 규칙은 Kubernetes 쓰기에도 적용합니다.
+Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes 쓰기에는 별도의 작업 허용 목록이, 노트 쓰기에는 `allow_write`가 필요합니다. 이 쓰기 작업에는 `ops:write`, 실제 OS/RBAC 권한, 사람의 승인이 필요합니다. HTTP 접근에는 `ops:read`도 필요하므로 원격 쓰기 사용자에게는 두 스코프가 모두 필요합니다. 네임스페이스 허용/거부 규칙은 Kubernetes 쓰기에도 적용합니다.
 
 서버는 승인 전에 입력을 검증하고 부수 효과가 없는 계획(Plan)을 만듭니다. builtin 인증과 `approval.web: true`를 사용하는 HTTP에서는 기본적으로 웹 승인을 요구하고 승인 링크와 `approval_id`를 반환합니다. `approval.require_web: false`를 명시하면 지원하는 클라이언트에서 클라이언트 내 확인(elicitation)을 허용합니다. 프로토콜 버전에 따라 여러 차례 왕복하는 입력 요청도 포함하며, 지원하지 않는 클라이언트는 계속 웹 링크를 사용합니다. 링크를 열고 같은 업스트림 사용자로 로그인한 뒤, 실행할 작업을 정확히 검토하세요. 승인 후에는 같은 도구에 정확히 같은 인자와 `approval_id`를 추가해 다시 호출하세요.
 
@@ -186,9 +184,9 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 
 승인 시간 창은 선택 사항이며, 사용하려면 `approval.window`와 `approval.window_tools`가 모두 필요합니다. `approval.window`는 1m–12h 범위로 설정하세요. `0s`이면 기능을 비활성화합니다. `approval.window_tools`는 `path.Match` glob 허용 목록이며 비어 있으면 어떤 도구도 허용하지 않습니다. 예를 들어 `window: 30m`과 `window_tools: [k8s_rollout_restart]`를 설정하면 브라우저에서 **Approve + allow for 30m**를 선택하거나, 클라이언트 내 확인에서 **Also auto-approve k8s_rollout_restart for 30m** 체크박스를 선택할 수 있습니다. 체크박스 선택은 필수가 아닙니다.
 
-이 권한은 정확히 그 사용자, 도구, 대상에 적용되며, 이후 다른 클라이언트에서 호출하거나 다른 인자를 사용해도 적용됩니다. 다른 대상에는 적용되지 않습니다. `dev_task_start`에는 승인 시간 창을 활성화하지 말고, 각 작업을 별도로 검토하세요. 이 기능은 스코프를 주거나 작업 허용 목록을 우회하지 않으며, 입력 검증이나 계획을 생략하지도 않습니다. 권한은 메모리에만 보관하고 최대 100개까지 허용합니다. 사용해도 유효 기간이 늘어나지 않으며, 만료되거나 재시작하면 사라집니다. 호출마다 `approval: window`가 포함된 별도의 감사 로그를 남깁니다. 권한을 만들 때는 승인 방식(`web` 또는 `elicitation`), 기간, 만료 시각을 담은 별도의 `window_granted` 이벤트를 기록합니다. `require_web`을 사용하면 이 권한도 브라우저에서만 받을 수 있으며 stdio 쓰기는 계속 거부합니다.
+이 권한은 정확히 그 사용자, 도구, 대상에 적용되며, 이후 다른 클라이언트에서 호출하거나 다른 인자를 사용해도 적용됩니다. 다른 대상에는 적용되지 않습니다. 이 기능은 스코프를 주거나 작업 허용 목록을 우회하지 않으며, 입력 검증이나 계획을 생략하지도 않습니다. 권한은 메모리에만 보관하고 최대 100개까지 허용합니다. 사용해도 유효 기간이 늘어나지 않으며, 만료되거나 재시작하면 사라집니다. 호출마다 `approval: window`가 포함된 별도의 감사 로그를 남깁니다. 권한을 만들 때는 승인 방식(`web` 또는 `elicitation`), 기간, 만료 시각을 담은 별도의 `window_granted` 이벤트를 기록합니다. `require_web`을 사용하면 이 권한도 브라우저에서만 받을 수 있으며 stdio 쓰기는 계속 거부합니다.
 
-승인 페이지에는 diff를 강조한 계획, 요청자, 전송 방식, 만료 시각을 보여 주며, 인자는 접힌 상태로 표시합니다. 승인 여부를 결정한 뒤 채팅으로 돌아가 어시스턴트에게 재시도를 요청하세요. 자동 리다이렉트는 없습니다. 승인 요약은 최대 `max(64 KiB, argument limit + 16 KiB)`까지 허용하며, 원시 JSON 인자의 기본 제한은 16 KiB입니다. 노트 내용 도구는 528 KiB(내용/치환 필드당 256 KiB)를 허용합니다. `dev_task_start`는 32 KiB 프롬프트를 담을 수 있도록 48 KiB를 허용합니다. JSON 이스케이프도 전송 크기 제한에 포함됩니다.
+승인 페이지에는 diff를 강조한 계획, 요청자, 전송 방식, 만료 시각을 보여 주며, 인자는 접힌 상태로 표시합니다. 승인 여부를 결정한 뒤 채팅으로 돌아가 어시스턴트에게 재시도를 요청하세요. 자동 리다이렉트는 없습니다. 승인 요약은 최대 `max(64 KiB, argument limit + 16 KiB)`까지 허용하며, 원시 JSON 인자의 기본 제한은 16 KiB입니다. 노트 내용 도구는 528 KiB(내용/치환 필드당 256 KiB)를 허용합니다. JSON 이스케이프도 전송 크기 제한에 포함됩니다.
 
 `approval.web`이 활성화되면 `approval.require_web`의 기본값은 `true`입니다. builtin 인증을 쓰는 모드가 웹 승인을 켠 경우도 포함합니다. `approval.require_web: false`를 명시하면 클라이언트 내 확인을 허용하며, 침해된 클라이언트가 자기 쓰기를 스스로 승인할 수 있습니다. external/static 인증이나 `approval.web: false`에서는 웹 승인을 사용할 수 없어 기본값이 `false`입니다. `-transport stdio`는 사용자가 로컬에서 시작한 프로세스이고 웹 채널이 없으므로, 모드 파일이라도 `require_web`을 생략하면 클라이언트 내 확인을 허용합니다. 명시적 `true`는 계속 stdio 쓰기를 거부합니다. HTTP 시작 시 클라이언트 내 확인이 허용되어 있으면 경고를 남깁니다. 프롬프트 인젝션은 여전히 모델이 쓰기를 요청하게 만들 수 있으므로, 사람이 승인 전에 요약을 읽어야 합니다. [SECURITY.md](security.md)를 참고하세요.
 
@@ -220,21 +218,6 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 네임스페이스·파드·컨테이너 이름과 민감 정보를 마스킹한 요약이 클러스터 외부의 메일 제공업체를 거칩니다. 최대 발송량은 묶음 간격마다 메시지 한 통으로, `5m`이면 하루 최대 288통, `15m`이면 최대 96통입니다. 특히 다른 서비스와 계정을 공유한다면 계정의 발송 한도를 확인하세요.
 
 알리는 내용과 본문 형식은 [watch 알림](watch.md)을 보세요.
-
-## Dev runner 설정
-
-runner는 별도 YAML 파일을 사용하며, `providers` 아래에 중첩하지 않습니다. runner 설정은 신뢰할 수 있어야 하며, HTTP 계정이 쓸 수 없어야 합니다. [설정과 위험](dev.md), [예제](../../deploy/dev-runner.example.yaml)를 참고하세요.
-
-| Runner YAML 키 | 기본값 | 설명 |
-| --- | --- | --- |
-| `admins` | `[]` | 모든 작업을 읽고 취소할 수 있는 요청자 subject를 정확히 지정한 목록입니다. 일반 사용자는 자신의 작업에만 접근합니다 |
-| `socket` / `socket_group` | Required | Unix 소켓의 절대 경로와 허용할 피어 그룹입니다 |
-| `work_dir` | Required | 비공개 상태/worktree 디렉터리의 절대 경로입니다 |
-| `projects` | `[]` | 고유한 소문자 `name`, 절대 경로인 `path`, `base_ref`(기본값 `HEAD`)로 구성한 허용 목록입니다 |
-| `agents` | `{}` | 에이전트 이름에 고정된 `command` argv와 필요에 따라 `env` KEY=VALUE 쌍을 지정합니다. 실행 파일은 절대 경로로 지정합니다 |
-| `timeout` | `1h` | 작업 제한 시간이며, 양수여야 합니다 |
-| `max_concurrent` | `1` | FIFO worker 수이며, 1..8 범위입니다 |
-| `max_tasks` | `100` | 보관할 작업 수의 상한이며, 양수여야 합니다. 완료된 worktree/기록을 오래된 순서로 제거하고 브랜치는 유지합니다 |
 
 ## 감사 로그 형식
 

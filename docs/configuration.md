@@ -46,7 +46,7 @@ this prints `require_web: true` explicitly. Running that output with
 | `server.max_output_bytes` | `65536` | Tool output byte limit; must be positive |
 | `server.tool_timeout` | `30s` | Cooperative call timeout; separate planning/applying deadlines for writes; positive |
 | `stdio.user` | `local` | Audit identity label; OS user is the trust boundary |
-| `stdio.scopes` | `[ops:read]` | Accepted scopes: ops:read, ops:write, dev:run; write does not enable actions |
+| `stdio.scopes` | `[ops:read]` | Accepted scopes: ops:read, ops:write; write does not enable actions |
 | `providers.kubernetes.enabled` | `false` | Enable Kubernetes provider |
 | `providers.kubernetes.clusters` | omitted | Ordered connection/policy entries; mutually exclusive with single-cluster fields |
 | `providers.kubernetes.name` / `clusters[].name` | `default` / required | Name clients select with the cluster argument |
@@ -64,7 +64,7 @@ this prints `require_web: true` explicitly. Running that output with
 | `auth.builtin.state_file` | `""` | Optional 0600 persistence for clients and token hashes; empty loses state on restart |
 | `auth.builtin.users` | `[]` | Allowed upstream users; empty denies everyone |
 | `auth.builtin.users[].subject` | `""` | passkey:name, github:login, email:verified-email or oidc:sub (exact OIDC subject) |
-| `auth.builtin.users[].scopes` | `[]` | Grants: ops:read, ops:write, dev:run |
+| `auth.builtin.users[].scopes` | `[]` | Grants: ops:read, ops:write |
 | `auth.builtin.upstream.provider` | `""` | passkey (no identity provider; needs no client ID or secret), github or oidc |
 | `auth.builtin.upstream.issuer` | `""` | Required OIDC issuer, e.g. https://accounts.google.com |
 | `auth.builtin.upstream.client_id` | `""` | Upstream application client ID |
@@ -97,8 +97,6 @@ this prints `require_web: true` explicitly. Running that output with
 | `providers.note.exclude` | `[]` | Additional vault-relative path.Match globs matching a path or any parent; dot-prefixed segments and sync-conflict copies always excluded |
 | `providers.note.allow_write` | `false` | Register four note write tools; each requires ops:write and human approval |
 | `providers.note.max_note_bytes` | `1048576` | Positive per-note size limit for reads/writes; oversized notes skipped in content scans |
-| `providers.dev.enabled` | `false` | Enable dev provider; all tools require dev:run |
-| `providers.dev.runner_socket` | `""` | Absolute Unix socket path of the separate dev-runner |
 | `server.tools.allow` / `server.tools.deny` | `[]` / `[]` | Tool-name `path.Match` globs; empty allow permits all offered tools, deny wins; excluded tools are absent from tools/list |
 | `auth.builtin.users[].tools` | `[]` | Optional tool-name globs narrowing a user's calls; empty adds no limit |
 | `auth.external.users[].tools` | `[]` | Optional tool-name globs narrowing a mapped user's calls; empty adds no limit |
@@ -110,7 +108,7 @@ this prints `require_web: true` explicitly. Running that output with
 
 Server policy patterns must match a tool offered by an enabled provider after its action gates, or startup fails. Per-user/token tool patterns are syntax-checked and enforced on calls; they do not filter tools/list. Scopes, server policy, per-user tool policy and provider resource allowlists all apply. Empty tool allowlists add no restriction, unlike empty provider resource allowlists. Configuration changes require a restart.
 
-All providers are disabled by default. Enabling Kubernetes permits cluster-scoped reads subject to RBAC. `ops:read` covers all enabled read providers, including the optional experimental note provider. `dev:run` covers dev tools, with HTTP additionally requiring `ops:read`. See [the trust model](../SECURITY.md).
+All providers are disabled by default. Enabling Kubernetes permits cluster-scoped reads subject to RBAC. `ops:read` covers all enabled read providers, including the optional experimental note provider. See [the trust model](../SECURITY.md).
 
 Note writes run as the server account, so notes it creates or rewrites are owned by that account. Grant it access with ACLs rather than ownership, and keep the vault owner able to replace those files (write access to their directories). A sync tool running as the vault owner cannot chmod files it does not own: in Syncthing, set the vault folder's Ignore Permissions option, or permission-only changes from other devices fail with "operation not permitted".
 
@@ -175,13 +173,13 @@ OAuth GET routes reject request bodies; POST body reads have a 10-second deadlin
 
 `external` validates JWT signatures using issuer discovery and JWKS, with issuer, audience, expiry and allowed algorithm checks. Issuer, discovery and JWKS URLs require HTTPS, except loopback HTTP. JWKS fetch attempts are shared across requests and limited to one per minute, including failed fetches. Cached valid keys continue to work; a new signing key may be rejected until the cooldown expires. Audience defaults to the MCP resource URL. Scopes come from `scope` or `scp`; an optional `claim:<value>` user allowlist further restricts identities and intersects their scopes. `static` accepts pre-shared bearer tokens configured by SHA-256 digest; generate a token and digest with `opsgate -gen-token`. Store the raw token only in the client's secret storage. Static mode provides no DCR or OAuth login.
 
-Kubernetes and note read tools require `ops:read`. Kubernetes writes require their own action allowlist; note writes require `allow_write`. These operations require `ops:write`, underlying OS/RBAC permission and human confirmation. Dev tools instead require `dev:run`, and `dev_task_start` requires human confirmation. HTTP access additionally requires `ops:read`, so remote writers need both scopes. Namespace allow/deny rules still apply to Kubernetes writes.
+Kubernetes and note read tools require `ops:read`. Kubernetes writes require their own action allowlist; note writes require `allow_write`. These operations require `ops:write`, underlying OS/RBAC permission and human confirmation. HTTP access additionally requires `ops:read`, so remote writers need both scopes. Namespace allow/deny rules still apply to Kubernetes writes.
 
 The server validates inputs and builds a side-effect-free plan before confirmation. With builtin auth and `approval.web: true`, HTTP defaults to browser approval and returns an approval link and `approval_id`. Setting `approval.require_web: false` explicitly allows clients supporting MCP elicitation to use an in-client prompt, including multi round-trip input requests across protocol versions; other clients still use the web link. The human opens it, signs in upstream as the same user and reviews the exact operation. After approval, retry the same tool with exactly the same arguments plus `approval_id`. Approvals expire, are single-use and bind the user, tool, SHA-256 of canonical unredacted arguments (excluding `approval_id`) and plan. Writes are denied if redaction changes the summary, so the human sees an unambiguous target. Kubernetes plans include the target UID; execution uses that invocation’s plan and identity/version preconditions. Without a confirmation channel, writes are denied; stdio supports elicitation only.
 
-Optional time-window approvals require both `approval.window` (1m–12h; `0s` disables the feature) and `approval.window_tools` (a `path.Match` glob allowlist; empty allows no tools). For example, `window: 30m` and `window_tools: [k8s_rollout_restart]` let a human choose **Approve + allow for 30m** in the browser, or the optional **Also auto-approve k8s_rollout_restart for 30m** checkbox in elicitation. The grant covers that exact user, tool and target, including later calls from another client or with different arguments. It does not cover another target. Do not enable windows for `dev_task_start`; each task should receive a separate review. It does not grant scopes, bypass action allowlists, skip input validation or skip planning. Grants live only in memory, expire without renewal on use, are capped at 100, and disappear on restart. Each call still has its own audit record with `approval: window`; grant creation emits a separate `window_granted` event with the source (`web` or `elicitation`), duration and expiry. With `require_web`, only the browser can obtain a grant and stdio writes remain denied.
+Optional time-window approvals require both `approval.window` (1m–12h; `0s` disables the feature) and `approval.window_tools` (a `path.Match` glob allowlist; empty allows no tools). For example, `window: 30m` and `window_tools: [k8s_rollout_restart]` let a human choose **Approve + allow for 30m** in the browser, or the optional **Also auto-approve k8s_rollout_restart for 30m** checkbox in elicitation. The grant covers that exact user, tool and target, including later calls from another client or with different arguments. It does not cover another target. It does not grant scopes, bypass action allowlists, skip input validation or skip planning. Grants live only in memory, expire without renewal on use, are capped at 100, and disappear on restart. Each call still has its own audit record with `approval: window`; grant creation emits a separate `window_granted` event with the source (`web` or `elicitation`), duration and expiry. With `require_web`, only the browser can obtain a grant and stdio writes remain denied.
 
-Approval pages show the plan with diff highlighting, requester, transport, expiry and collapsed arguments. After deciding, return to the chat and ask the assistant to retry; there is no automatic redirect. Approval summaries allow up to `max(64 KiB, argument limit + 16 KiB)`. Raw JSON arguments default to 16 KiB; note content tools allow 528 KiB (256 KiB per content/replacement field), and `dev_task_start` allows 48 KiB for its 32 KiB prompt. JSON escaping counts toward the wire limit.
+Approval pages show the plan with diff highlighting, requester, transport, expiry and collapsed arguments. After deciding, return to the chat and ask the assistant to retry; there is no automatic redirect. Approval summaries allow up to `max(64 KiB, argument limit + 16 KiB)`. Raw JSON arguments default to 16 KiB; note content tools allow 528 KiB (256 KiB per content/replacement field). JSON escaping counts toward the wire limit.
 
 `approval.require_web` defaults to `true` whenever `approval.web` is enabled, including by a mode with builtin auth. Explicit `approval.require_web: false` opts in to elicitation: a compromised client can approve its own writes. External/static auth and `approval.web: false` keep the default `false` because web approval is unavailable. With `-transport stdio`, an omitted `require_web` allows elicitation even for mode-based files, since the user starts the process locally and there is no web channel. Explicit `true` still denies stdio writes. HTTP startup warns when elicitation is allowed. Prompt injection can still make a model request writes: humans must read the summary before approving. See [SECURITY.md](../SECURITY.md).
 
@@ -292,21 +290,6 @@ interval: `5m` can send up to 288 messages a day and `15m` up to 96. Check the
 account's sending limit, especially when other services share it.
 
 See [watch alerts](watch.md) for what is reported and the payload.
-
-## Dev runner configuration
-
-The runner uses a separate YAML file, never nested under `providers`. Its configuration is trusted and must be unwritable by the HTTP account. See [setup and risks](dev.md) and [the example](../deploy/dev-runner.example.yaml).
-
-| Runner YAML key | Default | Meaning |
-| --- | --- | --- |
-| `admins` | `[]` | Exact requester subjects allowed to read/cancel every task; ordinary users access only their own |
-| `socket` / `socket_group` | Required | Absolute Unix socket path and allowed peer group |
-| `work_dir` | Required | Absolute private state/worktree directory |
-| `projects` | `[]` | Allowlist of unique lowercase `name`, absolute `path`, and `base_ref` (default `HEAD`) |
-| `agents` | `{}` | Agent names mapped to fixed `command` argv and optional `env` KEY=VALUE pairs; executable path must be absolute |
-| `timeout` | `1h` | Positive task timeout |
-| `max_concurrent` | `1` | FIFO worker count, 1..8 |
-| `max_tasks` | `100` | Positive retained-task cap; remove oldest finished worktrees/records, keep branches |
 
 ## Audit format
 

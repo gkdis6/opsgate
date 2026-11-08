@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 1222" role="img" aria-labelledby="title desc" lang="en">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 1178" role="img" aria-labelledby="title desc" lang="en">
 <title id="title">opsgate architecture and automatic alert investigation</title>
-<desc id="desc">MCP clients use local stdio or HTTPS through a TLS reverse proxy. opsgate checks identity, scopes and policy, wraps tools with plan/approval/apply, masks and limits results, and writes JSONL audit events. Kubernetes, notes and a separate dev runner are bounded by OS accounts and RBAC. There is no shell tool. A separate analyzer pod receives signed watch alerts, investigates with a model and read-only MCP tools, and reports to Discord and an optional webhook independently of immediate alerts.</desc>
+<desc id="desc">MCP clients use local stdio or HTTPS through a TLS reverse proxy. opsgate checks identity, scopes and policy, wraps tools with plan/approval/apply, masks and limits results, and writes JSONL audit events. Kubernetes and notes are bounded by OS accounts and RBAC. There is no shell tool. A separate analyzer pod receives signed watch alerts, investigates with a model and read-only MCP tools, and reports to Discord and an optional webhook independently of immediate alerts.</desc>
 <style>
 svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
 text { fill: #202936; }
@@ -96,25 +96,15 @@ text { fill: #202936; }
 <text x="552" y="559" class="head">Note</text>
 <text x="552" y="583" class="small">Markdown folder</text>
 <text x="552" y="604" class="small">Runbooks + incident memory</text>
-<rect x="536" y="640" width="250" height="68" rx="9" class="box"/>
-<text x="552" y="665" class="head">Dev</text>
-<text x="552" y="689" class="small">Configured projects / agents</text>
 <path d="M464 510 H504 V470 H536" class="line "/>
 <path d="M504 510 V576 H536" class="line "/>
-<path d="M504 576 V674 H536" class="line "/>
-<path d="M786 470 H804 V674" class="line return"/>
-<path d="M786 576 H804 V674" class="line return"/>
-<path d="M786 674 H804 V774 H492 V656 H464" class="line return"/>
+<path d="M786 470 H804 V576" class="line return"/>
+<path d="M786 576 H804 V774 H492 V656 H464" class="line return"/>
 <text x="298" y="777" class="small muted">Dashed arrows: results</text>
-<path d="M661 708 V830" class="line "/>
-<text x="678" y="812" class="small">Unix socket</text>
-<rect x="526" y="830" width="292" height="98" rx="9" class="boundary"/>
-<text x="542" y="852" class="small muted">Trust boundary: separate runner account</text>
-<text x="542" y="879" class="head">dev-runner</text>
-<text x="542" y="905">→ Git worktree + coding agent</text>
-<text x="32" y="846" class="small muted">One transport per process.</text>
-<text x="32" y="869" class="small muted">Providers and writes must be enabled.</text>
-<text x="32" y="892" class="small muted">Permissions still constrain approved actions.</text>
+<text x="32" y="830" class="small muted">One transport per process.</text>
+<text x="32" y="853" class="small muted">Providers and writes must be enabled.</text>
+<text x="32" y="876" class="small muted">Permissions still constrain approved actions.</text>
+<g transform="translate(0 -44)">
 <text x="24" y="966" class="head">Optional automatic alert investigation</text>
 <rect x="24" y="990" width="210" height="64" rx="9" class="box"/>
 <text x="40" y="1017" class="head">opsgate watch</text>
@@ -144,4 +134,5 @@ text { fill: #202936; }
 <text x="620" y="1137" class="head">Model provider</text>
 <text x="620" y="1160" class="small">API or CLI backend</text>
 <text x="620" y="1183" class="small muted">Outside the cluster · masked</text>
+</g>
 </svg>

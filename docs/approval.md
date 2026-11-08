@@ -4,7 +4,7 @@
 
 <img src="images/approval-flow.svg" alt="Write approval channels, retry checks and denial exits" width="830">
 
-Tools registered through the write wrapper need a successful plan and human confirmation before Apply. This includes Kubernetes writes, note writes and `dev_task_start`. Stopping a coding task with `dev_task_cancel` deliberately needs no approval.
+Tools registered through the write wrapper need a successful plan and human confirmation before Apply. This includes Kubernetes writes and note writes.
 
 ## Execution flow
 
@@ -20,7 +20,7 @@ call
   -> mask and limit result -> JSONL audit event
 ```
 
-The raw size check and argument parsing happen before authorization, but their error is returned after caller, user tool and scope checks. The usual scope is `ops:write`; `dev_task_start` requires `dev:run`. HTTP also requires `ops:read` at `/mcp`.
+The raw size check and argument parsing happen before authorization, but their error is returned after caller, user tool and scope checks. The usual scope is `ops:write`. HTTP also requires `ops:read` at `/mcp`.
 
 Plan is side-effect-free. Its summary must identify the target and effect. If masking changes the summary, the write is denied because the human cannot see an unambiguous preview. Each retry computes Plan again. Plan and Apply have separate `server.tool_timeout` deadlines; the default is 30 seconds each.
 
@@ -40,7 +40,7 @@ A window is an optional grant keyed by **user, exact tool name and target**. It 
 
 `approval.window` is zero by default, disabling grants. If enabled, it must be between `1m` and `12h`, and the tool must match a `path.Match` glob in `approval.window_tools`. An empty list permits no grants. The human must explicitly choose the window option; enabling configuration alone does not grant a window.
 
-There are at most 100 live user/tool/target grants. A new grant does not evict another live grant; renewing an existing grant is allowed. Keep `dev_task_start` out of this list: the code permits it, but a window would approve different coding prompts and projects without another confirmation.
+There are at most 100 live user/tool/target grants. A new grant does not evict another live grant; renewing an existing grant is allowed.
 
 This is a configuration fragment to merge into a working configuration:
 
@@ -115,6 +115,6 @@ The default raw write argument limit is 16 KiB; some content-bearing tools raise
 
 Tool events use `pending`, `denied`, `ok` or `error`. Browser decisions add `approved` or `rejected` events. Grant creation adds `window_granted`. The `approval` field identifies `elicitation`, `web` or `window` where applicable. Plans and display arguments are masked; full successful results are not stored as audit text.
 
-Approval confirms a requested action, not arbitrary future actions by the same client. Windows intentionally broaden that promise to a tool on the approved target for their lifetime. OS permissions, Kubernetes RBAC, provider allowlists, scopes and tool restrictions remain necessary. Coding agents can run further commands under the runner account after task-start approval; see [Development tools](dev.md).
+Approval confirms a requested action, not arbitrary future actions by the same client. Windows intentionally broaden that promise to a tool on the approved target for their lifetime. OS permissions, Kubernetes RBAC, provider allowlists, scopes and tool restrictions remain necessary.
 
 See [Authentication](authentication.md) to configure built-in sign-in and the [security policy](../SECURITY.md) for trust boundaries.

@@ -25,7 +25,7 @@ static: client -> configured Bearer token -> opsgate SHA-256 comparison
 stdio: client -> local opsgate process -> configured stdio identity/scopes
 ```
 
-All HTTP modes require `ops:read` at `/mcp`. Additional scopes authorize tools: normally `ops:write` for writes and `dev:run` for coding tools. Scopes do not enable providers or bypass human approval. Optional user/token `tools` globs add restrictions on top of server policy.
+All HTTP modes require `ops:read` at `/mcp`. Additional scopes authorize tools: normally `ops:write` for writes. Scopes do not enable providers or bypass human approval. Optional user/token `tools` globs add restrictions on top of server policy.
 
 With `approval.web: true`, HTTP defaults to web-only approval (`approval.require_web: true`); modes with builtin auth enable web approval automatically. Explicit `approval.require_web: false` opts in to in-client elicitation. A compromised client can then approve its own writes. External/static auth has no web channel and keeps `require_web` false by default; HTTP startup warns when elicitation is allowed.
 
@@ -199,7 +199,7 @@ This fragment loads without HTTP/authentication settings. The transport defaults
 
 1. Prepare the destination identity provider or token. Retain the HTTP origin where possible. Back up the state file if using built-in persistence.
 2. Update `auth.mode` for HTTP, or use `-transport stdio`. For built-in sign-in, set exactly one `auth.builtin.upstream.provider` and its required settings. Configuration is read at startup; restart to apply it.
-3. Update subjects and grants in `users`, `admins` and any runner administrator list. Examples are `passkey:alice`, `github:alice`, `email:alice@example.com`, exact `oidc:<sub>`, external configuration `claim:alice` (caller `alice`), and `static:alice`.
+3. Update subjects and grants in `users` and `admins`. Examples are `passkey:alice`, `github:alice`, `email:alice@example.com`, exact `oidc:<sub>`, external configuration `claim:alice` (caller `alice`), and `static:alice`.
 4. Set `approval.web: false` and remove `approval.require_web` or set it to `false` when leaving built-in HTTP. Choose elicitation-capable clients for approved writes; a compromised client can approve its own writes through this channel. Stdio has no web channel and allows elicitation when `require_web` is omitted. When returning to built-in HTTP, remove an explicit `require_web: false` to restore the web-only default.
 5. Restart and reconnect or reauthorize clients for the new method. Verify identity, scopes and provider/tool policy with a read operation before requesting writes.
 

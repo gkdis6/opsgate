@@ -27,22 +27,16 @@ AI client (claude.ai, ChatGPT, Claude Code, or another MCP client)
                   |
              shared tool wrapper
                   |
-                  +----------+------------+
-                  |          |            |
-                 kube       note         dev
-                                          |
-                                      Unix socket
-                                          |
-                                      dev-runner
-                                          |
-                                 Git worktree + agent
+                  +----------+
+                  |          |
+                 kube       note
 ```
 
 The HTTP listener serves plain HTTP; use a reverse proxy for public HTTPS. `http.public_url` must be an HTTPS origin, except for loopback HTTP. The Host check accepts the configured public authority, or a loopback host when the listener and local connection address are loopback. CORS applies only to discovery and selected MCP/OAuth endpoints, not to browser decision pages.
 
 For `/mcp`, `Mcp-Protocol-Version` values lexically at or above `2026-07-28` select the stateless handler. Earlier or absent values select the session handler, whose session timeout is 30 minutes. This supports newer sessionless clients, including ChatGPT, while keeping sessions for older clients and elicitation. This routing decision does not grant access.
 
-The command selects one transport per process. stdio is the default. HTTP requires an explicit authentication mode and `ops:read` even for callers using `dev:run` tools.
+The command selects one transport per process. stdio is the default. HTTP requires an explicit authentication mode and `ops:read` for all callers.
 
 ## Automatic alert investigation
 
@@ -52,7 +46,7 @@ The command selects one transport per process. stdio is the default. HTTP requir
 
 | Package | Responsibility |
 | --- | --- |
-| `cmd/opsgate` | Loads configuration and assembles the process; supports `init`, `config show`, `-gen-token`, `passkey invite`, `watch` and `dev-runner` |
+| `cmd/opsgate` | Loads configuration and assembles the process; supports `init`, `config show`, `-gen-token`, `passkey invite` and `watch` |
 | `cmd/opsgate-analyzer` | Loads analyzer configuration and starts the `opsgate-analyzer` receiver and investigation worker; `-check` checks configuration and credentials |
 | `internal/analyzer` | Signed batch reception, queueing, model adapters, bounded read-only MCP investigations and report delivery |
 | `internal/alert` | Watch alert batching, deduplication and webhook, Discord and SMTP delivery |
@@ -69,7 +63,6 @@ The command selects one transport per process. stdio is the default. HTTP requir
 | `internal/ui` | Shared page layout for consent, approval, passkeys and administration |
 | `internal/provider/kube` | Kubernetes objects, events and logs; allowlisted rollout restarts, scaling, pod deletion and image restoration within namespace policy; read-only remediation options |
 | `internal/provider/note` | Searches and reads a Markdown vault; optional create/append/replace/trash tools with content/diff previews and snapshot checks |
-| `internal/provider/dev`, `internal/devrunner` | Sends requests to a separate runner; the runner chooses configured projects/agents and executes tasks in Git worktrees |
 
 ## Tool execution
 
@@ -86,7 +79,7 @@ Approved write tool (AddWrite):
   -> output handling -> audit -> MCP result
 ```
 
-Most tools require `ops:read`; approved writes normally require `ops:write`. Dev tools require `dev:run`, and `dev_task_start` uses the approval wrapper with that scope. `dev_task_cancel` is a state-changing general tool and deliberately needs no human approval to stop a task.
+Most tools require `ops:read`; approved writes normally require `ops:write`.
 
 The default argument limit is 16 KiB. Content-bearing writes can use larger per-tool limits. The default timeout is 30 seconds and uses context cancellation; writes receive separate Plan and Apply deadlines. Confirmation sits between those deadlines. See [Tools](tools.md) for individual limits.
 
@@ -103,8 +96,6 @@ Treat logs, notes, events and agent output as untrusted data. Masking reduces ac
 The analyzer calls only `k8s_clusters`, `k8s_overview`, `k8s_list`, `k8s_get`, `k8s_events`, `k8s_logs`, `k8s_service_check`, `k8s_remediation_options`, `note_search`, `note_read`, `note_recent`, `note_list`, `note_links`, `note_tags`, and also requires `readOnlyHint`. Policy is checked again before execution; approval windows cannot expand this list. A dedicated reader’s `ops:read` token, tool policies, namespace policies and read-only RBAC further constrain access.
 
 The analyzer has the shared HMAC key, MCP bearer token, Discord webhook URL, and either a model API key for the API backend or the execution account’s CLI login credentials for CLI backends. Optional report forwarding uses a separate HMAC key. The reference pod’s ServiceAccount is bound to `opsgate-readonly`. Its `/alerts` Service has no public ingress; restrict network access to watch. It needs loopback access to the reader and outbound access to the selected model provider, Discord and any configured forwarding receiver. The reference manifest defines no NetworkPolicy. Alert text and tool output are masked before sending to the model, and reports before Discord, but masking cannot guarantee detection of all sensitive content: allow only data intended for the selected model provider and Discord to receive. See [Automatic alert investigation](analyzer.md).
-
-Run `dev-runner` under a separate account with its own configuration, projects and agent commands. The server communicates over a Unix socket. On Linux, the runner checks peer credentials with `SO_PEERCRED`, accepting its own UID or callers in the configured socket group. Agent execution is limited by the runner account and any configured agent sandbox, not by the requesting person's OS permissions. See [Development tools](dev.md) and the [security policy](../SECURITY.md).
 
 ## Minimal local configuration
 

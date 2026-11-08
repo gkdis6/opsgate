@@ -59,6 +59,19 @@ func secureEndpoint(raw string) bool {
 	u, err := url.Parse(raw)
 	return err == nil && u.Hostname() != "" && u.User == nil && !strings.Contains(raw, "#") && (u.Scheme == "https" || u.Scheme == "http" && loopbackOrigin(u.Hostname()))
 }
+
+// withoutRemovedScope keeps older connectors working while retaining validation
+// of all other unknown scopes. It never turns an explicit request into defaults.
+func withoutRemovedScope(scopes []string) []string {
+	out := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		if scope != "dev:run" {
+			out = append(out, scope)
+		}
+	}
+	return out
+}
+
 func supportedScopes(scopes []string) bool {
 	for _, scope := range scopes {
 		if !config.KnownScope(scope) {

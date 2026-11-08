@@ -600,7 +600,7 @@ func TestBrowserPagesEscaping(t *testing.T) {
 		name string
 		data pageData
 	}{
-		{"consent", pageData{Name: "<script>client</script>", Host: "client.example", URI: "https://client.example/callback", Subject: "github:operator", CSRF: "test-csrf", Scopes: []string{"ops:read", "ops:write", "dev:run"}}},
+		{"consent", pageData{Name: "<script>client</script>", Host: "client.example", URI: "https://client.example/callback", Subject: "github:operator", CSRF: "test-csrf", Scopes: []string{"ops:read", "ops:write"}}},
 		{"error", pageData{Error: "<script>error</script>"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -611,7 +611,7 @@ func TestBrowserPagesEscaping(t *testing.T) {
 				t.Fatalf("unsafe or unstyled page: %s", body)
 			}
 			if tc.name == "consent" {
-				for _, want := range []string{`class="host">client.example`, "unverified, self-reported", "github:operator", "Read server, Kubernetes and notes", "Change them after approval", "Start coding agents after approval", `class="chip">dev:run`} {
+				for _, want := range []string{`class="host">client.example`, "unverified, self-reported", "github:operator", "Read server, Kubernetes and notes", "Change them after approval"} {
 					if !strings.Contains(body, want) {
 						t.Errorf("missing %q", want)
 					}

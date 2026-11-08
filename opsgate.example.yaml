@@ -65,7 +65,6 @@ approval:
   window: 0s # Off; opt-in duration must be 1m..12h.
   window_tools: [] # Empty permits no grants; tool-name path.Match globs.
   # Windows cover user+tool across clients and targets; in memory, 100 max.
-  # Never include dev_task_start: approve every coding task separately.
 providers:
   kubernetes:
     enabled: false
@@ -89,9 +88,6 @@ providers:
     exclude: [] # Additional vault-relative path.Match globs; dot paths/conflicts hidden.
     allow_write: false # Registers four note write tools; still needs approval + ops:write.
     max_note_bytes: 1048576 # Positive read/write cap; oversized notes skipped by scans.
-  dev: # Optional experimental provider; separate trusted runner/account required.
-    enabled: false
-    runner_socket: "" # Absolute Unix socket path, e.g. /run/opsgate-dev/runner.sock.
 
 # ---- OPTIONAL WRITE OPT-INS (merge into existing sections; not enabled above) ----
 # Review narrow OS/RBAC permissions and human confirmation first. HTTP also needs ops:read.
@@ -118,9 +114,6 @@ providers:
 #     enabled: true
 #     vault: /absolute/path/to/vault
 #     allow_write: true # Use sync version history; check/rename has an external-edit race.
-# To enable coding tasks: providers.dev.enabled=true, configure runner_socket,
-# and grant selected users [ops:read, dev:run]. Each start requires human approval.
-# Worktrees are not a sandbox; no automatic push/merge/deploy is implemented.
 # An optional approval.window/window_tools grant skips later individual prompts
 # for that user/tool/target. Protected Kubernetes clusters require fresh approval.
 # Keep it off for coding task starts.

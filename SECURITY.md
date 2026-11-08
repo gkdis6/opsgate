@@ -2,7 +2,7 @@
 
 [한국어](docs/ko/security.md)
 
-opsgate is a released 0.3.x project implementing remote HTTP, authentication and human-approved writes. The optional note and dev providers are experimental. It has not yet been security-reviewed by third parties. Review the implementation you deploy.
+opsgate is a released 0.3.x project implementing remote HTTP, authentication and human-approved writes. The optional note provider is experimental. It has not yet been security-reviewed by third parties. Review the implementation you deploy.
 
 ## Threat model
 
@@ -10,8 +10,8 @@ opsgate is a released 0.3.x project implementing remote HTTP, authentication and
 provider: servers, cluster resources and notes. Provider allowlists constrain
 resources; `server.tools` and per-user/token `tools` globs can narrow tool access.
 They are not separate credential or process boundaries. For different trust
-levels run separate instances and accounts, for example production operations,
-personal notes and coding agents. Keep each instance's credentials and reachable
+levels run separate instances and accounts, for example production operations and
+personal notes. Keep each instance's credentials and reachable
 data appropriate for its entire trust group.
 
 The intended boundary is a constrained MCP interface with read tools and explicitly approved write actions: explicit provider opt-in, namespace allowlists, namespace denies, scope checks, bounded calls and output, best-effort redaction and per-call audit records. No arbitrary shell or exec interface is exposed. Kubernetes Secrets are excluded; ConfigMap values are hidden by default. These controls reduce accidental disclosure and the operations a client can request through opsgate.
@@ -49,11 +49,11 @@ Passkey login (upstream `passkey`) needs no external identity provider. Registra
 
 Builtin login accepts only configured passkey users (`passkey:<name>`), GitHub logins, verified OIDC email identities or exact, case-sensitive `oidc:<sub>` identities from the configured issuer. Google email identities additionally require a Gmail/Googlemail domain or an `hd` claim matching the email domain; other Google addresses must use an immutable subject. GitHub login renames can change who matches a login allowlist: prefer verified email via OIDC or keep the GitHub allowlist current. External mode verifies JWT signatures via discovered JWKS and checks issuer, audience, expiry and allowed signing algorithms. Issuer, discovery and JWKS URLs require HTTPS, except loopback HTTP. Optional external user entries restrict identities and scopes. Static mode stores only SHA-256 token digests; it has no interactive OAuth flow.
 
-Kubernetes writes need a separate action allowlist; note writes need `allow_write`. These tools need `ops:write`, OS/RBAC permission and human confirmation. Dev tools use `dev:run`; task starts need human confirmation, while cancellation is an explicit low-risk exception that needs no new approval. HTTP also requires `ops:read`. Planning validates the target and produces the summary before execution. Elicitation obtains an in-client decision through MCP input requests. With builtin auth and `approval.web: true`, HTTP defaults to browser approval even for clients supporting elicitation; the client receives an approval link and the approver signs in upstream as the same user. The approval expires, is single-use and binds the SHA-256 of canonical unredacted arguments (excluding `approval_id`) and the exact plan. A summary changed by redaction is denied because its target cannot be shown unambiguously. Kubernetes summaries include the UID, and Apply receives the plan from the same invocation; rollout uses a JSON patch UID test, scale retains resourceVersion, and pod deletion retains a UID precondition. A retry with changed arguments cannot reuse it. Without confirmation, writes are denied.
+Kubernetes writes need a separate action allowlist; note writes need `allow_write`. These tools need `ops:write`, OS/RBAC permission and human confirmation. HTTP also requires `ops:read`. Planning validates the target and produces the summary before execution. Elicitation obtains an in-client decision through MCP input requests. With builtin auth and `approval.web: true`, HTTP defaults to browser approval even for clients supporting elicitation; the client receives an approval link and the approver signs in upstream as the same user. The approval expires, is single-use and binds the SHA-256 of canonical unredacted arguments (excluding `approval_id`) and the exact plan. A summary changed by redaction is denied because its target cannot be shown unambiguously. Kubernetes summaries include the UID, and Apply receives the plan from the same invocation; rollout uses a JSON patch UID test, scale retains resourceVersion, and pod deletion retains a UID precondition. A retry with changed arguments cannot reuse it. Without confirmation, writes are denied.
 
-Time-window approvals are off by default. Enabling them requires `approval.window` between 1m and 12h and explicit tool-name `path.Match` globs in `approval.window_tools`; an empty allowlist allows none. A human can opt in while approving an eligible call through the browser or elicitation. A grant binds one exact user, tool and target, and allows later valid calls from other clients with different arguments on that same target until expiry. A different target requires a new approval. Do not enable windows for `dev_task_start`; review every task separately. Use narrow tool allowlists and short windows. Grants do not bypass scope checks, provider policy, planning, argument limits or summary redaction checks. They are held only in memory, capped at 100 live grants, never extended by use, and cleared on restart. Creation emits a separate `window_granted` audit event (source method, duration and expiry), and every use is audited by the write wrapper with `approval: window`. `require_web` still requires the browser to obtain a grant and denies stdio writes. Compromised clients can opt into elicitation windows just as they can accept individual elicitation prompts.
+Time-window approvals are off by default. Enabling them requires `approval.window` between 1m and 12h and explicit tool-name `path.Match` globs in `approval.window_tools`; an empty allowlist allows none. A human can opt in while approving an eligible call through the browser or elicitation. A grant binds one exact user, tool and target, and allows later valid calls from other clients with different arguments on that same target until expiry. A different target requires a new approval. Use narrow tool allowlists and short windows. Grants do not bypass scope checks, provider policy, planning, argument limits or summary redaction checks. They are held only in memory, capped at 100 live grants, never extended by use, and cleared on restart. Creation emits a separate `window_granted` audit event (source method, duration and expiry), and every use is audited by the write wrapper with `approval: window`. `require_web` still requires the browser to obtain a grant and denies stdio writes. Compromised clients can opt into elicitation windows just as they can accept individual elicitation prompts.
 
-Raw write JSON defaults to 16 KiB; note create/append/replace allow 528 KiB (256 KiB per content/replacement input), and `dev_task_start` allows 48 KiB with an independent 32 KiB prompt limit. JSON escaping counts toward the wire limit. Approval summaries allow `max(64 KiB, argument limit + 16 KiB)`; redacted display arguments must fit the tool argument limit. Provider output above 4 MiB is omitted entirely; other output is redacted before truncation to the configured response cap (default 64 KiB). Approval and consent pages share escaped HTML templates, inline CSS, no scripts or external assets, and retain their CSRF, cross-origin, CSP and cache protections. Approval links and CSRF tokens are not included in grant audit events.
+Raw write JSON defaults to 16 KiB; note create/append/replace allow 528 KiB (256 KiB per content/replacement input). JSON escaping counts toward the wire limit. Approval summaries allow `max(64 KiB, argument limit + 16 KiB)`; redacted display arguments must fit the tool argument limit. Provider output above 4 MiB is omitted entirely; other output is redacted before truncation to the configured response cap (default 64 KiB). Approval and consent pages share escaped HTML templates, inline CSS, no scripts or external assets, and retain their CSRF, cross-origin, CSP and cache protections. Approval links and CSRF tokens are not included in grant audit events.
 
 `approval.require_web` defaults to `true` when `approval.web` is enabled, including by a mode with builtin auth. Explicit `approval.require_web: false` opts in to elicitation: a compromised client can approve its own writes, and the server cannot establish that a real person clicked a client-controlled prompt. External/static auth and `approval.web: false` keep `require_web` false by default because no web channel is available. HTTP startup warns when elicitation is allowed. When the file omits `require_web`, `-transport stdio` allows elicitation even with a mode, since the user starts the process locally and there is no web channel. Explicit `true` still denies stdio writes. `config show` prints the HTTP default explicitly; its `require_web: true` must be removed or set to `false` to allow stdio writes. Prompt injection can still cause the model to *request* writes. Humans must read the summary and target before approving. Approval does not make an operation safe or guarantee the target's state remains unchanged; OS privileges, RBAC and narrow allowlists remain essential. Audit records include plans, approval methods, pending outcomes, web decisions (with only an approval ID prefix) and denied multi round-trip verifications, but audit delivery is not a prerequisite for execution.
 
@@ -85,41 +85,6 @@ between the check and rename can be overwritten. Use version history in sync
 tools and backups. Creates publish without overwriting a racing creator; trash
 retains a copy locally rather than permanently deleting a note. Protect the
 vault and its backups with filesystem permissions.
-
-## Dev provider
-
-The dev provider uses `dev:run` for every tool and human approval for task starts.
-It connects to a separate `opsgate dev-runner` process under an unprivileged
-account such as `opsdev`, without sudo or cluster credentials. The runner's
-separate, trusted configuration is the sole authority for project paths, base
-refs, executable paths, argv and environment. Clients submit only configured
-names and a bounded prompt on stdin. The Unix socket has mode 0660 and a
-configured group; each connection checks SO_PEERCRED and account group membership.
-Tasks belong to the requester: ordinary users can list, inspect, read logs/diffs
-and cancel only their own tasks; exact subjects in runner `admins` can access
-and cancel all tasks. The socket peer is trusted to assert the user through
-`X-Opsgate-User`; SO_PEERCRED authenticates the peer account, not the end user.
-Any permitted socket peer can impersonate another user or runner admin.
-Give the HTTP account search access to the socket directory, but no runner
-configuration, state, credentials or repository write access.
-
-A compromised HTTP process can submit tasks directly and bypass the server's
-human approval, but cannot supply arbitrary runner commands or project paths.
-The selected coding agent can still act on an arbitrary malicious prompt. Use a
-verified agent sandbox and narrow OS permissions: a Git worktree and process
-group are not a sandbox. Tasks share the runner UID and repository metadata;
-agent-accessible files, credentials and network endpoints remain at risk. No
-push, merge or deploy operation is implemented. Runner Git commands disable
-hooks, fsmonitor, global/system configuration and signing; diff also disables
-external diff/text conversion. Keep repository-local Git configuration trusted.
-
-Task logs and final messages are untrusted data, as are diffs. API output is
-bounded and best-effort redacted, while raw prompts/logs/output and commit
-messages can retain sensitive material on disk. Protect repositories, state and
-backups. Persistence failures stop dispatch. Retention removes finished worktrees
-and records but keeps branches; task count/output caps do not bound repository
-size or all resource consumption. Configure service limits and cleanup. See
-[setup, workflow and risks](docs/dev.md).
 
 ## Supported versions
 

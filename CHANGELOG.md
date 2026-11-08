@@ -7,6 +7,10 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Removed
+
+- Remove the experimental Dev provider, `dev_projects`/`dev_task_*` tools, `opsgate dev-runner` and `dev:run` scope in v0.4.0. Delete `providers.dev` and remove `dev:run` from configured scope lists; stop and remove the runner service. Existing OAuth state and requests drop the removed scope while retaining valid scopes.
+
 ## [0.3.0] - 2026-11-06
 
 ### Fixed

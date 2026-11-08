@@ -38,7 +38,7 @@ watch:
 
 `watch.webhook_url`, `watch.secret_file`, `watch.allow_private_http`는 제거되었습니다. 이 키가 있으면 설정을 거부합니다. `watch.outputs`의 `type: webhook` 항목으로 옮기고 `url`, `secret_file`, `allow_private_http`를 대상별로 설정하세요. 기본 웹훅 JSON 본문과 HMAC 서명은 유지됩니다.
 
-## Groups
+## 그룹
 
 `watch.groups`로 알림의 namespace에 따라 수신 출력, 경고 필터와 묶음 주기를
 정합니다. 아래 예시는 기존 `watch.outputs`의 `discord` 항목과 설정된

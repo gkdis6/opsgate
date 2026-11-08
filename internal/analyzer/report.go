@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gkdis6/opsgate/internal/action"
 	"github.com/gkdis6/opsgate/internal/alert"
 )
 
@@ -44,6 +45,24 @@ func reportDuration(d time.Duration, language string) string {
 func reportNotification(c Config, b alert.Batch, result investigation, status, code string) string {
 	a := b.Alerts[0]
 	text := result.Text
+	choices := ""
+	if a.Kind == "Pod" && c.Report.ApprovalURL != "" {
+		hint := ""
+		if a.Workload != nil {
+			hint = a.Workload.Kind + "/" + a.Workload.Name
+		}
+		link, err := action.OptionsURL(c.Report.ApprovalURL, a.Cluster, a.Namespace, a.Name, hint)
+		if err != nil && hint != "" {
+			link, err = action.OptionsURL(c.Report.ApprovalURL, a.Cluster, a.Namespace, a.Name, "")
+		}
+		if err == nil {
+			label := "모든 선택지 보기"
+			if c.Report.Language == "en" {
+				label = "All choices"
+			}
+			choices = "\n\n[" + label + "](" + link + ")"
+		}
+	}
 	if c.Report.Language == "en" {
 		if status == "failed" {
 			text = "Analysis failed or insufficient evidence (" + code + "): check investigation limits, model/MCP connectivity and read permissions. No cause was confirmed and no changes were made."
@@ -51,7 +70,7 @@ func reportNotification(c Config, b alert.Batch, result investigation, status, c
 				text += "\nElapsed: " + reportDuration(result.Total, "en")
 			}
 		}
-		return fmt.Sprintf("opsgate automatic analysis [%s]\n%s %s %s/%s\nAlert occurred: %s\n\n%s", status, a.Cluster, a.Kind, a.Namespace, a.Name, a.Time.UTC().Format(time.RFC3339), text)
+		return fmt.Sprintf("opsgate automatic analysis [%s]\n%s %s %s/%s\nAlert occurred: %s\n\n%s", status, a.Cluster, a.Kind, a.Namespace, a.Name, a.Time.UTC().Format(time.RFC3339), text) + choices
 	}
 	label := "완료"
 	if status == "failed" {
@@ -61,5 +80,5 @@ func reportNotification(c Config, b alert.Batch, result investigation, status, c
 			text += "\n소요 " + reportDuration(result.Total, "ko")
 		}
 	}
-	return fmt.Sprintf("opsgate 자동 분석 [%s]\n%s %s %s/%s\n알림 발생: %s\n\n%s", label, a.Cluster, a.Kind, a.Namespace, a.Name, a.Time.UTC().Format(time.RFC3339), text)
+	return fmt.Sprintf("opsgate 자동 분석 [%s]\n%s %s %s/%s\n알림 발생: %s\n\n%s", label, a.Cluster, a.Kind, a.Namespace, a.Name, a.Time.UTC().Format(time.RFC3339), text) + choices
 }

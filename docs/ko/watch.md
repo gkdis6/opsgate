@@ -78,10 +78,10 @@ watcher가 시작할 때 이미 있던 객체는 기준점일 뿐 알리지 않�
 
 경고에는 `hint`가 붙습니다. 경고 종류에 따라 고른 고정 문구이며, 클러스터에서 온 텍스트는 들어가지 않습니다. 삭제되는 중에 실패한 파드는 알리지 않습니다.
 
-다음 조건을 모두 만족하면 `restart`에 워크로드 이름도 넣습니다.
+호환성을 위해 다음 조건을 모두 만족하면 `restart`에 워크로드 이름도 넣습니다.
 
 - 컨테이너가 3회 이상 재시작했습니다.
-- 종료 사유가 `OOMKilled`, `Unknown`, `Completed`가 아닙니다.
+- 종료 사유가 `OOMKilled`, `Unknown`, `ContainerStatusUnknown`, `Completed`가 아닙니다.
 - 파드가 Job이 아니라 Deployment, StatefulSet, DaemonSet에 속합니다.
 - watch 설정의 `providers.kubernetes.rollout_restart`에 그 워크로드가 있습니다. 서버와 같은 목록을 쓰세요.
 
@@ -93,7 +93,25 @@ watch는 제안만 합니다. 쓰기 권한이 없고, 제안을 자동으로 �
 `/approve/action/k8s_rollout_restart?...&source=rule` 형식입니다. 영어 승인
 화면에는 “Restart workload”와 “Suggested by: rule”을 표시합니다. 기존 재시작
 링크도 별칭으로 동작합니다. 다른 카탈로그 조치는 `action_link`와 분석기로
-제안할 수 있으며, 위 watch 재시작 조건은 그대로입니다.
+제안할 수 있습니다. 기존 재시작 조건은 보수적으로 유지하며, 현재 선택지 페이지에서는
+시간만 벌 수 있다는 경고와 함께 반복 OOM 재시작도 제공합니다.
+
+`watch.approval_url`이 있으면 허용된 namespace의 **파드 경고** 중 소유자가
+Deployment·StatefulSet·DaemonSet으로 해석되는 알림에 `options_url`을 추가합니다.
+**조치 선택** / **Choose an action** 링크는
+`/approve/options/{cluster}/{namespace}/{pod}?workload=kind/name` 형식입니다.
+정보 알림, 소유자 없는 파드, 지원하지 않는 소유자에는 붙이지 않습니다. 재시작 허용
+목록과 일치할 필요는 없습니다. 로그인 후 서버가 현재 클러스터 상태에서 활성화되고
+허용된 조치를 계산합니다. watcher가 넘긴 워크로드는 이동용 힌트일 뿐이며 서버가
+현재 소유 관계를 UID로 재검증합니다. 이미지 받기 실패에는 이미지 복구, 실패 중인
+새 배포에는 복구 우선 후 재시작, 반복 OOM에는 임시 재시작, 멈췄거나 연결할 수 없는
+컨트롤러 소유 파드에는 삭제를 제공할 수 있습니다. [전체 규칙](approval.md#장애별-현재-선택지).
+
+Discord embed, 웹훅 JSON·텍스트, 이메일 텍스트가 같은 선택지 링크를 출력별 언어로
+표시합니다. 외부 n8n/Telegram 수신기를 위해 기존 `restart`, `restart.url`은 유지하고
+`options_url`, `workload`를 추가합니다. 사용자 웹훅 템플릿에서는 알림의 `.OptionsURL`을
+쓸 수 있습니다. 링크에는 비밀 값이 없고 승인을 부여하지 않습니다. 복구되거나 정책이
+바뀌면 선택지가 없을 수 있습니다. 조치를 열면 새 계획을 만들고, 승인해야만 적용합니다.
 
 ## Webhook 본문
 

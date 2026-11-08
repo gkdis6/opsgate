@@ -523,3 +523,23 @@ func TestCatalogActionPasskeyBrowserSwitch(t *testing.T) {
 		}
 	}
 }
+
+func TestChoicesPasskeyBrowserSwitch(t *testing.T) {
+	f := newPasskeyFixture(t, "", "passkey:alice")
+	target := "/approve/options/main/apps/web-abc?workload=deployment%2Fweb"
+	w := httptest.NewRecorder()
+	f.s.RequireUser(func(http.ResponseWriter, *http.Request, string) { t.Fatal("unexpected session") }).ServeHTTP(w, httptest.NewRequest("GET", "https://ops.example"+target, nil))
+	location := w.Header().Get("Location")
+	if w.Code != 303 || location != "/oauth/passkey?return="+url.QueryEscape(target) {
+		t.Fatalf("%d %q", w.Code, location)
+	}
+	other := f.do(t, "GET", location, nil, nil)
+	if other.Code != 303 || other.Header().Get("Location") != target {
+		t.Fatalf("browser switch: %d %q", other.Code, other.Header().Get("Location"))
+	}
+	for _, bad := range []string{target + "&next=https://evil.example", target + "&workload=deployment/web", target + "&approval_id=forged", "/approve/options/main/apps/web?workload=job/web", "/approve/options/main/apps/%2e%2e?workload=deployment/web"} {
+		if approvalReturn(bad) {
+			t.Fatalf("unsafe return %q", bad)
+		}
+	}
+}

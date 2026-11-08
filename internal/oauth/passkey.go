@@ -270,6 +270,15 @@ func approvalReturn(target string) bool {
 	}
 	// Only catalog link fields may survive a browser switch. In particular no
 	// arbitrary redirect parameter or approval_id can travel in this return URL.
+	if strings.HasPrefix(u.Path, "/approve/options/") {
+		parts := strings.Split(strings.TrimPrefix(u.Path, "/approve/options/"), "/")
+		q, err := url.ParseQuery(u.RawQuery)
+		if err != nil || len(parts) != 3 || len(q) > 1 || (len(q) == 1 && len(q["workload"]) != 1) {
+			return false
+		}
+		_, err = action.OptionsURL("", parts[0], parts[1], parts[2], q.Get("workload"))
+		return err == nil
+	}
 	if strings.HasPrefix(u.Path, "/approve/action/") || strings.HasPrefix(u.Path, "/approve/restart/") || strings.HasPrefix(u.Path, "/approve/restore-image/") {
 		_, _, _, err := action.Parse(u)
 		return err == nil

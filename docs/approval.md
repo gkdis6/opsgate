@@ -226,3 +226,41 @@ a trusted browser push service. A persisted endpoint outside the configured
 policy causes startup to fail; remove its subscription before narrowing the
 allowlist. Invalid or unreadable state also fails startup rather than replacing
 the signing key silently.
+
+## Live choices per failure
+
+`GET /approve/options/{cluster}/{namespace}/{pod}` requires sign-in and evaluates
+`k8s_remediation_options` for that user now. It shows catalog buttons, fixed
+English/Korean reasons and `rule` source. The user needs `ops:read`, `ops:write`,
+access to `k8s_remediation_options` and the selected action, plus the provider
+allowlists. Disabled or denied actions are silently omitted. The page is
+read-only, creates no pending approval and uses the same no-store, security and
+cross-origin headers as other approval pages. Each button opens the existing
+`/approve/action/...` flow: plan → human approval with CSRF protection → re-plan
+check → apply → audit. Choosing is not approving and never grants a window.
+
+| Current state | Choices, in order |
+| --- | --- |
+| `ImagePullBackOff`, `ErrImagePull`, `InvalidImageName` | Verified image restore candidates for the owning Deployment |
+| `CrashLoopBackOff` or ≥3 restarts in a Deployment's current pod, with a newer ReplicaSet than a healthy previous one | Image restore first, then rollout restart |
+| Deployment `ProgressDeadlineExceeded`, or new pods unready while an older ReplicaSet has verified ready pods | Image restore |
+| ≥3 restarts for Deployment/StatefulSet/DaemonSet, eligible under `restartAdvice` | Rollout restart; not for Jobs, config/image errors, Unknown or Completed exits |
+| ≥3 restarts with `OOMKilled` | Rollout restart with “only buys time; check the memory limit” reason |
+| Controller-owned pod terminating >5 minutes, `Unknown`, or on a NotReady node | Delete that pod, with normal UID/resource-version checks; no force deletion |
+| Nothing fits | Empty actions and the existing fixed inspection hint |
+
+Image restoration retains its ready, running container/image identity checks
+and bounds of 500 ReplicaSets and 500 Pods per namespace. At most five image
+choices plus restart and deletion are returned. Readiness is evidence, not proof
+of application health; restoring an image does not restore configuration. A
+restart does not fix missing configuration, an invalid image or memory limits.
+
+An optional `?workload=deployment/name` (also `statefulset/name`, `daemonset/name`)
+is only a navigation hint for a vanished pod. The page explicitly says the pod
+is gone. It fetches the live workload and evaluates current UID-verified owned
+pods, plus the Deployment's stalled condition. It never reuses the vanished
+pod's failure or offers its deletion. A hint is not ownership proof: a person
+can edit it to another allowed workload, whose current state and permissions
+are checked independently. If neither pod nor usable hint remains, the page
+shows no actions. Unknown/repeated query fields and unsupported hint kinds are
+rejected. Cluster messages cannot become rule reasons or executable links.

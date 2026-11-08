@@ -90,3 +90,22 @@ func TestLegacyAliasesShareValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestOptionsURL(t *testing.T) {
+	got, err := OptionsURL("https://ops.example/", "main", "apps", "web-abc", "deployment/web")
+	if err != nil || got != "https://ops.example/approve/options/main/apps/web-abc?workload=deployment%2Fweb" {
+		t.Fatalf("%q %v", got, err)
+	}
+	for _, tc := range []struct{ base, cluster, ns, pod, hint string }{
+		{"http://ops.example", "main", "apps", "web", ""},
+		{"https://ops.example/redirect", "main", "apps", "web", ""},
+		{"https://user@ops.example", "main", "apps", "web", ""},
+		{"", "../main", "apps", "web", ""}, {"", "main", "apps", "a/b", ""},
+		{"", "main", "apps", "web", "job/web"}, {"", "main", "apps", "web", "deployment/a/b"},
+		{"", "main", "apps", "web", "deployment/web\nLocation:evil"},
+	} {
+		if link, err := OptionsURL(tc.base, tc.cluster, tc.ns, tc.pod, tc.hint); err == nil {
+			t.Fatalf("unsafe link %s", link)
+		}
+	}
+}

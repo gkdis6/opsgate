@@ -62,3 +62,11 @@ func matches(patterns []string, name string) bool {
 func (c Caller) allowsTool(name string) bool {
 	return len(c.Tools) == 0 || matches(c.Tools, name)
 }
+
+// Allows reports server registration policy without registering another tool.
+func (p *Policy) Allows(name string) bool {
+	return p == nil || (len(p.allow) == 0 || matches(p.allow, name)) && !matches(p.deny, name)
+}
+
+// AllowsTool reports the caller's tool policy.
+func (c Caller) AllowsTool(name string) bool { return c.allowsTool(name) }

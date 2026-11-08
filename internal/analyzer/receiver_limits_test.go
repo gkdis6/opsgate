@@ -10,7 +10,7 @@ import (
 )
 
 func TestReceiverFieldLimitsAndProjection(t *testing.T) {
-	for _, field := range []string{"reason", "summary", "hint", "cluster", "kind", "namespace", "name", "restart-url"} {
+	for _, field := range []string{"reason", "summary", "hint", "cluster", "kind", "namespace", "name", "restart-url", "options-url", "workload-kind", "workload-namespace", "workload-name", "workload-url"} {
 		t.Run(field, func(t *testing.T) {
 			s := newService(Default(), []byte("0123456789abcdef"))
 			b := testBatch(time.Now())
@@ -31,6 +31,16 @@ func TestReceiverFieldLimitsAndProjection(t *testing.T) {
 				a.Namespace = long
 			case "name":
 				a.Name = long
+			case "options-url":
+				a.OptionsURL = long
+			case "workload-kind":
+				a.Workload = &alert.Workload{Kind: long}
+			case "workload-namespace":
+				a.Workload = &alert.Workload{Namespace: long}
+			case "workload-name":
+				a.Workload = &alert.Workload{Name: long}
+			case "workload-url":
+				a.Workload = &alert.Workload{URL: long}
 			case "restart-url":
 				a.Restart = &alert.Workload{Kind: "deployment", Namespace: "apps", Name: "web", URL: long}
 			}

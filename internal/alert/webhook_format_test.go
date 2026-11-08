@@ -108,3 +108,30 @@ func TestWebhookRetries429(t *testing.T) {
 		}
 	}
 }
+
+func TestChoicesAcrossOutputs(t *testing.T) {
+	const link = "https://ops.example/approve/options/main/apps/web?workload=deployment%2Fweb"
+	b := &Batch{Alerts: []Alert{{Severity: Warning, Kind: "Pod", Namespace: "apps", Name: "web", OptionsURL: link}}}
+	for _, language := range []string{"en", "ko"} {
+		for _, format := range []string{"webhook", "discord"} {
+			s, _ := NewWebhook(WebhookOptions{Format: format, Language: language})
+			raw, err := s.(*webhookSender).body(b)
+			if err != nil || !strings.Contains(string(raw), link) {
+				t.Fatalf("%s %s: %s %v", format, language, raw, err)
+			}
+			if format == "webhook" && !strings.Contains(string(raw), `"options_url"`) {
+				t.Fatal(string(raw))
+			}
+			label := "Choose an action"
+			if language == "ko" {
+				label = "조치 선택"
+			}
+			if !strings.Contains(string(raw), label) {
+				t.Fatal(string(raw))
+			}
+		}
+	}
+	if !strings.Contains(render(b), "Choose an action: "+link) {
+		t.Fatal(render(b))
+	}
+}

@@ -168,7 +168,7 @@ func (w *watcher) pod(oldObj, curObj any) []alert.Alert {
 	var result []alert.Alert
 	owner, ownerName := podOwner(cur)
 	warn := func(key, reason, summary, hint string, restart *alert.Workload) {
-		result = append(result, alert.Alert{Severity: alert.Warning, Kind: "Pod", Namespace: cur.Namespace, Name: cur.Name, Reason: reason, Summary: summary, Hint: hint, Restart: restart,
+		result = append(result, alert.Alert{Severity: alert.Warning, Kind: "Pod", Namespace: cur.Namespace, Name: cur.Name, Reason: reason, Summary: summary, Hint: hint, Restart: restart, Workload: choiceWorkload(owner, cur.Namespace, ownerName),
 			Key: strings.Join([]string{"Pod", cur.Namespace, cur.Name, key}, "/")})
 	}
 	before := map[string]corev1.ContainerStatus{}

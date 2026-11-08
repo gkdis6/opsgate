@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"context"
+	"github.com/gkdis6/opsgate/internal/alert"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -58,5 +59,17 @@ func TestDiscordReceiptValidation(t *testing.T) {
 		} else if err == nil || strings.Contains(err.Error(), "private-error") {
 			t.Fatal("invalid receipt accepted")
 		}
+	}
+}
+
+func TestAllChoicesIgnoresUnsupportedHint(t *testing.T) {
+	c := Default()
+	c.Report.Language = "en"
+	c.Report.ApprovalURL = "https://ops.example"
+	b := testBatch(time.Now())
+	b.Alerts[0].Workload = &alert.Workload{Kind: "job", Name: "job"}
+	got := reportNotification(c, b, investigation{}, "failed", "timeout")
+	if !strings.Contains(got, "[All choices](https://ops.example/approve/options/main/apps/web)") {
+		t.Fatal(got)
 	}
 }

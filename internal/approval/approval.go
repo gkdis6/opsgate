@@ -20,6 +20,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/gkdis6/opsgate/internal/action"
 	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/config"
 	"github.com/gkdis6/opsgate/internal/redact"
@@ -50,6 +51,7 @@ type Manager struct {
 	windowTools []string
 	grants      map[grantKey]time.Time
 	direct      func(name string) *tool.Direct
+	options     func(context.Context, tool.Caller, string, string, string, string) (action.Options, error)
 }
 
 const splitWriteMessage = "change is too large to review in the client; split it into smaller writes"

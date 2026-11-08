@@ -98,3 +98,12 @@ func (w *watcher) restartTarget(kind, namespace, name string) *alert.Workload {
 	}
 	return nil
 }
+
+// choiceWorkload is only a navigation hint. Approval resolves real owners by UID.
+func choiceWorkload(kind, namespace, name string) *alert.Workload {
+	switch kind {
+	case "deployment", "statefulset", "daemonset":
+		return &alert.Workload{Kind: kind, Namespace: namespace, Name: name}
+	}
+	return nil
+}

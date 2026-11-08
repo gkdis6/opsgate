@@ -19,6 +19,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/gkdis6/opsgate/internal/action"
 	"github.com/gkdis6/opsgate/internal/alert"
 	"github.com/gkdis6/opsgate/internal/approval"
 	"github.com/gkdis6/opsgate/internal/audit"
@@ -131,6 +132,7 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 	if err != nil {
 		return err
 	}
+	am.SetOptions(env.Remediation)
 	o.Server = s
 	if !cfg.Approval.RequireWeb {
 		log.Printf("warning: a compromised client can approve its own writes through elicitation; approval.require_web: true avoids this where web approval is available")
@@ -199,8 +201,11 @@ func (c *application) runWatch(args []string) error {
 	return err
 }
 
-// addApprovalLink lets a restart suggestion open the server's approval page.
+// addApprovalLink adds live choices and retains the legacy restart link.
 func addApprovalLink(a *alert.Alert, base string) {
+	if base != "" && a.Severity == alert.Warning && a.Kind == "Pod" && a.Namespace != "" && a.Workload != nil {
+		a.OptionsURL, _ = action.OptionsURL(base, a.Cluster, a.Namespace, a.Name, a.Workload.Kind+"/"+a.Workload.Name)
+	}
 	if base != "" && a.Restart != nil {
 		a.Restart.URL = approval.RestartURL(base, a.Cluster, a.Restart.Kind, a.Restart.Namespace, a.Restart.Name)
 	}

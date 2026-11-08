@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 1104" role="img" aria-labelledby="title desc" lang="en">
 <title id="title">Write approval flow</title>
-<desc id="desc">Check scopes, policy and arguments, then compute a side-effect-free Plan. An eligible active user/tool window skips a new prompt. Otherwise use supported in-client elicitation or a built-in HTTP web approval link, with same-user sign-in (passkey shown). Continuations recompute the plan and verify the one-call bindings before Apply. Invalid, rejected, expired or mismatched requests do not Apply.</desc>
+<desc id="desc">Check scopes, policy and arguments, then compute a side-effect-free Plan. An eligible active user/tool window skips a new prompt. Otherwise use supported in-client elicitation or a built-in HTTP web approval link, with same-user sign-in (passkey shown). Web approval re-plans and applies once; waiting calls or approval_status receive the stored result. Elicitation continuations verify one-call bindings before Apply. Invalid, rejected, expired or mismatched requests do not Apply.</desc>
 <style>
 svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
 text { fill: #202936; }
@@ -73,11 +73,11 @@ text { fill: #202936; }
 <text x="96" y="667" class="small">Passkey shown; configured GitHub / OIDC also supported</text>
 <text x="96" y="688" class="small">Approve / Approve for N minutes* / Reject</text>
 <path d="M340 726 V770" class="line "/>
-<text x="352" y="751" class="small muted">Approved → retry with approval_id</text>
+<text x="352" y="751" class="small muted">Approved → run once; store result</text>
 <rect x="80" y="770" width="520" height="88" rx="9" class="accent"/>
-<text x="96" y="797" class="head">Recompute Plan on every continuation / retry</text>
+<text x="96" y="797" class="head">Recompute Plan before web execution / continuation</text>
 <text x="96" y="821" class="small">One-call approval: user, transport, tool, arguments and</text>
-<text x="96" y="842" class="small">plan summary must match; expired / reused → deny</text>
+<text x="96" y="842" class="small">summary / target must match; no second Apply</text>
 <path d="M340 858 V904" class="line allow"/>
 <rect x="80" y="904" width="520" height="56" rx="9" class="good"/>
 <text x="96" y="938" class="head">Apply · current approved Plan</text>

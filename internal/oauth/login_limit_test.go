@@ -78,6 +78,7 @@ func TestLoginAdmissionPaths(t *testing.T) {
 					m.Routes(mux)
 					_, err := m.Confirm(context.Background(), nil, tool.ConfirmRequest{
 						Caller: tool.Caller{User: s.cfg.Users[0].Subject, Transport: "http"},
+						Run:    func(context.Context) (string, error) { return "changed", nil },
 						Tool:   "test_write", Summary: "Change test value", Args: map[string]any{},
 					})
 					if !errors.Is(err, tool.ErrApprovalPending) {

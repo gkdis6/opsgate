@@ -24,6 +24,9 @@ func (c Config) Validate() error {
 	if err := c.validateRegistrationPolicy(); err != nil {
 		return err
 	}
+	if c.Approval.Wait < 0 || c.Approval.Wait > 55*time.Second {
+		return fmt.Errorf("approval.wait must be between 0 and 55s")
+	}
 	if c.Approval.Window != 0 && (c.Approval.Window < time.Minute || c.Approval.Window > 12*time.Hour) {
 		return fmt.Errorf("approval.window must be zero or between 1m and 12h")
 	}

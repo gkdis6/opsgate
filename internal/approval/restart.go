@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/redact"
@@ -95,7 +96,7 @@ func (m *Manager) directRequest(w http.ResponseWriter, r *http.Request, subject,
 	}
 	m.mu.Lock()
 	m.sweepLocked()
-	// Bound all live records, including decided approvals awaiting consumption.
+	// Bound all live records, including running and retained outcomes.
 	if len(m.approvals) >= 100 || m.approvals[id] != nil {
 		m.mu.Unlock()
 		ui.Message(w, http.StatusServiceUnavailable, "Action unavailable", "Too many approvals are waiting. Try again after they expire.")
@@ -121,6 +122,13 @@ func (m *Manager) runDirect(ctx context.Context, p *pending, run func(context.Co
 	}
 	m.mu.Lock()
 	p.result = result
+	p.failed = err != nil
+	p.finished = true
+	p.run = nil
+	p.retainUntil = m.now().Add(10 * time.Minute)
+	if p.done != nil {
+		close(p.done)
+	}
 	m.mu.Unlock()
 	return result
 }

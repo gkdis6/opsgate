@@ -2,7 +2,7 @@
 
 [한국어](ko/approval.md)
 
-<img src="images/approval-flow.svg" alt="Write approval channels, retry checks and denial exits" width="830">
+<img src="images/approval-flow.svg" alt="Write approval channels, execution checks and denial exits" width="830">
 
 Tools registered through the write wrapper need a successful plan and human confirmation before Apply. This includes Kubernetes writes and note writes.
 
@@ -22,11 +22,11 @@ call
 
 The raw size check and argument parsing happen before authorization, but their error is returned after caller, user tool and scope checks. The usual scope is `ops:write`. HTTP also requires `ops:read` at `/mcp`.
 
-Plan is side-effect-free. Its summary must identify the target and effect. If masking changes the summary, the write is denied because the human cannot see an unambiguous preview. Each retry computes Plan again. Plan and Apply have separate `server.tool_timeout` deadlines; the default is 30 seconds each.
+Plan is side-effect-free. Its summary must identify the target and effect. If masking changes the summary, the write is denied because the human cannot see an unambiguous preview. Web approval recomputes Plan before applying; retrieving a stored outcome does not plan or apply again. Plan and Apply have separate `server.tool_timeout` deadlines; the default is 30 seconds each.
 
 ## Confirmation channels
 
-The manager first validates the request and `require_web` restrictions, then checks for an active approval window. Without a window, it processes supplied client input or `approval_id`; a fresh HTTP request uses web approval by default when `approval.web` is enabled. Explicit `approval.require_web: false` opts in to elicitation when supported, with web approval as fallback. No available channel means denial.
+The manager first validates the request and `require_web` restrictions, then resolves any supplied `approval_id` as a stored outcome. Otherwise it checks for an active approval window and processes supplied client input; a fresh HTTP request uses web approval by default when `approval.web` is enabled. Explicit `approval.require_web: false` opts in to elicitation when supported, with web approval as fallback. No available channel means denial.
 
 Plans with truncated previews require web approval showing the complete masked arguments; without a browser channel, split the change into smaller writes. This full-review requirement is bound to signed client state and web approval records, while existing eligible approval windows continue to apply.
 
@@ -68,14 +68,21 @@ This opt-in lets a compromised client approve its own writes: the server cannot 
 Web approval requires HTTP with `auth.mode: builtin` and `approval.web: true`. It uses the built-in sign-in session; it is unavailable in external/static modes and stdio.
 
 ```text
-initial call -> pending result with /approve/<id> link
+initial call -> create approval and wait up to approval.wait
+  -> if still pending, return /approve/<id> link
   -> human opens link and signs in as the requesting user
   -> Reject / Approve / Approve + allow for configured duration
-  -> client retries original tool arguments plus approval_id
-  -> Plan recomputed -> binding checked -> Apply
+  -> approval re-plans -> summary/target checked -> Apply -> audit
+  -> waiting call receives result, or client reads approval_status
 ```
 
-The initial call returns a text tool result with a link, an expiry and instructions to retry. It is audited as `pending`; it is not a protocol error and does not execute Apply. After approving, return to the client and request the retry. For example, a retry may contain:
+Approving runs the original call exactly once, including **Approve + allow for** a window. Execution uses the original caller's identity, scopes, tool list and arguments. It continues if the MCP request or browser disconnects, with separate `server.tool_timeout` deadlines for re-planning and applying. If the summary, target or review requirements changed, nothing is applied; the page and stored outcome explain why. An apply failure returns `Not applied: ...` and needs a new approval to try a write again.
+
+`approval.wait` defaults to `25s` when web approval is enabled explicitly or through a mode, otherwise `0s`. It accepts `0s`–`55s`; zero returns the pending link immediately. A waiting call returns the apply result on success, an error on apply failure, or denial on rejection. Request cancellation ends the wait without revoking the approval. Creation records a `pending` event; execution records exactly one apply event with `approval: web`. Waiting calls and result retries do not duplicate that apply event.
+
+If the wait ends first, the normal text tool result asks the assistant to show the link and includes the expiry and `approval_id`. After approval, no further call is needed to execute the write. To read its outcome, call the read-only `approval_status` tool with `{"approval_id":"<id>"}` (`ops:read` required). Only the requester can read it; other users receive the same unknown-or-expired response as an unknown ID. It returns `tool`, `target`, `status` (`pending`, `running`, `applied`, `not_applied`, `rejected`) and `result` when available.
+
+A compatibility retry of the original tool with the same arguments plus `approval_id` returns the stored outcome and never executes again:
 
 ```json
 {"kind":"deployment","namespace":"default","name":"web","approval_id":"<id from the pending result>"}
@@ -83,7 +90,7 @@ The initial call returns a text tool result with a link, an expiry and instructi
 
 The page displays the plan line by line, highlights diff lines only after consecutive `--- ` and `+++ ` headers (shown muted), and includes masked arguments. Only the exact requesting user can view or decide it. Decisions are protected by CSRF checks and cross-origin protection, are accepted once, and use a strict script-free Content Security Policy.
 
-The retry must match user, transport, tool, target, per-call approval requirement, canonical unredacted argument hash (excluding `approval_id`) and the newly calculated summary. A one-call approval is marked used before Apply, so an Apply failure requires a new approval. An active window is checked earlier and deliberately does not impose this one-call binding.
+Result retries must match the requester, transport, tool and canonical unredacted argument hash (excluding `approval_id`). The stored runner binds the approved summary, target and review requirements and checks them before applying. Reading a completed result does not compare against a new live plan: the approved change may itself have changed that plan. A retry carrying `approval_id` never uses an approval window to authorize another apply. Fresh calls without an ID can still use eligible windows.
 
 Web-only decisions are the default when `approval.web` is enabled, either explicitly or by a mode with builtin auth. This fragment makes that choice explicit in a working built-in HTTP configuration:
 
@@ -102,9 +109,10 @@ approval:
 | --- | --- |
 | Argument binding | SHA-256 of canonical unredacted JSON arguments, excluding `approval_id`; masked arguments are only for display/audit |
 | Plan binding | Recomputed summary, target and per-call approval requirement must match; note writes also check the planned file snapshot during Apply |
-| One-call use | Web records have a used flag; elicitation uses consumed nonces |
+| One-call use | Web decisions start one stored runner; result reads never apply; elicitation uses consumed nonces |
 | Pending/input lifetime | `approval.ttl`, default `10m`; a nonpositive TTL causes confirmation requests to be denied |
-| Web record capacity | 100 live records, including decided records awaiting consumption; expiry releases capacity |
+| Web record capacity | 100 live records, including running and retained outcomes; no live record is evicted |
+| Outcome retention | Until at least the original expiry; executions remain readable for at least 10 minutes after finishing. Rejections remain until original expiry |
 | Nonce capacity | 1,000 live consumed nonces; live entries are not evicted to accept another continuation |
 | Window capacity | 100 live user/tool/target combinations |
 | Persistence | Pending records, windows, consumed nonces and signing key are memory-only; restart discards all of them |

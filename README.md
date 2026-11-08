@@ -182,15 +182,20 @@ available. Explicit `approval.require_web: false` opts in to in-client elicitati
 a compromised client can then approve its own writes. External/static auth and
 stdio keep elicitation because they have no web channel. An omitted `require_web`
 also allows elicitation with `-transport stdio` for mode-based files; explicit
-`true` denies stdio writes. One-call approval binds the exact arguments and plan.
+`true` denies stdio writes. One-call approval binds the exact arguments and plan. Approving in the browser
+rechecks the plan and runs the change immediately, once. The call waits up to
+`approval.wait` (default 25s with web approval, maximum 55s; 0 disables waiting).
+If it returns pending, show the link; read the result with `approval_status`
+and `approval_id`, or retry the same arguments plus `approval_id` to retrieve
+the stored outcome. Retries never apply again.
 
 Optional approval windows let a person approve a particular tool for a limited
 time. During that window, subsequent calls by the same user can skip a new
-approval prompt, including calls with different targets or arguments. Permission
+approval prompt, including calls with different arguments on the approved target. Permission
 and target checks still run on every call. Windows are disabled by default, and
 `k8s_restore_image` never uses one.
 
-<img src="docs/images/approval-flow.svg" alt="Write approval flow: plan, approval window or client / web confirmation, retry verification, Apply and denial exits" width="830">
+<img src="docs/images/approval-flow.svg" alt="Write approval flow: plan, approval window or client / web confirmation, execution checks, Apply and denial exits" width="830">
 
 ### Notes: runbooks and memory
 

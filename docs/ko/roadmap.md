@@ -31,8 +31,8 @@
 1. **Dev provider 제거** (`dev_*` 도구, `opsgate dev-runner`, `dev:run` 스코프).
    코딩 에이전트는 위의 방향에서 벗어납니다. 완료했으며 아직 릴리스하지 않았습니다.
    [변경 기록](../../CHANGELOG.md)을 참고하세요.
-2. **공통 실행 관문.** 알림과 MCP 도구가 함께 쓰는 조치 카탈로그, 클라이언트가
-   `approval_id`로 다시 호출하는 대신 승인하면 실행되는 구조, Web Push를 지원하는
+2. **공통 실행 관문.** 알림과 MCP 도구가 함께 쓰는 조치 카탈로그, 승인 시 실행
+   (execution on approval: done, unreleased — 완료, 미출시), Web Push를 지원하는
    승인함 페이지. 메신저 알림은 승인함으로 연결합니다.
 3. **장애마다 더 많은 선택지.** 더 많은 장애 상태(예: `OOMKilled`, `Pending`)에 대한
    규칙 기반 제안, 카탈로그에 맞으면 버튼이 되는 analyzer 제안.

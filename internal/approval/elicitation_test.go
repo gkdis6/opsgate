@@ -25,6 +25,7 @@ import (
 func approvalRequest() tool.ConfirmRequest {
 	return hashedRequest(tool.ConfirmRequest{
 		Caller: tool.Caller{User: "github:operator", Transport: "http", Scopes: []string{config.ScopeWrite}},
+		Run:    func(context.Context) (string, error) { return "restarted", nil },
 		Tool:   "restart", Summary: "Restart nginx.service", Args: map[string]any{"unit": "nginx.service"},
 	})
 }
@@ -293,7 +294,11 @@ func TestRedactedArgumentBinding(t *testing.T) {
 				params.InputResponses = mcp.InputResponseMap{approvalInputID: &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}}
 			}
 			result := approvalCall(t, cs, params)
-			if !result.IsError || result.NeedsInput() || applies.Load() != 0 {
+			expected := int32(0)
+			if method == "web" {
+				expected = 1
+			}
+			if !result.IsError || result.NeedsInput() || applies.Load() != expected {
 				t.Fatalf("colliding target accepted: %+v; applies %d", result, applies.Load())
 			}
 		})

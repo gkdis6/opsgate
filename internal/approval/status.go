@@ -1,0 +1,51 @@
+package approval
+
+import (
+	"context"
+	"encoding/json"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/gkdis6/opsgate/internal/tool"
+)
+
+type statusInput struct {
+	ApprovalID string `json:"approval_id" jsonschema:"ID returned with a web approval link"`
+}
+
+// RegisterStatus exposes only the requester's approval records. Add supplies
+// scope, per-caller tool policy, timeout, audit and output bounds.
+func (m *Manager) RegisterStatus(s *mcp.Server, env *tool.Env) {
+	if m.browser == nil {
+		return
+	}
+	tool.Add(s, env, tool.Spec{Name: "approval_status", Title: "Approval status", ReadOnly: true,
+		Description: "Read your web approval's status and execution result using approval_id."},
+		func(_ context.Context, c tool.Caller, in statusInput) (string, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			m.sweepLocked()
+			p := m.approvals[in.ApprovalID]
+			if !validID(in.ApprovalID) || p == nil || p.user != c.User {
+				return "", tool.Denied("unknown or expired approval")
+			}
+			status := "pending"
+			switch {
+			case p.decision == "rejected":
+				status = "rejected"
+			case p.finished && p.failed:
+				status = "not_applied"
+			case p.finished:
+				status = "applied"
+			case p.decision == "approved":
+				status = "running"
+			}
+			result, err := json.Marshal(struct {
+				Tool   string `json:"tool"`
+				Target string `json:"target"`
+				Status string `json:"status"`
+				Result string `json:"result,omitempty"`
+			}{p.tool, p.target, status, p.result})
+			return string(result), err
+		})
+}

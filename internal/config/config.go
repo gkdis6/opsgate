@@ -182,6 +182,9 @@ type StaticToken struct {
 
 // Approval configures human confirmation of write tools.
 type Approval struct {
+	// Wait bounds how long an MCP call waits for web approval and execution.
+	// Zero returns the link immediately; the maximum is 55 seconds.
+	Wait time.Duration `yaml:"wait"`
 	// TTL bounds how long a pending web approval stays valid.
 	TTL time.Duration `yaml:"ttl"`
 	// Web enables browser approval links.
@@ -270,6 +273,9 @@ func Parse(data []byte, name string) (Config, error) {
 	// when the file keeps builtin and does not decide itself.
 	if cfg.Mode != "" && cfg.Auth.Mode == AuthBuiltin && lookup(&root, "approval", "web") == nil {
 		cfg.Approval.Web = true
+	}
+	if cfg.Approval.Web && lookup(&root, "approval", "wait") == nil {
+		cfg.Approval.Wait = 25 * time.Second
 	}
 	if cfg.Approval.Web && lookup(&root, "approval", "require_web") == nil {
 		cfg.Approval.RequireWeb = true

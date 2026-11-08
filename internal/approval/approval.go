@@ -38,6 +38,7 @@ type Manager struct {
 	audit       *audit.Logger
 	requireWeb  bool
 	ttl         time.Duration
+	wait        time.Duration
 	publicURL   string
 	browser     BrowserAuth
 	approvals   map[string]*pending
@@ -61,9 +62,13 @@ type pending struct {
 	hash                                            [sha256.Size]byte
 	expires                                         time.Time
 	decision                                        string
-	used                                            bool
+	mcp                                             bool
+	done                                            chan struct{}
+	finished                                        bool
+	failed                                          bool
+	retainUntil                                     time.Time
 	window                                          time.Duration
-	// run applies a direct write once approved; no MCP client can claim it.
+	// run applies a write once approved, outside the manager lock.
 	run    func(context.Context) (string, error)
 	result string
 }
@@ -72,7 +77,7 @@ type pending struct {
 // publicURL is the origin used to build approval links.
 func New(cfg config.Approval, publicURL string, browser BrowserAuth, logger *audit.Logger) *Manager {
 	m := &Manager{
-		audit: logger, requireWeb: cfg.RequireWeb, ttl: cfg.TTL, publicURL: strings.TrimRight(publicURL, "/"), browser: browser,
+		audit: logger, requireWeb: cfg.RequireWeb, ttl: cfg.TTL, wait: cfg.Wait, publicURL: strings.TrimRight(publicURL, "/"), browser: browser,
 		approvals: make(map[string]*pending), used: make(map[string]time.Time), now: time.Now,
 		window: cfg.Window, windowTools: slices.Clone(cfg.WindowTools), grants: make(map[grantKey]time.Time),
 	}
@@ -125,7 +130,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	m.sweepLocked()
 	granted := m.windowEligible(r.Tool, r.NoWindow) && m.now().Before(m.grants[grantKey{r.Caller.User, r.Tool, r.Target}])
 	m.mu.Unlock()
-	if granted {
+	if granted && r.ApprovalID == "" {
 		return "window", nil
 	}
 	if r.FullReviewRequired && (r.Caller.Transport != "http" || m.browser == nil) {
@@ -148,19 +153,11 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	if r.ApprovalID != "" {
 		defer m.mu.Unlock()
 		p := m.approvals[r.ApprovalID]
-		if p == nil || p.run != nil || p.user != r.Caller.User || p.transport != r.Caller.Transport || p.tool != r.Tool || p.hash != hash ||
-			p.summary != r.Summary || p.target != r.Target || p.noWindow != r.NoWindow || p.fullReviewRequired != r.FullReviewRequired || p.used {
+		if p == nil || !p.mcp || p.user != r.Caller.User || p.transport != r.Caller.Transport || p.tool != r.Tool || p.hash != hash ||
+			p.summary != r.Summary || p.target != r.Target || p.noWindow != r.NoWindow || p.fullReviewRequired != r.FullReviewRequired {
 			return "web", tool.Denied("invalid or expired approval")
 		}
-		switch p.decision {
-		case "approved":
-			p.used = true
-			return "web", nil
-		case "rejected":
-			return "web", tool.Denied("rejected by human")
-		default:
-			return "web", m.pendingError(p)
-		}
+		return "web", m.outcomeLocked(p)
 	}
 	m.mu.Unlock()
 
@@ -170,22 +167,27 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	if r.Run == nil {
+		return "web", tool.Denied("write runner unavailable")
+	}
 	if m.browser == nil {
 		return "", tool.Denied("no human confirmation channel is available")
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.sweepLocked()
-	// Bound all live records, including decided approvals awaiting consumption.
+	// Bound all live records, including running and retained outcomes.
 	if len(m.approvals) >= 100 {
+		m.mu.Unlock()
 		return "web", tool.Denied("too many pending approvals; try again after expiry")
 	}
 	id, err := randomToken(16)
 	if err != nil {
+		m.mu.Unlock()
 		return "web", tool.Denied("cannot create approval")
 	}
 	csrf, err := randomToken(32)
 	if err != nil || m.approvals[id] != nil {
+		m.mu.Unlock()
 		return "web", tool.Denied("cannot create approval")
 	}
 	p := &pending{
@@ -194,9 +196,26 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 		target: r.Target, noWindow: r.NoWindow,
 		fullReviewRequired: r.FullReviewRequired,
 		expires:            m.now().Add(m.ttl),
+		run:                r.Run, mcp: true, done: make(chan struct{}),
 	}
 	m.approvals[id] = p
-	return "web", m.pendingError(p)
+	m.mu.Unlock()
+	if r.Pending != nil {
+		r.Pending()
+	}
+	if m.wait > 0 {
+		timer := time.NewTimer(m.wait)
+		defer timer.Stop()
+		select {
+		case <-p.done:
+		case <-ctx.Done():
+			return "web", ctx.Err()
+		case <-timer.C:
+		}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return "web", m.outcomeLocked(p)
 }
 
 func supportsElicitation(req *mcp.CallToolRequest) bool {
@@ -212,15 +231,22 @@ func (m *Manager) pendingError(p *pending) error {
 	if p.target != "" {
 		target = " for " + p.target
 	}
-	return fmt.Errorf("%w%s: ask the user to open %s/approve/%s, then call %s again with the same arguments plus approval_id %q. This approval expires at %s",
-		tool.ErrApprovalPending, target, m.publicURL, p.id, p.tool, p.id, p.expires.UTC().Format(time.RFC3339Nano))
+	return fmt.Errorf("%w%s: ask the user to open %s/approve/%s, the change runs as soon as they approve. To read the result, call approval_status with approval_id %q (or call %s again with the same arguments plus approval_id %q). This approval expires at %s",
+		tool.ErrApprovalPending, target, m.publicURL, p.id, p.id, p.tool, p.id, p.expires.UTC().Format(time.RFC3339Nano))
 }
 
 // Sweep during access so managers need no background goroutine or shutdown API.
 func (m *Manager) sweepLocked() {
 	now := m.now()
 	for id, p := range m.approvals {
-		if !now.Before(p.expires) {
+		if p.decision == "approved" && !p.finished {
+			continue
+		}
+		expires := p.expires
+		if p.retainUntil.After(expires) {
+			expires = p.retainUntil
+		}
+		if !now.Before(expires) {
 			delete(m.approvals, id)
 		}
 	}
@@ -265,4 +291,32 @@ func displayTitle(r tool.ConfirmRequest) string {
 		return t
 	}
 	return r.Tool
+}
+
+// outcomeLocked never authorizes an apply in the calling MCP request.
+func (m *Manager) outcomeLocked(p *pending) error {
+	if p.decision == "rejected" {
+		return tool.Denied("rejected by human")
+	}
+	if p.finished {
+		return &tool.ApprovalResult{Text: p.result, Failed: p.failed}
+	}
+	return m.pendingError(p)
+}
+
+// ResolveApproval retrieves the original invocation, even if applying it changed
+// the current plan. Its hash binds all original arguments (including the target);
+// only the stored runner can apply, after checking the approved summary/target.
+func (m *Manager) ResolveApproval(ctx context.Context, r tool.ConfirmRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sweepLocked()
+	p := m.approvals[r.ApprovalID]
+	if !validID(r.ApprovalID) || p == nil || !p.mcp || p.user != r.Caller.User || p.transport != r.Caller.Transport || p.tool != r.Tool || p.hash != r.ArgsHash {
+		return tool.Denied("invalid or expired approval")
+	}
+	return m.outcomeLocked(p)
 }

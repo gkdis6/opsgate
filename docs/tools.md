@@ -14,10 +14,11 @@ Kubernetes and note read tools require `ops:read`. Tools are registered only whe
 | `k8s_service_check` | Service host name DNS configuration and ready backends; configuration check only (no DNS queries or connections, NetworkPolicies not evaluated) | Required `namespace` (client namespace), `host` (lowercase DNS labels, max 253 bytes; IP addresses rejected); optional `port` (Service port number or name), `pod` (DNS settings in the client namespace). Assumes `cluster.local`; accepts explicit Service names with other domains. Shows resolver candidates, Service, up to 500 selector pods and EndpointSlices; suggests same-name Services in allowed namespaces (up to 10). |
 | `k8s_logs` | Pod logs; registered if any cluster has `allow_logs=true` | Required `namespace`, `pod`; `container` may be omitted only if exactly one regular/init/ephemeral container exists; `tail=200`, clamped to 1–`max_log_lines` (default cap 500); `since=""` (no time filter), positive Go duration up to 168h; `previous=false`; `grep=""`, literal case-insensitive substring; stream capped at 1 MiB |
 | `k8s_events` | Namespace events | `namespace=""` (all allowed namespaces); `warnings_only=true`; `since="1h"`, positive Go duration up to 168h; `limit=50`, clamped to 1–500 |
+| `action_link` | Read-only: validate a catalog action with its current Plan and return approval URL, label and summary; never applies | Required `tool`, `arguments` object; optional `source` (`ai` default, or `rule`); `ops:read`; registered when an enabled catalog action and per-cluster `action_approval_url` exist |
 | `k8s_remediation_options` | Read-only: image-restore approval links for a Pod failing to pull its image, backed by a non-deleting owned ReplicaSet with a ready owned Pod whose target container is ready/running the reported image | Required `namespace`, `name` (Pod); no actions unless `restore_image` and `action_approval_url` are set; at most 5 links |
 | `k8s_rollout_restart` | Restart a workload by updating its pod template | Required `kind` (deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` gate |
 | `k8s_scale` | Set workload replicas | Required `kind` (deployment/statefulset), `namespace`, `name`, `replicas` (0–`max_replicas`, default cap 10); `scale` gate |
-| `k8s_delete_pod` | Delete a specific pod with UID precondition | Required `namespace`, `name`; `delete_pod` gate |
+| `k8s_delete_pod` | Delete a specific pod with UID precondition | Required `namespace`, `name`; `delete_pod` gate; links require a controller owner; MCP warns for an unowned pod |
 | `k8s_restore_image` | Restore a Deployment container's image observed in a ready/running container of a ready Pod owned by a non-deleting ReplicaSet; only the image changes and configuration is not rolled back | Required `namespace`, `name` (Deployment), `container`, `expected_image` (exact current image), `image` (exact source image); `restore_image` gate; rechecked before patching; no approval window |
 | `note_search` | Literal note content/filename search with snippets and scanned counts | Required `query` (1–4096 UTF-8 bytes); optional `folder`, `tag`, `case_sensitive=false`; `limit=20`, max 100 |
 | `note_read` | Note text and file/line metadata | Required `path`, `.md` optional; `offset_line=1`, `max_lines=400`, max 2000 |
@@ -73,3 +74,10 @@ When web approval is enabled, read-only `approval_status` (`ops:read`) takes req
 Read tools accept up to 16 KiB of raw JSON arguments. Write arguments default to 16 KiB; `note_create`, `note_append` and `note_replace` allow 528 KiB. JSON escaping counts toward these limits. Approval summaries are bounded by `max(64 KiB, argument limit + 16 KiB)`: 64 KiB for default tools, 544 KiB for note content tools. Redacted display arguments must fit the tool's argument limit. Note previews have a separate approximately 8 KiB display bound.
 
 The shared wrapper omits provider output above 4 MiB entirely, then redacts text before truncating it to `server.max_output_bytes` (default 64 KiB). Errors follow the same path. Smaller provider-specific collection limits still apply. Deadlines are cooperative; write planning and applying each receive a separate `server.tool_timeout` (default 30s), excluding human waiting time.
+
+`action_link` supports only restart, image restore, scale and controller-owned pod
+deletion. It checks server registration, the caller's tool policy, typed catalog
+arguments and live target allowlists without requiring `ops:write`. It rejects
+extra arguments (including `source` inside `arguments` or `approval_id`) and
+masked values. Links use `/approve/action/{tool}`; approving still requires the
+browser user's write scope and a fresh review. See [approval](approval.md#catalog-action-links).

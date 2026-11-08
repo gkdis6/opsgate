@@ -24,7 +24,9 @@ import (
 type Caller struct {
 	User      string
 	Transport string
-	Scopes    []string
+	// Source records link suggestion provenance, never a tool argument.
+	Source string
+	Scopes []string
 	// Tools optionally restricts this identity to matching tool-name globs.
 	Tools []string
 }

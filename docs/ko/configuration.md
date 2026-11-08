@@ -240,7 +240,7 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 
 쓰기 이벤트에는 마스킹한 `plan`(사람에게 보여 준 요약)과 `approval`을 추가로 포함할 수 있습니다. `approval`은 확인 방식인 `elicitation`, `web`, `window` 중 하나이며, 거부되거나 대기 중인 호출에도 포함할 수 있습니다. `pending`은 사람의 입력을 기다리는 상태입니다. 웹 승인은 대기 전에 텍스트 출력 없이 `pending` 생성 이벤트를 기록하며 결과 조회는 적용 이벤트를 중복 기록하지 않습니다. 클라이언트 내 확인의 입력 요청은 텍스트 출력을 반환하지 않습니다. 계획(Plan)과 실행(Apply)에는 각각 별도의 도구 제한 시간을 적용합니다. 사람의 확인에는 더 오래 걸릴 수 있습니다.
 
-웹 승인 결정은 별도의 감사 이벤트로 기록합니다. `outcome`은 `approved` 또는 `rejected`이며, 사용자, 도구와 8글자의 `args.approval_id_prefix`만 포함합니다. 여러 차례 왕복하는 승인 과정에서 검증을 거부하면 요청 상태 없이 `denied` 이벤트를 기록합니다. 도구 출력 본문은 저장하지 않습니다. 감사 로그 쓰기에 실패하면 도구 호출을 실패시키지 않고 stderr에 오류를 보고합니다. 감사 로그는 변조를 막지 못하며 민감한 정보가 남아 있을 수 있으므로, 로그를 보호하고 순환 관리하세요.
+웹 승인 결정은 별도의 감사 이벤트로 기록합니다. `outcome`은 `approved` 또는 `rejected`이며, 사용자, 도구와 8글자의 `args.approval_id_prefix`만 포함합니다. 여러 차례 왕복하는 승인 과정에서 검증을 거부하면 요청 상태 없이 `denied` 이벤트를 기록합니다. 링크 승인 생성·결정·실행에는 도구 인자와 별개인 선택 필드 `source`(`rule` 또는 `ai`)도 기록합니다. 도구 출력 본문은 저장하지 않습니다. 감사 로그 쓰기에 실패하면 도구 호출을 실패시키지 않고 stderr에 오류를 보고합니다. 감사 로그는 변조를 막지 못하며 민감한 정보가 남아 있을 수 있으므로, 로그를 보호하고 순환 관리하세요.
 
 승인 시간 창을 만들 때는 원래 승인 방식과 `args.window`/`args.expires_at`을 담은 `window_granted`를 기록합니다. 이후 이 권한을 사용하는 호출에는 `approval: window`를 기록합니다.
 
@@ -274,7 +274,11 @@ Discord 출력은 `watch.outputs[].language: ko|en`(기본 en), 분석 보고서
 원본 `reason`·`summary`는 보존하고 webhook의 `display`에 번역된 설명을 추가합니다.
 Kubernetes `restore_image: ["namespace/deployment"]`와
 `action_approval_url: https://mcp.example.com`을 설정하면 검증된 이전 이미지 복원 승인을
-활성화합니다. 기본 비활성이며 [분석기 문서](analyzer.md)를 참고하세요.
+활성화합니다. `action_approval_url`은 `action_link`가 네 가지 카탈로그 조치에
+사용하는 클러스터별 HTTPS 출처이기도 합니다. 새 설정 없이 이 URL과
+`rollout_restart`, `restore_image`, `scale`, `delete_pod` 중 하나 이상을
+설정하면 되며, 서버 도구 정책이 등록을 계속 제어합니다. 기본 비활성이며
+[분석기 문서](analyzer.md)를 참고하세요.
 
 ## 명령줄
 

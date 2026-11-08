@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/gkdis6/opsgate/internal/action"
 	"github.com/gkdis6/opsgate/internal/tool"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -219,9 +219,12 @@ func (p *provider) remediation(ctx context.Context, _ tool.Caller, in remediatio
 			if err != nil {
 				continue
 			}
-			query := url.Values{"container": {c.Name}, "expected_image": {c.Image}, "image": {image}}
-			link := strings.TrimRight(p.cfg.ActionApprovalURL, "/") + "/approve/restore-image/" + url.PathEscape(p.cfg.Name) + "/" + url.PathEscape(d.Namespace) + "/" + url.PathEscape(d.Name) + "?" + query.Encode()
-			options = append(options, imageRestoreOption{Label: "이미지 복구 승인", URL: link, Container: c.Name, CurrentImage: c.Image, Image: image, Source: good.Name})
+			link, err := action.URL(p.cfg.ActionApprovalURL, "k8s_restore_image", map[string]any{"cluster": p.cfg.Name, "namespace": d.Namespace, "name": d.Name, "container": c.Name, "expected_image": c.Image, "image": image}, "rule")
+			if err != nil {
+				continue
+			}
+			entry, _ := action.Lookup("k8s_restore_image")
+			options = append(options, imageRestoreOption{Label: entry.Label("en"), URL: link, Container: c.Name, CurrentImage: c.Image, Image: image, Source: good.Name})
 			if len(options) >= 5 {
 				break
 			}

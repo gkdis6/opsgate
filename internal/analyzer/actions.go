@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/gkdis6/opsgate/internal/action"
 	"github.com/gkdis6/opsgate/internal/alert"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -32,6 +33,7 @@ func remediationLinks(c Config, out *mcp.CallToolResult) []alert.ActionLink {
 			raw = rest
 		}
 		var body struct {
+			URL     string `json:"url"`
 			Actions []struct {
 				URL string `json:"url"`
 			} `json:"actions"`
@@ -39,23 +41,41 @@ func remediationLinks(c Config, out *mcp.CallToolResult) []alert.ActionLink {
 		if json.Unmarshal([]byte(raw), &body) != nil {
 			continue
 		}
-		for _, action := range body.Actions {
-			u, err := url.Parse(action.URL)
-			if err != nil || len(action.URL) > 512 || u.Scheme != "https" || u.Host != origin.Host || u.User != nil || u.Fragment != "" || !strings.HasPrefix(u.Path, "/approve/restore-image/") {
+		urls := []string{}
+		if body.URL != "" {
+			urls = append(urls, body.URL)
+		}
+		for _, item := range body.Actions {
+			urls = append(urls, item.URL)
+		}
+		for _, link := range urls {
+			u, err := url.Parse(link)
+			if err != nil || len(link) > 16384 || u.Scheme != "https" || u.Scheme != origin.Scheme || u.Host != origin.Host || u.User != nil || u.Fragment != "" {
 				continue
 			}
-			label := "조치 승인: 이미지 복구"
-			if c.Report.Language == "en" {
-				label = "Approve action: restore image"
+			if !strings.HasPrefix(u.Path, "/approve/action/") && !strings.HasPrefix(u.Path, "/approve/restore-image/") {
+				continue
+			}
+			entry, _, source, err := action.Parse(u)
+			if err != nil {
+				continue
+			}
+			label := entry.Label(c.Report.Language)
+			if source == "ai" {
+				if c.Report.Language == "en" {
+					label = "AI suggestion: " + label
+				} else {
+					label = "AI 제안: " + label
+				}
 			}
 			duplicate := false
 			for _, old := range links {
-				if old.URL == action.URL {
+				if old.URL == link {
 					duplicate = true
 				}
 			}
 			if !duplicate {
-				links = append(links, alert.ActionLink{Label: label, URL: action.URL})
+				links = append(links, alert.ActionLink{Label: label, URL: link})
 			}
 			if len(links) >= 5 {
 				return links

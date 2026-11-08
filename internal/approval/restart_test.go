@@ -227,7 +227,7 @@ func TestRestartApprovalCannotBeClaimedByClient(t *testing.T) {
 }
 
 func TestRestartURLEscapesAndRoutes(t *testing.T) {
-	if got := RestartURL("https://ops.example/", "a/b", "deployment", "apps", "we b"); got != "https://ops.example/approve/restart/a%2Fb/deployment/apps/we%20b" {
+	if got := RestartURL("https://ops.example/", "a/b", "deployment", "apps", "we b"); got != "https://ops.example/approve/action/k8s_rollout_restart?cluster=a%2Fb&kind=deployment&name=we+b&namespace=apps&source=rule" {
 		t.Fatalf("url = %q", got)
 	}
 	f := newRestartFixture(t, writer())

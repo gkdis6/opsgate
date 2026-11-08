@@ -136,14 +136,15 @@ Kubernetes 변경은 허용 목록에 대상을 적기 전까지 모두 꺼져 �
 | 변경 | 켜는 설정 | MCP 클라이언트에서 요청 | 미리 만들어진 승인 링크 |
 | --- | --- | --- | --- |
 | 워크로드 재시작 | `rollout_restart` | 가능 | `watch.approval_url`을 설정하면 watch 알림의 재시작 제안에 붙음 ([조건](docs/ko/watch.md#힌트와-재시작-제안)) |
-| 파드 수 조정 | `scale` (`max_replicas`로 상한) | 가능 | 없음 |
-| 파드 삭제 | `delete_pod` | 가능 | 없음 |
+| 파드 수 조정 | `scale` (`max_replicas`로 상한) | 가능 | `action_approval_url` 설정 후 `action_link` / 분석기에서 제공 |
+| 파드 삭제 | `delete_pod` | 가능 | 컨트롤러 소유 파드만, `action_approval_url` 설정 후 `action_link` / 분석기에서 제공 |
 | 이전 이미지 복원 | `restore_image`와 `action_approval_url` | 가능 | `k8s_remediation_options`가 만들며, 분석기가 보고서에 버튼으로 붙임 ([자세히](#실패한-이미지-복원-선택)) |
 
 미리 만들어진 링크를 열면 브라우저 로그인 후 새 실행 계획이 나오고, 승인 버튼을
 누르기 전에는 아무것도 바뀌지 않습니다. 승인 시간 창은 이 링크에 적용되지 않습니다.
-분석기 보고서는 Deployment 수정 같은 다른 조치를 글로 권장할 수 있지만, 직접 실행하지
-않으며 서버가 검증한 링크만 버튼이 됩니다.
+분석기는 조회 전용 `action_link`로만 해결 조치를 제안하며, 영향이 가장 작은
+카탈로그 조치를 우선합니다. 직접 실행하지 않고 서버가 검증한 링크만 버튼이
+되며 규칙·AI 출처를 표시합니다. [승인 문서](docs/ko/approval.md#카탈로그-조치-링크)를 참고하세요.
 
 
 

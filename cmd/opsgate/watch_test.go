@@ -48,7 +48,7 @@ func TestAddApprovalLink(t *testing.T) {
 		t.Fatalf("link without a base: %q", a.Restart.URL)
 	}
 	addApprovalLink(&a, "https://ops.example")
-	if a.Restart.URL != "https://ops.example/approve/restart/main/deployment/apps/web" {
+	if a.Restart.URL != "https://ops.example/approve/action/k8s_rollout_restart?cluster=main&kind=deployment&name=web&namespace=apps&source=rule" {
 		t.Fatalf("link = %q", a.Restart.URL)
 	}
 	plain := alert.Alert{Cluster: "main"}

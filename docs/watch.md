@@ -148,7 +148,11 @@ page, so a chat button can open it. The link holds no secret. Opening it needs
 browser sign-in, the same scope and tool rules as the MCP path, and a fresh plan.
 Only pressing Approve restarts the workload, once, and only if the plan is
 unchanged. An approval window never covers this path. The server must use web
-approval with built-in sign-in. Other writes cannot run this way.
+approval with built-in sign-in. New restart URLs use the shared catalog builder:
+`/approve/action/k8s_rollout_restart?...&source=rule`. The page shows “Restart
+workload” and “Suggested by: rule”. Historical restart links still work as
+aliases. Other catalog actions can be suggested through `action_link` and the
+analyzer; watch's restart conditions above are unchanged.
 
 ## Webhook payload
 

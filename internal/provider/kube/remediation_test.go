@@ -121,7 +121,7 @@ func TestVerifiedRestoreOptionsAndApply(t *testing.T) {
 	var result struct {
 		Actions []imageRestoreOption `json:"actions"`
 	}
-	if json.Unmarshal([]byte(raw), &result) != nil || len(result.Actions) != 1 || !strings.HasPrefix(result.Actions[0].URL, "https://ops.example/approve/restore-image/main/prod/web?") || result.Actions[0].Image != in.Image {
+	if json.Unmarshal([]byte(raw), &result) != nil || len(result.Actions) != 1 || !strings.HasPrefix(result.Actions[0].URL, "https://ops.example/approve/action/k8s_restore_image?") || result.Actions[0].Image != in.Image {
 		t.Fatal(raw)
 	}
 	for _, action := range client.Actions() {

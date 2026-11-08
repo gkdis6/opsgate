@@ -32,7 +32,8 @@ In order. Each step still goes through security review.
 1. **Remove the Dev provider** (`dev_*` tools, `opsgate dev-runner`, the
    `dev:run` scope). Coding agents are outside the focus above. Done,
    unreleased; see the [changelog](../CHANGELOG.md).
-2. **Common action gate.** An action catalog shared by alerts and MCP tools;
+2. **Common action gate.** An action catalog shared by alerts and MCP tools
+   (action catalog and links: done, unreleased);
    execution on approval: done, unreleased; an
    approval inbox page with Web Push, with messenger alerts linking to it.
 3. **More choices per failure.** Rule-based suggestions for more failure states

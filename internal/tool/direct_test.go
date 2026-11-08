@@ -51,7 +51,7 @@ func TestDirectChecksAndAudit(t *testing.T) {
 	d := directFixture(t, WriteSpec{Name: "w", Direct: true}, env, &summary, &applied)
 	ctx := context.Background()
 	raw := json.RawMessage(`{"target":"web"}`)
-	allowed := Caller{User: "a", Transport: "web", Scopes: []string{config.ScopeWrite}}
+	allowed := Caller{User: "a", Transport: "web", Source: "ai", Scopes: []string{config.ScopeWrite}}
 
 	for name, c := range map[string]Caller{
 		"no scope":  {User: "a", Transport: "web", Scopes: []string{config.ScopeRead}},
@@ -83,9 +83,32 @@ func TestDirectChecksAndAudit(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := string(b)
-	for _, want := range []string{`"outcome":"denied"`, `"outcome":"ok"`, `"transport":"web"`, `"approval":"web"`, `"restart web"`} {
+	for _, want := range []string{`"outcome":"denied"`, `"outcome":"ok"`, `"transport":"web"`, `"approval":"web"`, `"restart web"`, `"source":"ai"`} {
 		if !strings.Contains(log, want) {
 			t.Fatalf("audit lacks %s: %s", want, log)
 		}
+	}
+}
+
+func TestDirectLinkValidationCannotAuthorizeWrite(t *testing.T) {
+	summary, applied := "plan", 0
+	env := &Env{Timeout: time.Second}
+	d := directFixture(t, WriteSpec{Name: "w", Direct: true}, env, &summary, &applied)
+	reader := Caller{Scopes: []string{config.ScopeRead}}
+	raw := json.RawMessage(`{"target":"web"}`)
+	if _, _, err := d.ValidateLink(context.Background(), reader, raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := d.Plan(context.Background(), reader, raw); !errors.Is(err, ErrDenied) {
+		t.Fatal("read validator weakened write plan")
+	}
+	if _, err := d.Run(context.Background(), reader, raw, summary); !errors.Is(err, ErrDenied) || applied != 0 {
+		t.Fatal("read validator authorized apply")
+	}
+	if _, _, err := d.ValidateLink(context.Background(), reader, json.RawMessage(`{"target":1}`)); err == nil {
+		t.Fatal("wrong input type allowed")
+	}
+	if _, _, err := d.ValidateLink(context.Background(), reader, json.RawMessage(`{"target":"web","extra":1}`)); err == nil {
+		t.Fatal("unknown field allowed")
 	}
 }

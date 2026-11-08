@@ -55,6 +55,7 @@ const splitWriteMessage = "change is too large to review in the client; split it
 
 type pending struct {
 	id, csrf, user, transport, tool, title, summary string
+	source                                          string
 	target                                          string
 	noWindow                                        bool
 	fullReviewRequired                              bool

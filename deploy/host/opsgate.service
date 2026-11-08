@@ -1,0 +1,43 @@
+# opsgate on a host without Kubernetes, with the optional host provider.
+# Install: copy to /etc/systemd/system/, create the opsgate user, then
+#   systemctl daemon-reload && systemctl enable --now opsgate
+# Restarts go through systemd's D-Bus API and polkit (50-opsgate.rules), so no
+# sudo and no extra privileges are needed; NoNewPrivileges stays on.
+[Unit]
+Description=opsgate MCP server (host provider)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=opsgate
+Group=opsgate
+# Read journals for host_unit_logs. Add the group that owns the Docker socket
+# proxy's socket here if you use one.
+SupplementaryGroups=systemd-journal
+ExecStart=/usr/local/bin/opsgate -transport http -config /etc/opsgate/opsgate.yaml
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+StateDirectory=opsgate
+StateDirectoryMode=0700
+LogsDirectory=opsgate
+LogsDirectoryMode=0700
+UMask=0077
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

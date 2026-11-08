@@ -1,0 +1,32 @@
+# opsgate watch on a host without Kubernetes. It reads unit and container
+# state only; it never restarts anything, so it needs no polkit rule.
+[Unit]
+Description=opsgate watch (host provider)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=opsgate
+Group=opsgate
+ExecStart=/usr/local/bin/opsgate watch -config /etc/opsgate/opsgate.yaml
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -181,6 +181,15 @@ kubectl -n opsgate rollout restart deployment/opsgate
 허용된 일회용 대상에 읽기 작업을 하나 실행하고,
 쓰기를 활성화했다면 승인된 쓰기 작업도 하나 실행하세요.
 
+## Kubernetes 없는 서버에 설치
+
+opsgate를 별도 `opsgate` 계정의 systemd 서비스로 실행하세요.
+[`deploy/host/opsgate.service`](../../deploy/host/opsgate.service)를 쓰고, 알림을 받으려면
+[`opsgate-watch.service`](../../deploy/host/opsgate-watch.service)도 씁니다. 유닛과 컨테이너
+도구가 필요하면 선택 기능인 [호스트 provider](host.md)를 켜고, 재시작용 polkit 규칙을 설치하고,
+Docker 앞에 소켓 프록시를 두세요. 이 경우 `mode: kubernetes`를 쓰지 말고 `http`, `auth`,
+`approval`을 직접 설정하세요.
+
 ## 업그레이드와 로컬 빌드
 
 릴리스 노트를 읽고 새 아티팩트를 먼저 검증하세요. Kubernetes 배포를 중지한 동안 OAuth 상태, 설정, 감사 로그를 안전하게 백업하고, 검증된 이미지 다이제스트로 바꾼 뒤 적용하세요. `Recreate`는 의도적으로 짧은 중단을 만듭니다. 트래픽을 다시 받기 전에 프로브, 검색, 로그인, 정책 검사를 확인하세요. 롤백을 위해 이전의 검증된 이미지와 호환되는 상태 백업을 보관하세요. 롤백에는 이전 버전과 호환되는 상태 복원이 필요할 수 있습니다. 구버전과 새 버전 프로세스를 같은 상태 파일에 동시에 연결하지 마세요.

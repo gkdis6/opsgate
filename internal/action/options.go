@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gkdis6/opsgate/internal/hosttarget"
 	"github.com/gkdis6/opsgate/internal/redact"
 )
 
@@ -51,5 +52,19 @@ func OptionsURL(base, cluster, namespace, pod, workload string) (string, error) 
 		u.RawQuery = url.Values{"workload": {workload}}.Encode()
 	}
 	u.Path = "/approve/options/" + cluster + "/" + namespace + "/" + pod
+	return u.String(), nil
+}
+
+// HostOptionsURL links to live choices for a host unit or container. It is
+// navigation only; every action behind it still needs its own approval.
+func HostOptionsURL(base, kind, name string) (string, error) {
+	u, err := url.Parse(base)
+	if err != nil || u == nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || (base != "" && (u.Host == "" || u.Scheme != "https")) {
+		return "", fmt.Errorf("approval base must be an HTTPS origin")
+	}
+	if !hosttarget.Valid(kind, name) {
+		return "", fmt.Errorf("invalid host options target")
+	}
+	u.Path = "/approve/host-options/" + kind + "/" + name
 	return u.String(), nil
 }

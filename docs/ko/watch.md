@@ -38,6 +38,13 @@ watch:
 
 `watch.webhook_url`, `watch.secret_file`, `watch.allow_private_http`는 제거되었습니다. 이 키가 있으면 설정을 거부합니다. `watch.outputs`의 `type: webhook` 항목으로 옮기고 `url`, `secret_file`, `allow_private_http`를 대상별로 설정하세요. 기본 웹훅 JSON 본문과 HMAC 서명은 유지됩니다.
 
+## 호스트 알림
+
+선택 기능인 [호스트 provider](host.md)를 켜면 `opsgate watch`가 systemd 유닛과 Docker
+컨테이너도 조회해 `UnitFailed`, `UnitRestarted`, `ContainerUnhealthy`, `ContainerExited`,
+`ContainerRestarted` 경고를 보냅니다. cluster와 namespace는 `host`이므로 그룹에서는 `host`나
+`*`로 맞춥니다. 호스트 provider를 켜면 watch에 Kubernetes가 없어도 됩니다.
+
 ## 그룹
 
 `watch.groups`로 알림의 namespace에 따라 수신 출력, 경고 필터와 묶음 주기를

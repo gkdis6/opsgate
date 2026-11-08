@@ -174,6 +174,15 @@ Verify discovery through the public origin, that unauthenticated `/mcp` requests
 are rejected, and that an unlisted identity cannot sign in. Exercise one
 read and, if enabled, one approved write against a disposable allowed target.
 
+## Install on a host without Kubernetes
+
+Run opsgate as a systemd service under its own `opsgate` account with
+[`deploy/host/opsgate.service`](../deploy/host/opsgate.service) and, for alerts,
+[`opsgate-watch.service`](../deploy/host/opsgate-watch.service). Enable the
+optional [host provider](host.md) for unit and container tools, install the
+polkit rule for restarts and put a socket proxy in front of Docker. Do not use
+`mode: kubernetes` there; set `http`, `auth` and `approval` explicitly.
+
 ## Upgrades and local builds
 
 Read release notes and verify the new artifacts first. For Kubernetes, stop the deployment and securely back up OAuth state, config and audit logs, then update the verified image digest and apply. `Recreate` intentionally incurs a short outage. Confirm probes, discovery, login and policy checks before resuming traffic. Keep the prior verified image and a compatible state backup for rollback; rollback may require restoring state compatible with the old version. Never run old and new processes against the same state file.

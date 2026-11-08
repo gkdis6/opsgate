@@ -132,12 +132,15 @@ func (m *Manager) notify(w http.ResponseWriter, r *http.Request) {
 			hint = n.WorkloadKind + "/" + n.WorkloadName
 		}
 		link, err := action.OptionsURL("", n.Cluster, n.Namespace, n.Pod, hint)
+		if n.HostKind != "" {
+			link, err = action.HostOptionsURL("", n.HostKind, n.Pod)
+		}
 		if err != nil {
 			reject(http.StatusBadRequest)
 			return
 		}
 		// JSON gives unambiguous field boundaries without retaining more input.
-		key, _ := json.Marshal([]string{n.Cluster, n.Namespace, n.Pod, n.Reason})
+		key, _ := json.Marshal([]string{n.HostKind, n.Cluster, n.Namespace, n.Pod, n.Reason})
 		sum := sha256.Sum256(key)
 		notices = append(notices, inboxNotice{Notice: n, ID: hex.EncodeToString(sum[:]), URL: link})
 	}

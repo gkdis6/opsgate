@@ -20,6 +20,12 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. 각 도구
 | `k8s_scale` | 워크로드 복제본 수 설정 | 필수 `kind`(deployment/statefulset), `namespace`, `name`, `replicas`(0–`max_replicas`, 기본 상한 10); `scale` 허용 설정 필요; 결과에 이전 파드 수로 돌아가는 되돌리기 링크가 붙음([되돌리기](approval.md#되돌리기)) |
 | `k8s_delete_pod` | UID 사전 조건을 적용한 특정 파드 삭제 | 필수 `namespace`, `name`; `delete_pod` 허용 설정 필요; 링크는 컨트롤러 소유 파드만 허용, MCP는 소유자 없는 파드에 경고 |
 | `k8s_restore_image` | 삭제 중이 아닌 소유 ReplicaSet의 준비된 파드에서 준비되어 실행 중인 컨테이너로 확인한 이미지로 Deployment 컨테이너 이미지 복원. 이미지만 바뀌고 설정은 되돌리지 않음 | 필수 `namespace`, `name`(Deployment), `container`, `expected_image`(현재 이미지와 정확히 일치), `image`(복원할 이미지와 정확히 일치); 선택 `revert: true`는 이 Deployment의 ReplicaSet 이력에 있는, 정상 동작이 확인되지 않은 이미지를 받음(되돌리기에 사용); `restore_image` 허용 설정 필요; 패치 직전 재확인; 승인 시간 창 없음; 결과에 되돌리기 링크가 붙음([되돌리기](approval.md#되돌리기)) |
+| `host_units` | 호스트 provider: 허용한 systemd 유닛의 상태 | 인자 없음. [호스트 provider](host.md) 참고 |
+| `host_unit_logs` | 호스트 provider: 유닛 하나의 마스킹한 저널 끝부분 | 필수 `unit`; `lines=100`, 최대 500 |
+| `host_restart_unit` | 호스트 provider: systemd와 polkit을 거쳐 유닛 하나 재시작 | 필수 `unit`; `systemd.units`와 `systemd.restart`에 모두 맞아야 함; 카탈로그 조치, 되돌리기 없음 |
+| `host_containers` | 호스트 provider: 허용한 Docker 컨테이너의 상태 | 인자 없음 |
+| `host_container_logs` | 호스트 provider: 컨테이너 하나의 마스킹한 로그 끝부분 | 필수 `container`; `lines=100`, 최대 500 |
+| `host_restart_container` | 호스트 provider: Docker 컨테이너 하나 재시작 | 필수 `container`; `docker.containers`와 `docker.restart`에 모두 맞아야 함; 실행 계획이 전체 컨테이너 ID를 고정; 카탈로그 조치, 되돌리기 없음 |
 | `note_search` | 노트 내용/파일명에서 문자열 그대로 검색, 발췌문과 검색한 항목 수 제공 | 필수 `query`(1–4096 UTF-8 바이트); 선택 `folder`, `tag`, `case_sensitive=false`; `limit=20`, 최대 100 |
 | `note_read` | 노트 텍스트와 파일/줄 메타데이터 | 필수 `path`, `.md` 생략 가능; `offset_line=1`, `max_lines=400`, 최대 2000 |
 | `note_list` | 폴더를 먼저 표시한 뒤 .md/.canvas/.base 파일 표시 | `folder=""`(볼트 루트), `recursive=false`, `limit=200`, 최대 1000; 잘림 여부 보고 |

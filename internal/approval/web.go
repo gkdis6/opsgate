@@ -25,6 +25,9 @@ func (m *Manager) Routes(mux *http.ServeMux) {
 		ui.Message(w, http.StatusForbidden, "Approval forbidden", "This request cannot be accepted from another site.")
 	}))
 	m.inboxRoutes(mux, protect)
+	mux.Handle("GET /approve/host-options/{kind}/{name}", securityHeaders(protect.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		m.browser.RequireUser(m.hostOptionsRequest).ServeHTTP(w, r)
+	}))))
 	mux.Handle("GET /approve/options/{cluster}/{namespace}/{pod}", securityHeaders(protect.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { m.browser.RequireUser(m.optionsRequest).ServeHTTP(w, r) }))))
 	for _, method := range []string{"GET", "POST"} {
 		mux.Handle(method+" /approve/{id}", securityHeaders(protect.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

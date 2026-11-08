@@ -102,6 +102,11 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 | `providers.kubernetes.scale` | `[]` | namespace/name glob이며, 비어 있으면 도구를 비활성화합니다 |
 | `providers.kubernetes.delete_pod` | `[]` | namespace/name glob이며, 비어 있으면 도구를 비활성화합니다 |
 | `providers.kubernetes.max_replicas` | `10` | 스케일 조정의 최댓값입니다. 음수는 허용하지 않으며, 0이면 복제본 수 0만 허용합니다 |
+| `providers.host.enabled` | `false` | 선택 기능인 [호스트 provider](host.md)를 켭니다. `mode: kubernetes`와 함께 쓰면 오류입니다 |
+| `providers.host.poll_interval` | `30s` | `opsgate watch`가 유닛과 컨테이너를 조회하는 주기(10s–5m) |
+| `providers.host.systemd.units` / `.restart` | `[]` / `[]` | 볼 수 있는 유닛과 재시작할 수 있는 유닛의 `path.Match` 패턴(둘 다 맞아야 재시작) |
+| `providers.host.docker.endpoint` | `""` | Docker 소켓 프록시의 `unix:///절대/소켓` 또는 `http://<루프백 IP>:<포트>` |
+| `providers.host.docker.containers` / `.restart` | `[]` / `[]` | 컨테이너 이름 패턴 또는 `compose:<project>/<service>` 패턴. 볼 수 있는 대상과 재시작할 수 있는 대상 |
 | `providers.note.enabled` | `false` | Markdown 폴더나 Obsidian 볼트용 note provider를 활성화하며, 노트 앱이나 CLI는 필요하지 않습니다 |
 | `providers.note.vault` | `""` | 이미 있는 볼트 디렉터리의 절대 경로이며, 모든 접근 범위는 os.Root로 제한합니다 |
 | `providers.note.exclude` | `[]` | 볼트 기준 상대 경로나 그 상위 경로에 일치하면 제외하는 추가 path.Match glob입니다. 점으로 시작하는 경로 구성 요소와 동기화 충돌 복사본은 항상 제외합니다 |

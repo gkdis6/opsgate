@@ -103,6 +103,11 @@ this prints `require_web: true` explicitly. Running that output with
 | `providers.kubernetes.scale` | `[]` | namespace/name globs; empty disables tool |
 | `providers.kubernetes.delete_pod` | `[]` | namespace/name globs; empty disables tool |
 | `providers.kubernetes.max_replicas` | `10` | Scale maximum; nonnegative, zero permits only zero replicas |
+| `providers.host.enabled` | `false` | Enable the optional [host provider](host.md); an error with `mode: kubernetes` |
+| `providers.host.poll_interval` | `30s` | How often `opsgate watch` polls units and containers (10s–5m) |
+| `providers.host.systemd.units` / `.restart` | `[]` / `[]` | `path.Match` globs of visible units and of units that may be restarted (both must match) |
+| `providers.host.docker.endpoint` | `""` | `unix:///absolute/socket` or `http://<loopback IP>:<port>` of a Docker socket proxy |
+| `providers.host.docker.containers` / `.restart` | `[]` / `[]` | Container name globs or `compose:<project>/<service>` globs; visible and restartable |
 | `providers.note.enabled` | `false` | Enable the note provider for a Markdown folder or Obsidian vault; no note app or CLI needed |
 | `providers.note.vault` | `""` | Absolute existing vault directory; all access confined with os.Root |
 | `providers.note.exclude` | `[]` | Additional vault-relative path.Match globs matching a path or any parent; dot-prefixed segments and sync-conflict copies always excluded |

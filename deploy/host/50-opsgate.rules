@@ -1,0 +1,17 @@
+// polkit rule for the opsgate host provider. Install as
+// /etc/polkit-1/rules.d/50-opsgate.rules (mode 0644, owned by root).
+//
+// It lets the "opsgate" account restart exactly the units listed below and
+// nothing else: no start, stop, enable, edit or other units. List concrete
+// unit names (no globs) matching providers.host.systemd.restart. Requires
+// systemd 226 or later, which passes "unit" and "verb" to polkit.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units" || subject.user !== "opsgate") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var restartable = ["app-web.service", "app-worker.service"];
+    if (action.lookup("verb") === "restart" && restartable.indexOf(action.lookup("unit")) >= 0) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

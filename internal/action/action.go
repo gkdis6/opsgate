@@ -24,6 +24,8 @@ var catalog = []Entry{
 	{"k8s_restore_image", []string{"cluster", "namespace", "name", "container", "expected_image", "image", "revert"}, "Restore image", "이미지 복구", true},
 	{"k8s_scale", []string{"cluster", "kind", "namespace", "name", "replicas"}, "Scale workload", "워크로드 규모 조정", true},
 	{"k8s_delete_pod", []string{"cluster", "namespace", "name"}, "Delete controller-owned pod", "컨트롤러 소유 파드 삭제", false},
+	{"host_restart_unit", []string{"unit"}, "Restart systemd unit", "systemd 유닛 재시작", false},
+	{"host_restart_container", []string{"container"}, "Restart container", "컨테이너 재시작", false},
 }
 
 func Lookup(name string) (Entry, bool) {

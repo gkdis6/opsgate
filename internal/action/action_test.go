@@ -135,3 +135,30 @@ func TestOptionsURL(t *testing.T) {
 		}
 	}
 }
+
+func TestHostLinks(t *testing.T) {
+	for _, name := range []string{"host_restart_unit", "host_restart_container"} {
+		e, ok := Lookup(name)
+		if !ok || e.Reversible || len(e.Arguments) != 1 {
+			t.Fatalf("%s: %+v", name, e)
+		}
+		link, err := URL("", name, map[string]any{e.Arguments[0]: "app-web.service"}, "rule")
+		if err != nil {
+			t.Fatal(err)
+		}
+		u, _ := url.Parse(link)
+		if _, args, _, err := Parse(u); err != nil || args[e.Arguments[0]] != "app-web.service" {
+			t.Fatalf("%s: %v %v", link, args, err)
+		}
+	}
+	for kind, name := range map[string]string{"unit": "app@1.service", "container": "shop-api-1"} {
+		if link, err := HostOptionsURL("https://ops.example", kind, name); err != nil || link != "https://ops.example/approve/host-options/"+kind+"/"+name {
+			t.Fatalf("%s %v", link, err)
+		}
+	}
+	for _, tc := range [][2]string{{"unit", "app"}, {"unit", "../x.service"}, {"container", "-x"}, {"pod", "web"}, {"container", "a/b"}} {
+		if _, err := HostOptionsURL("", tc[0], tc[1]); err == nil {
+			t.Fatalf("accepted %v", tc)
+		}
+	}
+}

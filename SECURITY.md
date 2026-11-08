@@ -92,6 +92,19 @@ tools and backups. Creates publish without overwriting a racing creator; trash
 retains a copy locally rather than permanently deleting a note. Protect the
 vault and its backups with filesystem permissions.
 
+## Host provider
+
+The optional host provider is off by default and refused with
+`mode: kubernetes`. It takes only concrete, validated unit and container names
+from allowlists and runs `systemctl`/`journalctl` with fixed argv, never a shell,
+with timeouts and output caps. Restarts need both the visible and the restart
+allowlist and human approval. Unit restarts go through systemd's D-Bus API and a
+polkit rule limited to the `restart` verb on listed units, so opsgate needs no
+sudo and keeps `NoNewPrivileges`. Docker access must go through a socket proxy
+that allows only list, inspect, logs and restart; the Docker socket itself is
+root-equivalent. A container restart is bound to the container ID in the
+approved plan. See [host provider](docs/host.md).
+
 ## Supported versions
 
 While the project is 0.x, security fixes and support are best effort, focused on the latest development version. There is no guaranteed maintenance window for older 0.x releases.

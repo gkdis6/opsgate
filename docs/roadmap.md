@@ -27,6 +27,7 @@ The work below follows these principles:
 
 ## Next
 
+All six steps below are implemented and unreleased, awaiting the next release.
 In order. Each step still goes through security review.
 
 1. **Remove the Dev provider** (`dev_*` tools, `opsgate dev-runner`, the
@@ -46,7 +47,8 @@ In order. Each step still goes through security review.
    [changelog](../CHANGELOG.md).
 5. **Optional host provider** for systemd units and Docker or Compose
    containers: detection and restart, off by default, with a narrow privilege
-   model instead of direct root or Docker socket access.
+   model instead of direct root or Docker socket access. Done, unreleased; see
+   [host provider](host.md).
 6. **Undo buttons** for reversible actions, such as returning to the previous
    replica count or image. Done, unreleased; see the [changelog](../CHANGELOG.md).
 

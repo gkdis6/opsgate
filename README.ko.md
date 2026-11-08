@@ -12,7 +12,7 @@ Kubernetes를 지켜보다가 문제가 생기면 알리고, 폰이나 컴퓨터
 AI 클라이언트가 opsgate MCP 서버로 원인을 조사합니다. MCP 서버는 정해진 도구만
 제공하며, 정책을 명시하고 변경에는 사람의 승인을 받고 감사 로그를 남깁니다.
 
-> **상태:** 초기 릴리스이며, 노트, watch, 승인함, analyzer는 실험적 기능입니다. 변경 작업에는 사용자 권한 검사,
+> **상태:** 초기 릴리스이며, 노트, 호스트 provider, watch, 승인함, analyzer는 실험적 기능입니다. 변경 작업에는 사용자 권한 검사,
 > 허용 대상 제한, 사람의 승인이 적용됩니다. 조회 범위 제한과 출력 마스킹으로 민감 정보
 > 노출을 줄입니다. 외부 보안 검토는 아직 받지 않았으며, 보호 범위와 남아 있는 한계는
 > [보안 정책](docs/ko/security.md)에 설명합니다.
@@ -101,11 +101,8 @@ AI 클라이언트에는 로그나 조회 결과 안의 지시문을
 
 ## 앞으로의 방향
 
-계획 중이며 아직 릴리스하지 않았습니다. 자세한 내용은 [로드맵](docs/ko/roadmap.md)을
-참고하세요.
-
-- **선택 기능인 호스트 provider.** Kubernetes가 없는 서버의 systemd 유닛과 Docker 또는
-  Compose 컨테이너를 다룹니다. 직접 켜기 전에는 동작하지 않습니다.
+현재 [로드맵](docs/ko/roadmap.md)의 모든 단계를 구현했으며 다음 릴리스를 기다리고 있습니다.
+PostgreSQL provider, 설정 다시 불러오기 같은 남은 아이디어는 약속 없이 로드맵에 적어 두었습니다.
 
 
 
@@ -116,6 +113,7 @@ AI 클라이언트에는 로그나 조회 결과 안의 지시문을
 | 기능(provider) | 조회 도구 | 변경 도구(승인 필요) |
 | --- | --- | --- |
 | Kubernetes | 클러스터, 개요, 목록, 상세, 환경 변수, 서비스 점검, 이벤트, 파드 로그, 조치 옵션 | 워크로드 재시작, 실행할 파드 수 조정, 파드 삭제, 이전 이미지 복원 |
+| 호스트: Kubernetes 없는 서버의 systemd 유닛과 Docker/Compose 컨테이너 *(실험적, 기본값 꺼짐)* | 유닛, 유닛 로그, 컨테이너, 컨테이너 로그 | 유닛 재시작, 컨테이너 재시작 |
 | 노트: 런북과 메모리, Markdown 폴더 또는 Obsidian 볼트 *(실험적)* | 검색, 읽기, 목록, 최근 노트, 링크, 태그 | 작성, 내용 추가, 내용 수정, 휴지통으로 이동 |
 
 스코프는 사용자가 opsgate를 통해 수행할 수 있는 작업의 종류입니다. `ops:read`는 조회, `ops:write`는
@@ -431,6 +429,7 @@ Kubernetes 클러스터에 `restore_image`(`namespace/deployment` 허용 목록)
 | [설정](docs/ko/configuration.md) | 모든 설정 키와 기본값, 감사 로그 형식 |
 | [도구](docs/ko/tools.md) | 도구 인자, 제한, 마스킹 |
 | [노트](docs/ko/notes.md) | Markdown 폴더에 런북과 장애 기록 남기기 |
+| [호스트 provider](docs/ko/host.md) | Kubernetes 없이 systemd 유닛과 Docker/Compose 컨테이너 다루기, polkit과 소켓 프록시 설정 |
 | [배포](docs/ko/deploy.md) | 릴리스 검증, Kubernetes, 리버스 프록시 |
 | [Watch 알림](docs/ko/watch.md) | 별도 `opsgate watch` 프로세스로 Kubernetes 알림을 Discord·커스텀 JSON 웹훅·이메일·승인함으로 전송, namespace 그룹 |
 | [자동 분석](docs/ko/analyzer.md) | 선택적 모델 worker, 조회 전용 MCP 인증과 조사 한도 |

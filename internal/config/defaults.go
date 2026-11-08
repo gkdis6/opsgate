@@ -35,6 +35,7 @@ func Default() Config {
 			Push: ApprovalPush{Language: "en", AllowedHosts: []string{"fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com", "*.notify.windows.com"}},
 		},
 		Providers: Providers{
+			Host: Host{PollInterval: 30 * time.Second},
 			Kubernetes: Kubernetes{
 				KubernetesCluster: KubernetesCluster{
 					MaxLogLines: 500,

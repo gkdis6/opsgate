@@ -86,3 +86,64 @@ var optionsPage = ui.NewTemplate(`{{define "title"}}Choose an action / 조치 �
 {{if .PodGone}}<p>The pod is gone. Any choices below are for the verified current workload.<br>파드가 사라졌습니다. 아래 선택지는 확인된 현재 워크로드에 대한 것입니다.</p>{{end}}
 {{range .Actions}}<div class="target"><a class="button primary" href="{{.URL}}">{{.Label}} / {{.LabelKO}}</a><p>{{.Reason}}<br>{{.ReasonKO}}</p><p>Source / 출처: rule</p></div>{{else}}<p>No applicable actions / 적용 가능한 조치가 없습니다.</p>{{end}}
 {{if .Hint}}<p>{{.Hint}}</p>{{end}}{{end}}`)
+
+// SetHostOptions connects the browser to the host provider's rule engine.
+func (m *Manager) SetHostOptions(evaluate func(context.Context, tool.Caller, string, string) (action.Options, error)) {
+	m.hostOptions = evaluate
+}
+
+func (m *Manager) hostOptionsRequest(w http.ResponseWriter, r *http.Request, subject string) {
+	kind, name := r.PathValue("kind"), r.PathValue("name")
+	if r.URL.RawQuery != "" {
+		ui.Message(w, http.StatusBadRequest, "Invalid choices link", "This link takes no query.")
+		return
+	}
+	if _, err := action.HostOptionsURL("", kind, name); err != nil {
+		ui.Message(w, http.StatusBadRequest, "Invalid choices link", "Invalid target.")
+		return
+	}
+	access, ok := m.browser.(browserAccess)
+	if !ok || m.hostOptions == nil || m.direct == nil {
+		unavailablePage(w)
+		return
+	}
+	scopes, tools, known := access.Access(subject)
+	caller := tool.Caller{User: subject, Transport: "web", Scopes: scopes, Tools: tools, Source: "rule"}
+	if subject == "" || !known || !caller.Has(config.ScopeRead) || !caller.Has(config.ScopeWrite) {
+		ui.Message(w, http.StatusForbidden, "Choices unavailable", "This account cannot read and approve these actions.")
+		return
+	}
+	options, err := m.hostOptions(r.Context(), caller, kind, name)
+	if err != nil {
+		ui.Message(w, http.StatusForbidden, "Choices unavailable", "The target is unavailable or not allowed.")
+		return
+	}
+	// As for Kubernetes: rebuild local catalog links for this exact target and
+	// keep only those this person could plan.
+	choices := []action.Choice{}
+	for _, choice := range options.Actions {
+		u, err := url.Parse(choice.URL)
+		if err != nil {
+			continue
+		}
+		entry, args, source, err := action.Parse(u)
+		if err != nil || source != "rule" || len(args) != 1 || args[kind] != name {
+			continue
+		}
+		d := m.direct(entry.Tool)
+		if d == nil {
+			continue
+		}
+		raw, _ := json.Marshal(args)
+		if _, _, err := d.Plan(r.Context(), caller, raw); err != nil {
+			continue
+		}
+		if choice.URL, err = action.URL("", entry.Tool, args, "rule"); err != nil {
+			continue
+		}
+		choice.Label, choice.LabelKO, choice.Source = entry.Label("en"), entry.Label("ko"), "rule"
+		choices = append(choices, choice)
+	}
+	options.Actions = choices
+	ui.Render(w, http.StatusOK, optionsPage, options)
+}

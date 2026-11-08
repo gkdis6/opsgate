@@ -3,6 +3,7 @@ package alert
 import (
 	"context"
 	"encoding/json"
+	"github.com/gkdis6/opsgate/internal/hosttarget"
 	"time"
 )
 
@@ -21,10 +22,17 @@ type Notice struct {
 	Reason       string    `json:"reason"`
 	Severity     string    `json:"severity"`
 	OccurredAt   time.Time `json:"occurred_at"`
+	// HostKind is "unit" or "container" for a host target named by Pod; then
+	// Cluster, Namespace and the workload fields are empty.
+	HostKind string `json:"host_kind,omitempty"`
 }
 
 // Valid bounds all display and navigation fields and excludes free text.
 func (n Notice) Valid() bool {
+	if n.HostKind != "" {
+		return n.Cluster == "" && n.Namespace == "" && n.WorkloadKind == "" && n.WorkloadName == "" && hosttarget.Valid(n.HostKind, n.Pod) &&
+			noticeIdentifier(n.Reason, 128) && n.Severity == Warning && !n.OccurredAt.IsZero()
+	}
 	if !noticeIdentifier(n.Cluster, 64) || !noticeIdentifier(n.Namespace, 63) || !noticeIdentifier(n.Pod, 253) || !noticeIdentifier(n.Reason, 128) || n.Severity != Warning || n.OccurredAt.IsZero() {
 		return false
 	}
@@ -58,10 +66,13 @@ func (s *noticeSender) Name() string      { return "inbox" }
 func (s *noticeSender) Send(ctx context.Context, b *Batch) (bool, error) {
 	batch := NoticeBatch{SentAt: b.SentAt}
 	for _, a := range b.Alerts {
-		if a.Severity != Warning || a.OptionsURL == "" || a.Kind != "Pod" {
+		if !choiceAlert(a) {
 			continue
 		}
 		n := Notice{Cluster: a.Cluster, Namespace: a.Namespace, Pod: a.Name, Reason: a.Reason, Severity: a.Severity, OccurredAt: a.Time}
+		if kind := HostKind(a); kind != "" {
+			n = Notice{Pod: a.Name, HostKind: kind, Reason: a.Reason, Severity: a.Severity, OccurredAt: a.Time}
+		}
 		if a.Workload != nil {
 			n.WorkloadKind, n.WorkloadName = a.Workload.Kind, a.Workload.Name
 		}

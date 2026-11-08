@@ -120,6 +120,9 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 		browser = nil
 	}
 	am := approval.New(cfg.Approval, cfg.HTTP.PublicURL, browser, env.Audit)
+	if err := am.EnableInboxNotify(cfg.Approval.InboxNotify); err != nil {
+		return fmt.Errorf("approval inbox notify: %w", err)
+	}
 	if err := am.EnablePush(cfg.Approval.Push); err != nil {
 		return fmt.Errorf("approval push: %w", err)
 	}
@@ -189,7 +192,11 @@ func (c *application) runWatch(args []string) error {
 		}()
 	}
 	emit := func(a alert.Alert) {
-		addApprovalLink(&a, w.ApprovalURL)
+		base := w.ApprovalURL
+		if base == "" {
+			base = w.Inbox.URL
+		}
+		addApprovalLink(&a, base)
 		for _, d := range dispatchers {
 			d.Emit(a)
 		}
@@ -204,7 +211,10 @@ func (c *application) runWatch(args []string) error {
 // addApprovalLink adds live choices and retains the legacy restart link.
 func addApprovalLink(a *alert.Alert, base string) {
 	if base != "" && a.Severity == alert.Warning && a.Kind == "Pod" && a.Namespace != "" && a.Workload != nil {
-		a.OptionsURL, _ = action.OptionsURL(base, a.Cluster, a.Namespace, a.Name, a.Workload.Kind+"/"+a.Workload.Name)
+		a.OptionsURL, _ = action.OptionsURL("", a.Cluster, a.Namespace, a.Name, a.Workload.Kind+"/"+a.Workload.Name)
+		if a.OptionsURL != "" {
+			a.OptionsURL = strings.TrimRight(base, "/") + a.OptionsURL
+		}
 	}
 	if base != "" && a.Restart != nil {
 		a.Restart.URL = approval.RestartURL(base, a.Cluster, a.Restart.Kind, a.Restart.Namespace, a.Restart.Name)
@@ -214,6 +224,14 @@ func addApprovalLink(a *alert.Alert, base string) {
 // watchDispatchers loads credentials before any watchers start.
 func watchDispatchers(w config.Watch) ([]*alert.Dispatcher, error) {
 	var result []*alert.Dispatcher
+	if n := w.Inbox; n.URL != "" {
+		secret, err := alert.ReadSecret(n.SecretFile)
+		if err != nil {
+			return nil, fmt.Errorf("watch.inbox: %w", err)
+		}
+		sender := alert.NewNoticeSender(alert.Options{URL: strings.TrimRight(n.URL, "/") + "/approvals/notify", Secret: secret, PrivateOnly: strings.HasPrefix(strings.ToLower(n.URL), "http:")})
+		result = append(result, alert.New(alert.Options{Sender: sender, Batch: time.Second, ChoicesOnly: true, ProblemsOnly: true, Cooldown: w.Cooldown, MaxAlerts: min(w.MaxAlerts, 50)}))
+	}
 	for _, o := range w.Outputs {
 		if o.Language == "" {
 			o.Language = w.Language

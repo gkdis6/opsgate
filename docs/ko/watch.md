@@ -212,3 +212,64 @@ namespace/이름, 오류 이유·요약, 반복 횟수, 힌트와 재시작 제�
 리다이렉트는 거부하고 요청 제한 시간은 10초입니다. 네트워크 오류, HTTP 429와
 5xx는 1초·4초 뒤 두 번 재시도합니다. 별도의 서버 지정 속도 제한 스케줄러는
 없습니다. 영구 큐와 정확히 한 번 전송 보장은 없으며, 재시도로 중복될 수 있습니다.
+
+## 승인함으로 받는 휴대폰 알림
+
+`opsgate watch`는 HTTP 서버와 별개 프로세스이며, 다른 파드에서 실행할 수 있습니다.
+양쪽에 전용 HMAC 키를 설정하세요. 공백을 제거한 뒤 16–4096바이트여야 하며,
+다른 웹훅 키와 구분한 무작위 키를 쓰세요.
+
+```yaml
+# watch 프로세스의 기존 설정에 합칩니다.
+watch:
+  approval_url: https://ops.example.com
+  inbox:
+    url: https://ops.example.com
+    secret_file: /etc/opsgate/inbox/key
+    allow_private_http: false
+```
+
+```yaml
+# builtin 인증을 쓰는 HTTP 서버의 기존 설정에 합칩니다.
+auth:
+  builtin:
+    users:
+      - subject: passkey:owner
+        scopes: [ops:read, ops:write]
+approval:
+  web: true
+  inbox_notify:
+    secret_file: /etc/opsgate/inbox/key
+    subjects: [passkey:owner]
+  push:
+    enabled: true
+    subject: mailto:owner@example.com
+    state_file: /var/lib/opsgate/push.json
+```
+
+`watch.inbox.url`은 경로·쿼리·자격 증명이 없는 origin입니다. HTTPS를 기본으로 쓰며,
+루프백 HTTP와 `allow_private_http: true`인 사설 HTTP는 웹훅 출력과 같은 URL 및
+연결 시 주소 검사를 거칩니다. 클러스터 내부 예시는 `http://opsgate.opsgate.svc:8787`입니다.
+메신저 링크용 `approval_url`은 공개 HTTPS origin으로 유지하세요. 생략하면 승인함
+origin으로 선택지 링크를 만듭니다. 리버스 프록시는 `POST /approvals/notify`를
+전달해야 합니다. 활성화된 서명 POST 경로는 사설 서비스 Host도 받으며, 브라우저와
+MCP 경로는 기존 Host 허용 정책을 유지합니다.
+
+이 독립 출력은 다른 출력을 막지 않는 전용 큐, 고정 **1초** 묶음 주기, 기존 cooldown과
+웹훅 재시도 정책을 씁니다. 네트워크 오류·429·5xx는 1초, 4초를 기다려 최대 세 번
+시도합니다. **조치 선택** 링크가 있는 파드 경고만 보내며 정보 알림은 보내지 않습니다.
+묶음은 최대 50개이며 `watch.max_alerts` 제한도 적용합니다. 다른 출력의 큐와 주기는
+각자 유지되고 승인함 출력만 설정한 watch도 지원합니다.
+
+서명한 JSON은 `sent_at`과 `notices`만 담습니다. 각 항목의 필드는 `cluster`,
+`namespace`, `pod`, `workload_kind`, `workload_name`, `reason`, `severity`,
+`occurred_at`입니다. 요약·메시지·힌트·전달받은 URL 등 클러스터 자유 텍스트는 보내지
+않습니다. 식별자는 watch에서 이미 마스킹했으며 유효하지 않거나 마스킹된 이동 대상은
+건너뜁니다. 서명은 기존 `X-Opsgate-Signature: sha256=<원문 본문의 HMAC-SHA256 hex>`
+형식입니다. 이 알림은 승인 요청을 만들거나 조치를 실행하지 않습니다.
+
+휴대폰의 일반 브라우저에서 `/approvals`를 열어 알림을 한 번 켜세요
+([설정 방법](approval.md#승인함과-알림)). iPhone은 먼저 홈 화면에 추가해야 합니다.
+푸시를 누르면 승인함의 **Alerts waiting for a decision**에서 현재 선택지로 이동합니다.
+Telegram/Discord 내장 브라우저 밖에서 조치를 고르고 패스키로 계획을 검토·승인하세요.
+푸시 없이도 승인함에서 알림을 볼 수 있습니다. [제한과 보안](approval.md#서명된-watch-알림)을 참고하세요.

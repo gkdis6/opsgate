@@ -35,6 +35,7 @@ type BrowserAuth interface {
 
 // Manager implements tool.Confirmer.
 type Manager struct {
+	notices     *noticeStore
 	push        *pushSender
 	mu          sync.Mutex
 	audit       *audit.Logger

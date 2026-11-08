@@ -186,3 +186,79 @@ func TestWatchChoicesLinks(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchInboxStartup(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "inbox-key")
+	w := config.Default().Watch
+	w.Inbox = config.WatchInbox{URL: "https://ops.example", SecretFile: path}
+	for _, value := range []string{"missing", "short", "0123456789abcdef\n"} {
+		if value != "missing" {
+			if err := os.WriteFile(path, []byte(value), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		ds, err := watchDispatchers(w)
+		if value == "0123456789abcdef\n" {
+			if err != nil || len(ds) != 1 {
+				t.Fatal("inbox startup", err)
+			}
+		} else if err == nil {
+			t.Fatal("bad inbox secret accepted")
+		}
+	}
+}
+
+func TestWatchInboxBatching(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "inbox-key")
+	if err := os.WriteFile(path, []byte("0123456789abcdef\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	w := config.Default().Watch
+	w.Inbox = config.WatchInbox{SecretFile: path}
+	// Exercise the actual 1s ticker with the normal batch set to 10 minutes.
+	delivered := make(chan alert.NoticeBatch, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/approvals/notify" {
+			t.Error("incorrect notice path", r.URL.Path)
+		}
+		b, _ := io.ReadAll(r.Body)
+		if r.Header.Get("X-Opsgate-Signature") != alert.Sign([]byte("0123456789abcdef"), b) {
+			t.Error("incorrect notice signature")
+		}
+		var batch alert.NoticeBatch
+		if err := json.Unmarshal(b, &batch); err != nil {
+			t.Error(err)
+		}
+		delivered <- batch
+		rw.WriteHeader(204)
+	}))
+	defer srv.Close()
+	w.Inbox.URL = srv.URL
+	w.Batch = 10 * time.Minute
+	ds, err := watchDispatchers(w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := alert.Alert{Time: time.Now(), Cluster: "main", Namespace: "apps", Name: "web-pod", Kind: "Pod", Reason: "CrashLoopBackOff", Severity: alert.Warning, Workload: &alert.Workload{Kind: "deployment", Name: "web"}}
+	addApprovalLink(&a, w.Inbox.URL)
+	if a.OptionsURL == "" {
+		t.Fatal("private inbox origin did not enable choices")
+	}
+	ds[0].Emit(a)
+	a.Name = "second-pod"
+	ds[0].Emit(a)
+	a.Severity = alert.Info
+	ds[0].Emit(a)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { ds[0].Run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+	select {
+	case batch := <-delivered:
+		if len(batch.Notices) != 2 {
+			t.Fatal("batch filtering", batch)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("inbox did not batch at 1s")
+	}
+}

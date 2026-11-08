@@ -87,7 +87,12 @@ this prints `require_web: true` explicitly. Running that output with
 | `approval.ttl` | `10m` | Pending approval/input lifetime |
 | `approval.web` | `false` | Enable browser approval; requires builtin auth; modes enable it by default |
 | `approval.require_web` | `true` when `approval.web` is true; otherwise `false` | Require browser approval on HTTP; explicit `false` allows elicitation; explicit `true` also denies stdio writes |
-| `approval.push.enabled` | `false` | Web Push for MCP web approvals; requires `approval.web` |
+| `approval.inbox_notify.secret_file` | empty (disabled) | Shared watch notice HMAC key file (16–4096 bytes, trimmed); requires builtin web approval and subjects |
+| `approval.inbox_notify.subjects` | `[]` | 1–100 unique configured builtin users to receive identifier-only notices; memory-only, max 50/user for 1h; pushes coalesce for 1m |
+| `watch.inbox.url` | empty (disabled) | Server origin for signed `POST /approvals/notify`; HTTPS or webhook-compatible private/loopback HTTP; own queue and fixed 1s batching |
+| `watch.inbox.secret_file` | empty | Required shared HMAC key file (16–4096 bytes, trimmed) |
+| `watch.inbox.allow_private_http` | `false` | Permit private HTTP with dial-time address checks, as for watch outputs |
+| `approval.push.enabled` | `false` | Web Push for MCP web approvals and configured inbox notices; requires `approval.web` |
 | `approval.push.subject` | empty | Required contact `mailto:` or `https:` URL when enabled |
 | `approval.push.state_file` | `/var/lib/opsgate/push.json` with a mode, otherwise empty | Durable 0600 subscriptions and VAPID keys; required when enabled, separate from OAuth state |
 | `approval.push.allowed_hosts` | `[fcm.googleapis.com, updates.push.services.mozilla.com, web.push.apple.com, '*.notify.windows.com']` | HTTPS push hosts; wildcard matches subdomains only; dial-time public addresses, no redirects or proxies |
@@ -183,7 +188,7 @@ Kubernetes and note read tools require `ops:read`. Kubernetes writes require the
 
 The server validates inputs and builds a side-effect-free plan before confirmation. With builtin auth and `approval.web: true`, HTTP defaults to browser approval and returns an approval link and `approval_id`. Setting `approval.require_web: false` explicitly allows clients supporting MCP elicitation to use an in-client prompt, including multi round-trip input requests across protocol versions; other clients still use the web link. The human opens it, signs in upstream as the same user and reviews the exact operation. Approving immediately re-plans with the original caller and arguments, checks the approved summary and target, and runs the write once. The waiting call receives the result; after `approval.wait` ends, read it with `approval_status` or the same arguments plus `approval_id`. Result retries never apply again. Approvals expire, are single-use and bind the user, tool, SHA-256 of canonical unredacted arguments (excluding `approval_id`) and plan. Writes are denied if redaction changes the summary, so the human sees an unambiguous target. Kubernetes plans include the target UID; execution uses that invocation’s plan and identity/version preconditions. Without a confirmation channel, writes are denied; stdio supports elicitation only.
 
-The signed-in `/approvals` inbox lists only your live requests and retained results. Install it and enable optional device notifications as described in [Approval inbox and notifications](approval.md#approval-inbox-and-notifications). Only accounts with `ops:write` may subscribe (10 devices per user, newest wins).
+The signed-in `/approvals` inbox lists your live requests, retained results and watch notices addressed to you. Install it and enable optional device notifications as described in [Approval inbox and notifications](approval.md#approval-inbox-and-notifications). Only accounts with `ops:write` may subscribe (10 devices per user, newest wins).
 
 Optional time-window approvals require both `approval.window` (1m–12h; `0s` disables the feature) and `approval.window_tools` (a `path.Match` glob allowlist; empty allows no tools). For example, `window: 30m` and `window_tools: [k8s_rollout_restart]` let a human choose **Approve + allow for 30m** in the browser, or the optional **Also auto-approve k8s_rollout_restart for 30m** checkbox in elicitation. The grant covers that exact user, tool and target, including later calls from another client or with different arguments. It does not cover another target. It does not grant scopes, bypass action allowlists, skip input validation or skip planning. Grants live only in memory, expire without renewal on use, are capped at 100, and disappear on restart. Each call still has its own audit record with `approval: window`; grant creation emits a separate `window_granted` event with the source (`web` or `elicitation`), duration and expiry. With `require_web`, only the browser can obtain a grant and stdio writes remain denied.
 
@@ -195,11 +200,11 @@ Client registration can be restricted with `allowed_redirect_hosts`. With a none
 
 ## Watch alerts
 
-The `watch` section is read only by `opsgate watch`, a separate process; the MCP server ignores it. `opsgate watch` requires `providers.kubernetes.enabled` and at least one of `watch.outputs` and `watch.email.host`.
+The `watch` section is read only by `opsgate watch`, a separate process; the MCP server ignores it. `opsgate watch` requires `providers.kubernetes.enabled` and at least one of `watch.outputs`, `watch.email.host` and `watch.inbox.url`.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `approval_url` | empty | Public https origin of the opsgate server; adds an approval link to restart suggestions |
+| `approval_url` | empty | Public https origin for choices/restart links; defaults to the inbox origin when inbox is configured |
 | `clusters` | all | Configured cluster names to watch |
 | `problems_only` | `false` | Produce warnings only for every channel |
 | `batch` | `30s` | Webhook batch interval (1s–10m) |

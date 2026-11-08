@@ -2,6 +2,8 @@
 # first: the watcher uses the opsgate ServiceAccount, needing only list/watch.
 # Optional HMAC key: kubectl -n opsgate create secret generic opsgate-watch-hmac \
 #   --from-literal=key="$(openssl rand -hex 32)"
+# Optional inbox key: create opsgate-inbox-hmac with a key entry from a protected
+# random file (at least 16 bytes); mount the same Secret on the HTTP server.
 # Optional SMTP password: create opsgate-watch-smtp with a password key from a
 # protected file; use a dedicated credential (e.g. an app password).
 # Configure either channel or both; batching, cooldown and retries are independent.
@@ -25,6 +27,12 @@ data:
         namespaces: [apps]
         deny_namespaces: [kube-system, kube-public, kube-node-lease, opsgate]
     watch:
+      # Optional phone/inbox alerts; pair with approval.inbox_notify on the server.
+      # approval_url: https://mcp.example.com
+      # inbox:
+      #   url: http://opsgate.opsgate.svc:8787
+      #   secret_file: /etc/opsgate/inbox/key
+      #   allow_private_http: true
       outputs:
         - name: webhook
           type: webhook
@@ -102,6 +110,9 @@ spec:
             - name: hmac
               mountPath: /etc/opsgate/watch
               readOnly: true
+            # - name: inbox-hmac
+            #   mountPath: /etc/opsgate/inbox
+            #   readOnly: true
             # - name: smtp
             #   mountPath: /etc/opsgate/smtp
             #   readOnly: true
@@ -114,6 +125,10 @@ spec:
           secret:
             secretName: opsgate-watch-hmac
             defaultMode: 0440
+        # - name: inbox-hmac
+        #   secret:
+        #     secretName: opsgate-inbox-hmac
+        #     defaultMode: 0440
         # - name: smtp
         #   secret:
         #     secretName: opsgate-watch-smtp

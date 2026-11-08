@@ -15,6 +15,7 @@ import (
 // watches Kubernetes and delivers alerts. The MCP server does not
 // use it.
 type Watch struct {
+	Inbox    WatchInbox    `yaml:"inbox,omitempty"`
 	Language string        `yaml:"language"`
 	Outputs  []WatchOutput `yaml:"outputs,omitempty"`
 	// Email delivers alerts by SMTP.
@@ -97,6 +98,9 @@ func (w Watch) validate(k Kubernetes) error {
 	if w.Language != "" && w.Language != "ko" && w.Language != "en" {
 		return fmt.Errorf("watch.language must be ko or en")
 	}
+	if err := w.Inbox.validate(); err != nil {
+		return err
+	}
 	if err := w.Email.validate(); err != nil {
 		return err
 	}
@@ -157,8 +161,8 @@ func (c Config) ValidateWatch() error {
 	if !c.Providers.Kubernetes.Enabled {
 		return fmt.Errorf("opsgate watch requires providers.kubernetes.enabled")
 	}
-	if c.Watch.Email.Host == "" && len(c.Watch.Outputs) == 0 {
-		return fmt.Errorf("opsgate watch requires watch.outputs or watch.email.host")
+	if c.Watch.Inbox.URL == "" && c.Watch.Email.Host == "" && len(c.Watch.Outputs) == 0 {
+		return fmt.Errorf("opsgate watch requires watch.outputs, watch.inbox or watch.email.host")
 	}
 	return nil
 }

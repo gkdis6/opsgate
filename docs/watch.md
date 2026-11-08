@@ -265,3 +265,68 @@ marked as truncated. Lower `watch.max_alerts` or keep a native JSON destination
 for complete large batches. Custom templates must render valid JSON (up to 1 MiB).
 Use `json` for escaping and do not put quotes around its result. All webhook
 formats retry HTTP 429 as well as network errors and 5xx, using bounded backoff.
+
+## Phone alerts through the approval inbox
+
+`opsgate watch` runs separately from the HTTP server, often in another pod.
+Configure a dedicated shared HMAC key on both processes (16–4096 bytes after
+trimming whitespace; use a random key, separate from other webhook keys):
+
+```yaml
+# Watch process; merge into your existing watch configuration.
+watch:
+  approval_url: https://ops.example.com
+  inbox:
+    url: https://ops.example.com
+    secret_file: /etc/opsgate/inbox/key
+    allow_private_http: false
+```
+
+```yaml
+# HTTP server; merge into a working builtin-auth configuration.
+auth:
+  builtin:
+    users:
+      - subject: passkey:owner
+        scopes: [ops:read, ops:write]
+approval:
+  web: true
+  inbox_notify:
+    secret_file: /etc/opsgate/inbox/key
+    subjects: [passkey:owner]
+  push:
+    enabled: true
+    subject: mailto:owner@example.com
+    state_file: /var/lib/opsgate/push.json
+```
+
+`watch.inbox.url` is an origin without a path, query or credentials. HTTPS is
+the default; loopback HTTP and private HTTP with `allow_private_http: true`
+follow the same URL and dial-time checks as webhook outputs. An in-cluster
+example is `http://opsgate.opsgate.svc:8787`. Keep `approval_url` as the public
+HTTPS origin for messenger links; if omitted, choices links use the inbox
+origin. The reverse proxy must forward `POST /approvals/notify`. The enabled
+signed POST endpoint also accepts private service Host names; browser and MCP
+routes retain the configured Host policy.
+
+This independent output has its own nonblocking queue, a fixed **1s** batch
+interval, the normal cooldown and webhook retries (up to three attempts,
+waiting 1s then 4s; network failures, 429 and 5xx retry). It sends only warning
+pod alerts with a **Choose an action** link, never informational events. Each
+batch has at most 50 notices (also bounded by `watch.max_alerts`). Other outputs
+keep their own queues and intervals; an inbox-only watch is also supported.
+
+The signed JSON contains only `sent_at` and `notices`, each with `cluster`,
+`namespace`, `pod`, `workload_kind`, `workload_name`, `reason`, `severity` and
+`occurred_at`. It excludes summaries, messages, hints, supplied URLs and other
+cluster text. Identifiers are already masked by watch; invalid or masked
+navigation targets are skipped. The signature uses the existing
+`X-Opsgate-Signature: sha256=<hex HMAC-SHA256 of raw body>` format. Notices do
+not create approvals or execute actions.
+
+Enable notifications once in your phone's normal browser at `/approvals`
+([instructions](approval.md#approval-inbox-and-notifications)); on iPhone, add
+it to the Home Screen first. An alert push opens that inbox, where **Alerts
+waiting for a decision** links to live choices. Choose, review and approve
+with your passkey there, outside Telegram/Discord's in-app browser. Push is
+optional: notices remain visible without it. See [notice limits and security](approval.md#signed-watch-notices).

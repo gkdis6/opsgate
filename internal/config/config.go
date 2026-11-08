@@ -182,7 +182,8 @@ type StaticToken struct {
 
 // Approval configures human confirmation of write tools.
 type Approval struct {
-	Push ApprovalPush `yaml:"push"`
+	InboxNotify InboxNotify  `yaml:"inbox_notify,omitempty"`
+	Push        ApprovalPush `yaml:"push"`
 	// Wait bounds how long an MCP call waits for web approval and execution.
 	// Zero returns the link immediately; the maximum is 55 seconds.
 	Wait time.Duration `yaml:"wait"`

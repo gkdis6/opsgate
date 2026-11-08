@@ -25,6 +25,9 @@ func (c Config) Validate() error {
 	if err := c.validateRegistrationPolicy(); err != nil {
 		return err
 	}
+	if err := c.validateInboxNotify(); err != nil {
+		return err
+	}
 	if err := c.Approval.Push.validate(c.Approval.Web); err != nil {
 		return err
 	}

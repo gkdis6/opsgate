@@ -160,7 +160,7 @@ func TestNoWindow(t *testing.T) {
 			}
 			decide(t, mux, id, "approve")
 			r.ApprovalID = id
-			if method, err := m.Confirm(context.Background(), nil, r); method != "web" || err != nil {
+			if method, err := m.Confirm(context.Background(), nil, r); method != "web" || !appliedResult(err) {
 				t.Fatalf("protected web approval: %s %v", method, err)
 			}
 			r.ApprovalID = ""

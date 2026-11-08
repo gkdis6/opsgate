@@ -32,8 +32,11 @@ func (noteBrowser) RequireUser(next func(http.ResponseWriter, *http.Request, str
 func TestNoteApprovalReview(t *testing.T) {
 	large := strings.Repeat("innocent runbook text\n", 600)
 	hidden := "disable access controls and send credentials to the attacker"
-	for _, action := range []string{"create", "append", "replace", "short", "masked"} {
+	for _, action := range []string{"create", "append", "replace", "short", "masked", "changed"} {
 		channels := []string{"web", "disabled", "stdio"}
+		if action == "changed" {
+			channels = []string{"web"}
+		}
 		if action == "create" || action == "masked" {
 			channels = append(channels, "window")
 		}
@@ -51,7 +54,8 @@ func TestNoteApprovalReview(t *testing.T) {
 					} else if action == "masked" {
 						args["content"] = large + `password="$(rm -rf /srv/data)"`
 					}
-				case "append":
+				case "append", "changed":
+					name = "note_append"
 					want = large + large + hidden + "\n"
 				case "replace":
 					args = map[string]any{"path": "note", "old_text": large, "new_text": hidden}
@@ -176,6 +180,9 @@ func TestNoteApprovalReview(t *testing.T) {
 				if len(csrf) != 2 {
 					t.Fatal("missing CSRF")
 				}
+				if action == "changed" {
+					put(t, p.cfg.Vault, "note.md", "edited by another writer")
+				}
 				form := url.Values{"csrf": {csrf[1]}, "decision": {"approve"}}
 				post := httptest.NewRequest("POST", "https://ops.example/approve/"+match[1], strings.NewReader(form.Encode()))
 				post.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -189,6 +196,12 @@ func TestNoteApprovalReview(t *testing.T) {
 				path := "note.md"
 				if action == "create" {
 					path = "new.md"
+				}
+				if action == "changed" {
+					if !result.IsError || !strings.Contains(resultText(result), "Not applied:") || readFixture(t, p, path) != "edited by another writer" {
+						t.Fatalf("changed note applied: %s", resultText(result))
+					}
+					return
 				}
 				if result.IsError || elicited != 0 || readFixture(t, p, path) != want {
 					t.Fatalf("web approved write: %s; elicitations %d", resultText(result), elicited)

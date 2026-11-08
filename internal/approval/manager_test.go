@@ -54,7 +54,7 @@ func TestCanonicalArgs(t *testing.T) {
 	r.Args = map[string]any{"a": map[string]any{"first": "one", "second": "two"}, "z": 2}
 	r.ApprovalID = id
 	decide(t, mux, id, "approve")
-	if method, err := m.Confirm(context.Background(), nil, hashedRequest(r)); err != nil || method != "web" {
+	if method, err := m.Confirm(context.Background(), nil, hashedRequest(r)); !appliedResult(err) || method != "web" {
 		t.Errorf("same canonical arguments = %q, %v", method, err)
 	}
 	r.ApprovalID = ""
@@ -76,6 +76,7 @@ func TestInvalidRequests(t *testing.T) {
 	}{
 		{name: "zero TTL", ttl: 0},
 		{name: "negative TTL", ttl: -time.Second},
+		{name: "missing runner", ttl: time.Minute, mutate: func(r *tool.ConfirmRequest) { r.Run = nil }},
 		{name: "no subject", ttl: time.Minute, mutate: func(r *tool.ConfirmRequest) { r.Caller.User = "" }},
 		{name: "no summary", ttl: time.Minute, mutate: func(r *tool.ConfirmRequest) { r.Summary = "" }},
 		{name: "invalid approval id", ttl: time.Minute, mutate: func(r *tool.ConfirmRequest) { r.ApprovalID = "invalid" }},

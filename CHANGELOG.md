@@ -7,6 +7,10 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Changed
+
+- Web approval now rechecks and executes MCP writes immediately, once, using the original caller. Calls wait up to `approval.wait` (default 25s with web approval; 0–55s). Read retained results with the new read-only `approval_status` tool or an argument-bound `approval_id` retry; retries never apply again.
+
 ### Removed
 
 - Remove the experimental Dev provider, `dev_projects`/`dev_task_*` tools, `opsgate dev-runner` and `dev:run` scope in v0.4.0. Delete `providers.dev` and remove `dev:run` from configured scope lists; stop and remove the runner service. Existing OAuth state and requests drop the removed scope while retaining valid scopes.

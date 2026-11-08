@@ -56,7 +56,8 @@ func pendingID(t *testing.T, m *Manager, r tool.ConfirmRequest) string {
 	match := linkID.FindStringSubmatch(text)
 	if len(match) != 2 || !strings.Contains(text, "https://ops.example/approve/") ||
 		!strings.Contains(text, "call "+r.Tool+" again with the same arguments plus approval_id \""+match[1]+"\"") ||
-		!strings.Contains(text, "expires at") {
+		!strings.Contains(text, "expires at") || !strings.Contains(text, "the change runs as soon as they approve") ||
+		!strings.Contains(text, "call approval_status with approval_id") {
 		t.Fatalf("pending instructions = %q", text)
 	}
 	return match[1]
@@ -151,7 +152,7 @@ func TestWebEndToEnd(t *testing.T) {
 	if result := call(id); result.IsError || applies.Load() != 1 {
 		t.Fatalf("approved result = %+v; applies %d", result, applies.Load())
 	}
-	if result := call(id); !result.IsError || applies.Load() != 1 {
+	if result := call(id); result.IsError || applies.Load() != 1 {
 		t.Fatalf("reused result = %+v; applies %d", result, applies.Load())
 	}
 }
@@ -194,7 +195,7 @@ func TestWebBindingAndDecisions(t *testing.T) {
 				tc.mutate(&r)
 			}
 			method, err := m.Confirm(context.Background(), nil, hashedRequest(r))
-			if method != "web" || (err == nil) != tc.allowed || errors.Is(err, tool.ErrApprovalPending) != tc.pending ||
+			if method != "web" || appliedResult(err) != tc.allowed || errors.Is(err, tool.ErrApprovalPending) != tc.pending ||
 				(!tc.allowed && !tc.pending && !errors.Is(err, tool.ErrDenied)) {
 				t.Errorf("Confirm = %q, %v", method, err)
 			}
@@ -266,7 +267,7 @@ func TestWebPageSecurity(t *testing.T) {
 	}
 }
 
-func TestWebConcurrentConsume(t *testing.T) {
+func TestWebConcurrentStoredResult(t *testing.T) {
 	m, mux := newWebManager(t)
 	r := approvalRequest()
 	r.ApprovalID = pendingID(t, m, r)
@@ -276,7 +277,7 @@ func TestWebConcurrentConsume(t *testing.T) {
 	for range 20 {
 		wg.Go(func() {
 			_, err := m.Confirm(context.Background(), nil, hashedRequest(r))
-			if err == nil {
+			if appliedResult(err) {
 				successes.Add(1)
 			} else if !errors.Is(err, tool.ErrDenied) {
 				t.Errorf("unexpected error: %v", err)
@@ -284,8 +285,8 @@ func TestWebConcurrentConsume(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	if successes.Load() != 1 {
-		t.Errorf("approval consumed %d times", successes.Load())
+	if successes.Load() != 20 {
+		t.Errorf("stored outcome read %d times", successes.Load())
 	}
 }
 
@@ -380,4 +381,9 @@ func TestPlanLines(t *testing.T) {
 			}
 		})
 	}
+}
+
+func appliedResult(err error) bool {
+	var result *tool.ApprovalResult
+	return errors.As(err, &result) && !result.Failed
 }

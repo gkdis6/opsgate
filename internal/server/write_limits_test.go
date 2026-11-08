@@ -146,6 +146,7 @@ func TestApprovalUsesToolSizeLimit(t *testing.T) {
 			args["value"] = strings.Repeat("x", tc.argsSize-len(empty))
 			_, err := m.Confirm(context.Background(), nil, tool.ConfirmRequest{
 				Caller: tool.Caller{User: "alice", Transport: "http"}, Tool: "change", Args: args,
+				Run:     func(context.Context) (string, error) { return "done", nil },
 				Summary: strings.Repeat("x", tc.summaryLen), MaxArgBytes: tc.limit,
 			})
 			if tc.valid && !errors.Is(err, tool.ErrApprovalPending) || !tc.valid && !errors.Is(err, tool.ErrDenied) {

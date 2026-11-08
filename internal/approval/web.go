@@ -91,7 +91,7 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 			ui.Message(w, http.StatusBadRequest, "Invalid decision", "Choose one of the available approval options.")
 			return
 		}
-		if p.decision != "" || p.used {
+		if p.decision != "" {
 			m.mu.Unlock()
 			ui.Message(w, http.StatusConflict, "Approval already decided", "This approval already has a decision. Return to your chat.")
 			return
@@ -109,6 +109,10 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 		p.decision = "approved"
 		if decision[0] == "reject" {
 			p.decision = "rejected"
+			p.run = nil
+			if p.done != nil {
+				close(p.done)
+			}
 		}
 		decisionEvent = &audit.Event{Time: m.now(), User: redact.String(p.user), Transport: p.transport,
 			Tool: p.tool, Outcome: p.decision, Approval: "web", Args: map[string]any{"approval_id_prefix": p.id[:8]}}
@@ -117,7 +121,7 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 		PageTitle: "Approve: " + p.title, Tool: p.tool, Lines: planLines(p.summary), User: p.user, Transport: p.transport,
 		Target: p.target, NoWindow: p.noWindow,
 		Expires: fmt.Sprintf("Expires in %d min (%s UTC)", int(math.Ceil(p.expires.Sub(m.now()).Minutes())), p.expires.UTC().Format("15:04")),
-		CSRF:    p.csrf, Used: p.used, FullReview: p.fullReviewRequired,
+		CSRF:    p.csrf, FullReview: p.fullReviewRequired,
 	}
 	if m.windowEligible(p.tool, p.noWindow) {
 		view.Window = windowLabel(m.window)
@@ -136,7 +140,8 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 	if decisionEvent != nil && p.decision == "approved" && p.run != nil {
 		run = p.run
 	}
-	view.Direct = p.run != nil
+	view.MCP = p.mcp
+	view.Direct = p.run != nil || p.finished
 	view.Result = p.result
 	m.mu.Unlock()
 	if grantEvent != nil {
@@ -183,12 +188,13 @@ type approvalView struct {
 	PageTitle, Tool, Args, User, Transport, Expires, CSRF, Status, Window string
 	// Direct means approving runs the write here, so Result replaces the chat.
 	Direct bool
+	MCP    bool
 	Result string
 	// FullReview opens the arguments because the summary omits content.
-	FullReview     bool
-	Target         string
-	Lines          []planLine
-	Used, NoWindow bool
+	FullReview bool
+	Target     string
+	Lines      []planLine
+	NoWindow   bool
 }
 
 type planLine struct{ Text, Class string }
@@ -227,9 +233,9 @@ var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
 {{if .NoWindow}}<p class="note">This target requires approval for every call.</p>{{end}}
 <div class="target plan" aria-label="Target and plan">{{range .Lines}}<span class="plan-line {{.Class}}">{{if .Text}}{{.Text}}{{else}} {{end}}</span>{{end}}</div>
 {{if .Status}}
-{{if .Direct}}{{if .Result}}<p>{{.Result}}</p>{{end}}{{else}}
-{{if .Used}}<p class="muted">Approval already used.</p>{{end}}
-<p>Return to your chat — the assistant will continue when you ask it to retry.</p>{{end}}
+{{if .Result}}<p>{{.Result}}</p>{{end}}
+{{if .MCP}}
+<p>You can return to your chat; the assistant receives the result when its call is still waiting or when it checks the approval.</p>{{end}}
 {{else}}
 <dl><dt>Requester</dt><dd>{{.User}} via {{.Transport}}</dd><dt>Expires</dt><dd>{{.Expires}}</dd></dl>
 <details{{if .FullReview}} open{{end}}><summary>Arguments</summary><pre>{{.Args}}</pre></details>

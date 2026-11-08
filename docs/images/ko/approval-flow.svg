@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 1104" role="img" aria-labelledby="title desc" lang="ko">
 <title id="title">쓰기 승인 흐름</title>
-<desc id="desc">스코프·정책·인자 검사 후 부작용 없는 Plan을 계산합니다. 유효한 사용자/도구 시간 창이 있으면 새 확인을 생략합니다. 그 외에는 지원되는 클라이언트 내 확인이나 내장 HTTP 웹 승인을 사용합니다. 웹에서는 같은 사용자로 로그인합니다(패스키 예시). 재호출은 계획과 일회성 승인 바인딩을 검증한 뒤 실행합니다. 거부·만료·불일치 시 실행하지 않습니다.</desc>
+<desc id="desc">스코프·정책·인자 검사 후 부작용 없는 Plan을 계산합니다. 유효한 사용자/도구 시간 창이 있으면 새 확인을 생략합니다. 그 외에는 지원되는 클라이언트 내 확인이나 내장 HTTP 웹 승인을 사용합니다. 웹에서는 같은 사용자로 로그인합니다(패스키 예시). 웹 승인 시 계획을 재검증하고 한 번 실행하며 대기 호출이나 approval_status로 결과를 받습니다. 클라이언트 내 확인은 후속 호출의 승인 바인딩을 검사합니다. 거부·만료·불일치 시 실행하지 않습니다.</desc>
 <style>
 svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 14px; }
 text { fill: #202936; }
@@ -73,11 +73,11 @@ text { fill: #202936; }
 <text x="96" y="667" class="small">패스키 예시 · 설정된 GitHub / OIDC도 지원</text>
 <text x="96" y="688" class="small">승인 / N분 동안 승인* / 거절</text>
 <path d="M340 726 V770" class="line "/>
-<text x="352" y="751" class="small muted">승인 → approval_id로 재호출</text>
+<text x="352" y="751" class="small muted">승인 → 한 번 실행 · 결과 보관</text>
 <rect x="80" y="770" width="520" height="88" rx="9" class="accent"/>
-<text x="96" y="797" class="head">후속 호출 / 재호출마다 Plan 재계산</text>
+<text x="96" y="797" class="head">웹 실행 / 클라이언트 후속 호출 전 Plan 재계산</text>
 <text x="96" y="821" class="small">일회성 승인: 사용자 · 전송 방식 · 도구 · 인자와</text>
-<text x="96" y="842" class="small">계획 요약이 일치해야 함 · 만료 / 재사용 시 거부</text>
+<text x="96" y="842" class="small">요약 · 대상 일치 확인 · 다시 실행하지 않음</text>
 <path d="M340 858 V904" class="line allow"/>
 <rect x="80" y="904" width="520" height="56" rx="9" class="good"/>
 <text x="96" y="938" class="head">Apply · 현재 승인된 Plan 실행</text>

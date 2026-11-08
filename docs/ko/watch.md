@@ -38,6 +38,65 @@ watch:
 
 `watch.webhook_url`, `watch.secret_file`, `watch.allow_private_http`는 제거되었습니다. 이 키가 있으면 설정을 거부합니다. `watch.outputs`의 `type: webhook` 항목으로 옮기고 `url`, `secret_file`, `allow_private_http`를 대상별로 설정하세요. 기본 웹훅 JSON 본문과 HMAC 서명은 유지됩니다.
 
+## Groups
+
+`watch.groups`로 알림의 namespace에 따라 수신 출력, 경고 필터와 묶음 주기를
+정합니다. 아래 예시는 기존 `watch.outputs`의 `discord` 항목과 설정된
+`watch.inbox`, `watch.email`을 참조합니다.
+
+```yaml
+watch:
+  groups:
+    - name: customer
+      namespaces: [bid, chagok, "shop-*"]
+      outputs: [discord, inbox]
+      problems_only: true
+      batch: 1s
+    - name: rest
+      namespaces: ["*"]
+      outputs: [email]
+      problems_only: false
+      batch: 15m
+```
+
+전체 namespace를 Go `path.Match` glob으로 비교해 **처음 일치한 그룹**을
+선택합니다. 대소문자를 구분하고 `*`는 `/`를 넘지 않습니다. 필터로 제외된
+알림은 다음 그룹으로 넘어가지 않습니다. Node 등 namespace가 없는 알림은
+리터럴 패턴 `""` 또는 `"*"`에만 일치하며, `"**"` 등 다른 패턴에는 일치하지
+않습니다. 모든 namespace와 클러스터 범위 알림을 받으려면 마지막에 `"*"` 그룹을
+둡니다. 그룹은 이미 허용된 알림만 분배하며 provider namespace 정책을 넓히지 않습니다.
+
+`groups`를 생략하면 기존처럼 모든 출력이 각자의 필터와 주기로 알림을 받습니다.
+명시적인 빈 목록은 거부합니다. 그룹을 설정하면 선택된 출력에만 전송합니다.
+어느 그룹에도 일치하지 않는 알림은 한 번만 누락으로 집계하며, 기존 `dropped`
+요약 형식을 사용해 1분마다 그리고 종료 시 로컬 `watch unmatched` 로그로 남깁니다.
+이 요약에는 개수만 담고 알림 내용은 어떤 출력에도 보내지 않습니다.
+
+`watch.problems_only`는 계속 알림 생성 자체를 제한합니다. 그룹과 출력의
+`problems_only`는 추가 필터로, 하나라도 `true`면 정보 알림을 제외합니다.
+승인함은 여전히 선택지 링크가 있는 파드 경고만 받습니다. 그룹은 이 조건이나
+서명된 notice 스키마를 바꾸지 않습니다.
+
+그룹의 batch는 선택한 출력의 주기를 대체합니다. Webhook/Discord와 승인함은
+**1s–10m**, 이메일은 **1m–1h**입니다. 이메일과 webhook/승인함을 함께 선택하면
+**1m–10m**를 사용해야 합니다. 가장 빠른 주기는 `1s`(이메일 `1m`)이며 0은
+허용하지 않습니다. 그룹이 없으면 승인함은 기존 고정 1s를 유지합니다.
+각 `(그룹, 출력)`은 별도 묶음, cooldown 상태, 크기가 제한된 큐와 재시도를
+사용하므로 한 출력이나 그룹의 실패가 다른 전송을 지연시키지 않습니다.
+`watch.cooldown`, `watch.max_alerts`를 계속 사용하며 승인함은 묶음당 최대 50개입니다.
+그룹의 cooldown 캐시는 쌍마다 경고 키 1000개까지 보관하며, 가득 차면 새 키는
+공간이 생길 때까지 cooldown 추적 없이 전송합니다. 같은 출력으로 가는 다른 그룹도
+항상 별도 묶음으로 보냅니다. Discord 제목과 이메일 제목에 그룹 이름이 표시되고,
+기본 webhook JSON에는 `group` 필드가 추가됩니다. 커스텀 템플릿은
+`{{json .Group}}`을 사용할 수 있습니다. 그룹이 없으면 필드도 생략합니다.
+
+그룹은 1–50개이며 이름은 중복 없이 ASCII 영문·숫자·`_`·`-` 1–64자로 정합니다.
+각 그룹에는 유효한 namespace 패턴 1–100개(각 최대 253바이트), 중복 없는 출력
+이름 1–22개, 명시적인 유효 batch 주기가 필요합니다. 출력 이름은 `watch.outputs`에
+있어야 하며, `email`과 `inbox`는 활성화된 전용 설정만 가리키는 예약 이름입니다.
+그룹 사용 시 이 이름을 일반 출력에 쓸 수 없습니다. 존재하지 않거나 비활성인 출력,
+중복 이름, 잘못된 glob과 범위를 벗어난 주기는 시작 시 거부합니다.
+
 ## 이메일 전송
 
 Webhook과 이메일은 독립된 채널입니다. 둘 중 하나만 설정하거나 둘 다 설정할 수 있습니다. 각 채널이 알림 묶음, 쿨다운 상태, 재시도를 따로 관리하므로 한쪽이 느리거나 실패해도 다른 쪽 전송은 지연되지 않습니다. 두 채널 모두 `watch.cooldown`과 `watch.max_alerts`를 사용합니다. Webhook 전송 간격은 `watch.batch`, 이메일 전송 간격은 `watch.email.batch`로 정합니다. 이메일의 기본값은 `5m`이며 `1m`부터 `1h`까지 허용합니다.
@@ -191,7 +250,7 @@ Discord 채널에서 만든 웹훅 URL을 `url_file`에 저장하면 됩니다. 
 비밀 값이 나타나지 않습니다. 직접 적은 URL과 헤더는 설정 출력에 그대로 보입니다.
 
 `type` 기본값은 `webhook`이며 원본 JSON을 보냅니다. `body_template`을 지정하면
-Go 템플릿에 배치 필드 `.Source`, `.SentAt`, `.Alerts`, `.Dropped`, `.Text`가 전달됩니다.
+Go 템플릿에 배치 필드 `.Source`, `.SentAt`, `.Alerts`, `.Dropped`, `.Text`, `.Group`(그룹이 없으면 빈 문자열)이 전달됩니다.
 `{{json 값}}`을 따옴표로 감싸지 않고 사용하면 안전하게 JSON으로 인코딩합니다.
 알림 텍스트 자체는 템플릿으로 실행하지 않습니다. 템플릿은 최대 64 KiB, 결과는
 유효한 JSON으로 최대 1 MiB입니다. 문법 오류는 시작 시 거부하고, 실행 오류나
@@ -255,7 +314,7 @@ origin으로 선택지 링크를 만듭니다. 리버스 프록시는 `POST /app
 전달해야 합니다. 활성화된 서명 POST 경로는 사설 서비스 Host도 받으며, 브라우저와
 MCP 경로는 기존 Host 허용 정책을 유지합니다.
 
-이 독립 출력은 다른 출력을 막지 않는 전용 큐, 고정 **1초** 묶음 주기, 기존 cooldown과
+이 독립 출력은 다른 출력을 막지 않는 전용 큐, **1초** 묶음 주기(그룹 설정 시 그룹 batch로 대체), 기존 cooldown과
 웹훅 재시도 정책을 씁니다. 네트워크 오류·429·5xx는 1초, 4초를 기다려 최대 세 번
 시도합니다. **조치 선택** 링크가 있는 파드 경고만 보내며 정보 알림은 보내지 않습니다.
 묶음은 최대 50개이며 `watch.max_alerts` 제한도 적용합니다. 다른 출력의 큐와 주기는

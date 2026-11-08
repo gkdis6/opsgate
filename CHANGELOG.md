@@ -9,6 +9,8 @@ GitHub releases carry generated release notes.
 
 ### Added
 
+- Namespace alert groups with ordered routing, output selection, warning filters and independent batching/cooldown per group and output; unmatched alerts are counted locally. / namespace 알림 그룹에 순서별 경로, 출력 선택, 경고 필터와 그룹·출력별 묶음 및 cooldown을 추가하고 미일치 알림은 로컬 누락 개수로 집계합니다.
+
 - Optional signed watch-to-inbox notices with bounded per-user alert storage, CSRF-protected dismissal and coalesced payload-less phone push; choices stay behind live permission checks and human approval. / 서명된 watch 승인함 알림 선택 기능과 사용자별 제한된 경고 저장, CSRF로 보호한 해제, 묶음 내용 없는 휴대폰 푸시를 추가하며 현재 권한 검사와 사람 승인을 유지합니다.
 
 - Current-state rule choices for image failures, failing rollouts, repeated crashes/OOM and stuck/unreachable controller-owned pods; signed-in choices pages linked from watch alerts and analyzer reports, with fixed bilingual reasons and preserved webhook fields. / 이미지 실패·배포 정체·반복 종료/OOM·멈추거나 연결할 수 없는 컨트롤러 소유 파드에 현재 상태 규칙 선택지를 제공하고, watch·분석기에서 로그인 후 선택지 페이지로 연결하며 고정 이중 언어 이유와 기존 웹훅 필드를 유지합니다.

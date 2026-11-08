@@ -316,6 +316,9 @@ Run `opsgate watch` alongside the MCP server to receive Kubernetes problem and
 change notifications. It watches the Kubernetes API and sends alerts directly
 to Discord, custom JSON webhooks or SMTP email. n8n is optional.
 
+Optional [namespace groups](docs/watch.md#groups) choose outputs, warnings-only
+filtering and batch intervals per group; the first match wins.
+
 ### Delivery configuration
 
 Add the following to a configuration with the Kubernetes provider enabled:

@@ -53,6 +53,66 @@ the URL is never logged.
 
 `watch.webhook_url`, `watch.secret_file` and `watch.allow_private_http` were removed. Configurations containing these keys are rejected. Move them into a `type: webhook` entry in `watch.outputs`, using `url`, `secret_file` and `allow_private_http` on that output. The default webhook JSON body and HMAC signature are preserved.
 
+## Groups
+
+Use `watch.groups` to choose destinations, warning filtering and batching by the
+alert's namespace. The destinations below refer to an existing `discord` entry
+in `watch.outputs`, a configured `watch.inbox`, and a configured `watch.email`:
+
+```yaml
+watch:
+  groups:
+    - name: customer
+      namespaces: [bid, chagok, "shop-*"]
+      outputs: [discord, inbox]
+      problems_only: true
+      batch: 1s
+    - name: rest
+      namespaces: ["*"]
+      outputs: [email]
+      problems_only: false
+      batch: 15m
+```
+
+The **first matching group wins**, using Go `path.Match` globs against the whole
+namespace (case-sensitive, `*` does not cross `/`). A filtered alert never falls
+through to another group. Nodes and other alerts without a namespace match only
+a literal `""` or `"*"` pattern; other patterns, including `"**"`, cannot match
+them. Put a catch-all last if you want every namespace and cluster-scoped alert.
+Groups route already-allowed alerts; they do not widen provider namespace policy.
+
+Without `groups`, every configured output receives alerts as before, with its
+existing filters and intervals. An explicitly empty list is rejected. With
+groups, only the selected destinations receive alerts. Unmatched alerts are
+dropped once and counted using the existing `dropped` summary rendering in a
+local `watch unmatched` log every minute, and on shutdown. This summary contains
+only counts; unmatched alert content is never sent to a destination.
+
+`watch.problems_only` still limits what the watcher produces. A group's
+`problems_only` and each output's `problems_only` are additional filters: any
+`true` setting drops info alerts. Inbox still accepts only pod warnings carrying
+a choices link; groups do not relax that rule or change the signed notice schema.
+
+The group batch replaces the selected output's interval: use **1s–10m** for
+webhook/Discord and inbox, **1m–1h** for email. A group selecting both email and
+webhook/inbox must use **1m–10m**. The shortest interval is near-immediate delivery
+(`1s`, or `1m` for email); zero is invalid. Without groups, inbox keeps its fixed
+1s interval. Each `(group, output)` has separate batches, cooldown state, bounded
+queues and retries, so a failing destination or group cannot delay another.
+`watch.cooldown` and `watch.max_alerts` still apply (inbox caps batches at 50).
+Grouped cooldown caches hold at most 1000 warning keys per pair; when full, new
+keys are delivered without tracking cooldown until space is available. Different
+groups sharing one output are always sent separately. Discord titles and email
+subjects show the group name; default webhook JSON adds `group`, and custom
+templates can include `{{json .Group}}`. Without groups the field is omitted.
+
+Configure 1–50 groups, with unique names of 1–64 ASCII letters, digits, `_` or
+`-`. Each needs 1–100 valid namespace patterns (up to 253 bytes each), 1–22
+unique output names and an explicit valid batch interval. Output names must
+exist in `watch.outputs`; `email` and `inbox` refer only to the enabled dedicated
+settings and are reserved when groups are used. Unknown or disabled outputs,
+duplicate names, invalid globs and out-of-range intervals fail startup.
+
 ## Email delivery
 
 Webhook and email are independent: configure either or both. Each channel has
@@ -97,8 +157,9 @@ mail provider, which is outside the cluster. Check whether that is appropriate
 for the cluster before enabling email.
 
 Worst-case volume is one message per batch interval: a `5m` batch can send up
-to 288 messages a day and a `15m` batch up to 96. Check the account's sending
-limit, especially if other services share it.
+to 288 messages a day and a `15m` batch up to 96, per group when groups are
+configured. Check the account's sending limit, especially if other services
+share it.
 
 ## What is reported
 
@@ -309,8 +370,8 @@ origin. The reverse proxy must forward `POST /approvals/notify`. The enabled
 signed POST endpoint also accepts private service Host names; browser and MCP
 routes retain the configured Host policy.
 
-This independent output has its own nonblocking queue, a fixed **1s** batch
-interval, the normal cooldown and webhook retries (up to three attempts,
+This independent output has its own nonblocking queue, a **1s** batch
+interval (overridden by a group batch when groups are configured), the normal cooldown and webhook retries (up to three attempts,
 waiting 1s then 4s; network failures, 429 and 5xx retry). It sends only warning
 pod alerts with a **Choose an action** link, never informational events. Each
 batch has at most 50 notices (also bounded by `watch.max_alerts`). Other outputs

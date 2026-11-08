@@ -22,13 +22,8 @@ type WatchOutput struct {
 }
 
 func (o WatchOutput) validate() error {
-	if len(o.Name) == 0 || len(o.Name) > 64 {
+	if !watchName(o.Name) {
 		return fmt.Errorf("name must have 1 to 64 ASCII letters, digits, '_' or '-'")
-	}
-	for _, c := range o.Name {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
-			return fmt.Errorf("invalid name")
-		}
 	}
 	if o.Type != "" && o.Type != "webhook" && o.Type != "discord" {
 		return fmt.Errorf("type must be webhook or discord")

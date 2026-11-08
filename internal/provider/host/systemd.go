@@ -30,10 +30,6 @@ func (u unitState) failed() bool {
 	return u.Active == "failed" || u.Result != "" && u.Result != "success"
 }
 
-type unitInput struct {
-	Unit string `json:"unit" jsonschema:"Required allowlisted systemd unit name, e.g. app.service"`
-}
-
 type unitLogsInput struct {
 	Unit  string `json:"unit" jsonschema:"Required allowlisted systemd unit name"`
 	Lines int    `json:"lines,omitempty" jsonschema:"Journal lines to return; default 100, maximum 500"`

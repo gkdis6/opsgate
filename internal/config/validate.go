@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"path"
+	"path/filepath"
 	"time"
 )
 
@@ -23,6 +24,16 @@ func (c Config) Validate() error {
 	}
 	if err := c.validateRegistrationPolicy(); err != nil {
 		return err
+	}
+	if err := c.Approval.Push.validate(c.Approval.Web); err != nil {
+		return err
+	}
+	if c.Approval.Push.Enabled && c.Auth.Builtin.StateFile != "" {
+		pushFile, _ := filepath.Abs(c.Approval.Push.StateFile)
+		oauthFile, _ := filepath.Abs(c.Auth.Builtin.StateFile)
+		if pushFile == oauthFile {
+			return fmt.Errorf("approval.push.state_file must differ from auth.builtin.state_file")
+		}
 	}
 	if c.Approval.Wait < 0 || c.Approval.Wait > 55*time.Second {
 		return fmt.Errorf("approval.wait must be between 0 and 55s")

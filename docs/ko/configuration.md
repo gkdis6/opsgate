@@ -86,6 +86,11 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 | `approval.ttl` | `10m` | 대기 중인 승인/입력의 유효 기간입니다 |
 | `approval.web` | `false` | 브라우저 승인을 활성화하며 builtin 인증이 필요합니다. 모드에서는 기본으로 켭니다 |
 | `approval.require_web` | `approval.web`이 true이면 `true`, 아니면 `false` | HTTP에서 웹 승인을 필수로 합니다. 명시적 `false`는 클라이언트 내 확인을 허용하고, 명시적 `true`는 stdio 쓰기도 거부합니다 |
+| `approval.push.enabled` | `false` | MCP 웹 승인용 Web Push; `approval.web` 필요 |
+| `approval.push.subject` | 비어 있음 | 활성화 시 필수인 연락처 `mailto:` 또는 `https:` URL |
+| `approval.push.state_file` | 모드에서는 `/var/lib/opsgate/push.json`, 그 외 비어 있음 | 구독과 VAPID 키를 0600으로 영구 저장; 활성화 시 필수이며 OAuth 상태 파일과 분리 |
+| `approval.push.allowed_hosts` | `[fcm.googleapis.com, updates.push.services.mozilla.com, web.push.apple.com, '*.notify.windows.com']` | HTTPS push 호스트; 와일드카드는 하위 도메인에만 적용; 연결 시 공개 주소 검사, 리다이렉트·프록시 사용 안 함 |
+| `approval.push.language` | `en` | 일반 알림 언어 `en` 또는 `ko`; push에 내용 없음 |
 | `approval.window` | `0s` | 사용자/도구/대상별 자동 승인 시간 창의 유효 기간입니다. 선택 사항이며, 활성화하면 1m–12h 범위로 설정합니다 |
 | `approval.window_tools` | `[]` | 승인 시간 창을 허용할 도구 이름의 `path.Match` glob이며, 비어 있으면 어떤 도구도 허용하지 않습니다 |
 | `providers.kubernetes.rollout_restart` | `[]` | namespace/name glob이며, 비어 있으면 도구를 비활성화합니다 |
@@ -182,6 +187,8 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 서버는 승인 전에 입력을 검증하고 부수 효과가 없는 계획(Plan)을 만듭니다. builtin 인증과 `approval.web: true`를 사용하는 HTTP에서는 기본적으로 웹 승인을 요구하고 승인 링크와 `approval_id`를 반환합니다. `approval.require_web: false`를 명시하면 지원하는 클라이언트에서 클라이언트 내 확인(elicitation)을 허용합니다. 프로토콜 버전에 따라 여러 차례 왕복하는 입력 요청도 포함하며, 지원하지 않는 클라이언트는 계속 웹 링크를 사용합니다. 링크를 열고 같은 업스트림 사용자로 로그인한 뒤, 실행할 작업을 정확히 검토하세요. 승인하면 원래 호출자와 인자로 계획을 다시 계산하고 승인한 요약과 대상을 검사한 뒤 한 번 실행합니다. 대기 중인 호출은 결과를 받고, `approval.wait`가 끝난 뒤에는 `approval_status` 또는 같은 인자와 `approval_id`로 조회합니다. 결과 재조회는 다시 실행하지 않습니다.
 
 승인은 유효 기간이 있고 한 번만 사용할 수 있으며, 사용자, 도구, 마스킹하지 않은 정규화 인자의 SHA-256(`approval_id` 제외), 계획에 연결됩니다. 사용자가 대상을 명확히 볼 수 있어야 하므로 마스킹으로 요약이 바뀌면 쓰기를 거부합니다. Kubernetes 계획에는 대상 UID를 포함하며, 실행(Apply)에는 같은 호출에서 만든 계획과 식별자/버전 사전 조건을 사용합니다. 확인 채널이 없으면 쓰기를 거부하고, stdio는 클라이언트 내 확인만 지원합니다.
+
+로그인한 `/approvals` 승인함은 자신의 유효한 요청과 보관된 결과만 표시합니다. 설치와 선택 기능인 기기 알림 설정은 [승인함과 알림](approval.md#승인함과-알림)을 참고하세요. `ops:write`가 있는 계정만 구독할 수 있습니다(사용자당 10개, 최신 구독 우선).
 
 승인 시간 창은 선택 사항이며, 사용하려면 `approval.window`와 `approval.window_tools`가 모두 필요합니다. `approval.window`는 1m–12h 범위로 설정하세요. `0s`이면 기능을 비활성화합니다. `approval.window_tools`는 `path.Match` glob 허용 목록이며 비어 있으면 어떤 도구도 허용하지 않습니다. 예를 들어 `window: 30m`과 `window_tools: [k8s_rollout_restart]`를 설정하면 브라우저에서 **Approve + allow for 30m**를 선택하거나, 클라이언트 내 확인에서 **Also auto-approve k8s_rollout_restart for 30m** 체크박스를 선택할 수 있습니다. 체크박스 선택은 필수가 아닙니다.
 

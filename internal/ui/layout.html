@@ -37,6 +37,7 @@ button:hover{filter:brightness(.94)}button:focus-visible,summary:focus-visible{o
 .status{font-size:2rem}.success{color:var(--accent)}
 .error{color:var(--danger,#b42318)}[hidden]{display:none}
 </style>
+{{block "head" .}}{{end}}
 </head>
 <body><main><header class="brand"><img src="{{icon}}" alt="">opsgate</header><section class="card">{{template "content" .}}</section></main>{{block "scripts" .}}{{end}}</body>
 </html>

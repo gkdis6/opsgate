@@ -34,6 +34,7 @@ type BrowserAuth interface {
 
 // Manager implements tool.Confirmer.
 type Manager struct {
+	push        *pushSender
 	mu          sync.Mutex
 	audit       *audit.Logger
 	requireWeb  bool
@@ -61,6 +62,7 @@ type pending struct {
 	fullReviewRequired                              bool
 	args                                            []byte
 	hash                                            [sha256.Size]byte
+	created                                         time.Time
 	expires                                         time.Time
 	decision                                        string
 	mcp                                             bool
@@ -196,6 +198,7 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 		tool: r.Tool, title: displayTitle(r), summary: r.Summary, args: args, hash: hash,
 		target: r.Target, noWindow: r.NoWindow,
 		fullReviewRequired: r.FullReviewRequired,
+		created:            m.now(),
 		expires:            m.now().Add(m.ttl),
 		run:                r.Run, mcp: true, done: make(chan struct{}),
 	}
@@ -203,6 +206,9 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	m.mu.Unlock()
 	if r.Pending != nil {
 		r.Pending()
+	}
+	if m.push != nil {
+		m.push.enqueue(p.user, p.expires)
 	}
 	if m.wait > 0 {
 		timer := time.NewTimer(m.wait)

@@ -188,6 +188,11 @@ If it returns pending, show the link; read the result with `approval_status`
 and `approval_id`, or retry the same arguments plus `approval_id` to retrieve
 the stored outcome. Retries never apply again.
 
+Open `/approvals` in a normal phone or desktop browser for your approval inbox.
+Optional Web Push opens that inbox outside messenger in-app browsers; on iPhone,
+add it to the Home Screen first. Push carries no approval content.
+See [setup](docs/approval.md#approval-inbox-and-notifications).
+
 Optional approval windows let a person approve a particular tool for a limited
 time. During that window, subsequent calls by the same user can skip a new
 approval prompt, including calls with different arguments on the approved target. Permission

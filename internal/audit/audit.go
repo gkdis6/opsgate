@@ -21,6 +21,7 @@ type Event struct {
 	Error     string         `json:"error,omitempty"`
 	// Write tools only: the plan shown to the human and how it was approved.
 	Plan       string `json:"plan,omitempty"`
+	Source     string `json:"source,omitempty"`
 	Approval   string `json:"approval,omitempty"`
 	DurationMS int64  `json:"duration_ms"`
 	OutputSize int    `json:"output_bytes"`

@@ -502,3 +502,24 @@ func TestImageRestorePasskeySurvivesBrowserSwitch(t *testing.T) {
 		}
 	}
 }
+
+func TestCatalogActionPasskeyBrowserSwitch(t *testing.T) {
+	f := newPasskeyFixture(t, "", "passkey:alice")
+	target := "/approve/action/k8s_scale?cluster=main&kind=deployment&namespace=apps&name=web&replicas=2&source=ai"
+	r := httptest.NewRequest("GET", "https://ops.example"+target, nil)
+	w := httptest.NewRecorder()
+	f.s.RequireUser(func(http.ResponseWriter, *http.Request, string) { t.Fatal("unexpected session") }).ServeHTTP(w, r)
+	location := w.Header().Get("Location")
+	if w.Code != 303 || location != "/oauth/passkey?return="+url.QueryEscape(target) {
+		t.Fatalf("login: %d %q", w.Code, location)
+	}
+	other := f.do(t, "GET", location, nil, nil)
+	if other.Code != 303 || other.Header().Get("Location") != target {
+		t.Fatalf("browser switch: %d %q", other.Code, other.Header().Get("Location"))
+	}
+	for _, bad := range []string{target + "&approval_id=forged", target + "&next=https://evil.example", target + "&source=rule", strings.Replace(target, "k8s_scale", "note_trash", 1), strings.Replace(target, "replicas=2", "replicas=2.5", 1), strings.Replace(target, "name=web", "name=%0d%0aLocation:evil", 1)} {
+		if approvalReturn(bad) {
+			t.Fatalf("unsafe return %q", bad)
+		}
+	}
+}

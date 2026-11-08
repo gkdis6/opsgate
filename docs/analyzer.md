@@ -190,7 +190,7 @@ queries when the call budget allows it. Without Notes, the investigation uses Ku
 
 Independently of MCP annotations, the analyzer allows only these exact tool
 names: `k8s_clusters`, `k8s_overview`, `k8s_list`, `k8s_get`, `k8s_events`,
-`k8s_logs`, `k8s_service_check`, `k8s_remediation_options`, `note_search`, `note_read`, `note_recent`,
+`k8s_logs`, `k8s_service_check`, `k8s_remediation_options`, `action_link`, `note_search`, `note_read`, `note_recent`,
 `note_list`, `note_links`, `note_tags`. They must also advertise `readOnlyHint`.
 A model-selected call is checked again before execution. Write tools are never
 offered or called; no approval window can expand this list.
@@ -326,9 +326,9 @@ managed. The model is explicitly instructed to explain report causes in the
 selected language while preserving quoted evidence and identifiers.
 
 `report.suggest_actions` defaults to true. Reports request concrete operator
-proposals with target identity, evidence, commands or an approval link already
-present in the signed alert, impact/risk, verification and rollback. Unverified
-parameters must be clearly marked placeholders. A restart is not proposed as a
+proposals with target identity, evidence, an approval link obtained through
+`action_link`, impact/risk, verification and rollback. Unknown parameters require
+further checks before proposing a fix. A restart is not proposed as a
 fix for a missing image or configuration. These are model-generated proposals
 requiring review, not executed actions; neither language nor action suggestions
 expand MCP access. Set this option to false to request checks without an action
@@ -358,4 +358,28 @@ checks Pod ownership and a non-deleting Deployment-owned ReplicaSet with an actu
 buttons. The browser uses existing authentication, passkey verification, fresh plan review,
 and one-use approval. The write rechecks state and changes only the chosen container image.
 No approval window is opened. Arbitrary model commands and model-generated URLs never become
-executable actions. Without a verified candidate, the report contains manual guidance only.
+executable actions. Without a verified candidate, the report identifies the outstanding checks.
+
+
+Catalog buttons also support restart, scale and controller-owned pod deletion.
+`action_link` is in the default read-only tool allowlist. The model may propose a
+fix only by calling it with verified arguments, must prefer the least invasive
+action, and must explain that a person approves every action. The tool returns a
+link only after the action's side-effect-free Plan accepts the current target;
+it never writes and needs no write scope. Enable the action allowlist and
+`action_approval_url` on the MCP server, and set `report.approval_url` to the same
+origin. Restrictive MCP token tool policies must permit `action_link` and the
+catalog tools it may plan; the token can remain `ops:read` only. For the dedicated
+reader deployment above, add `action_link` to both tool allowlists and enable
+the matching action resource allowlists with `action_approval_url` pointing to
+the public approval server. Keep the reader's Kubernetes RBAC read-only. The
+public server independently needs those actions enabled and write permissions;
+it checks the approving user's own access and current plan.
+
+Buttons are collected from `k8s_remediation_options` and `action_link` results,
+limited to five distinct URLs on the configured HTTPS origin. The analyzer
+accepts `/approve/action/{catalog-tool}` and the old image-restore alias, checks
+the catalog arguments, and uses the catalog label in the report language.
+`source=ai` adds “AI suggestion: ” / “AI 제안: ”. Generated prose URLs never
+become buttons. Sign-in, the approver's write scope/tool policy, fresh review,
+approval and re-plan checks remain mandatory. See [approval](approval.md).

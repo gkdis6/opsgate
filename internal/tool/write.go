@@ -39,7 +39,7 @@ type WriteSpec struct {
 	// for tools that carry document content.
 	MaxArgBytes int
 	// Direct also lets a person run this tool from a browser approval page,
-	// without an MCP client. See Direct. Keep it to small, reversible writes.
+	// without an MCP client. See Direct. Use only for catalog actions with bounded effects.
 	Direct bool
 }
 

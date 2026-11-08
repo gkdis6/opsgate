@@ -7,6 +7,10 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Added
+
+- Shared action catalog and generic approval links for restart, image restore, scale and controller-owned pod deletion; read-only `action_link` validates live plans, and analyzer buttons use catalog labels and rule/AI provenance. Legacy restart/image links remain aliases. / 재시작·이미지 복구·규모 조정·컨트롤러 소유 파드 삭제의 공통 카탈로그와 승인 링크, 현재 계획을 검증하는 조회 전용 `action_link`, 출처를 표시하는 분석기 버튼을 추가하고 기존 링크 별칭을 유지합니다.
+
 ### Changed
 
 - Web approval now rechecks and executes MCP writes immediately, once, using the original caller. Calls wait up to `approval.wait` (default 25s with web approval; 0–55s). Read retained results with the new read-only `approval_status` tool or an argument-bound `approval_id` retry; retries never apply again.

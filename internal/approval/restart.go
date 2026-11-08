@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
+	"github.com/gkdis6/opsgate/internal/action"
 	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/tool"
@@ -32,28 +31,30 @@ func (m *Manager) SetDirect(lookup func(name string) *tool.Direct) { m.direct = 
 
 // RestartURL returns the link that requests approval to restart a workload.
 // It holds no secret and changes nothing until a signed-in person approves.
+// Invalid or masked values produce no link.
 func RestartURL(base, cluster, kind, namespace, name string) string {
-	return strings.TrimRight(base, "/") + restartPath + url.PathEscape(cluster) + "/" + url.PathEscape(kind) + "/" + url.PathEscape(namespace) + "/" + url.PathEscape(name)
+	link, _ := action.URL(base, restartTool, map[string]any{"cluster": cluster, "kind": kind, "namespace": namespace, "name": name}, "rule")
+	return link
 }
 
-// restartRequest shows the signed-in person a fresh plan to approve. Opening
-// the link changes nothing but one expiring approval record.
 func (m *Manager) restartRequest(w http.ResponseWriter, r *http.Request, subject string) {
-	m.directRequest(w, r, subject, restartTool, map[string]any{"cluster": r.PathValue("cluster"), "kind": r.PathValue("kind"), "namespace": r.PathValue("namespace"), "name": r.PathValue("name")})
+	m.actionRequest(w, r, subject)
 }
 
 func (m *Manager) restoreImageRequest(w http.ResponseWriter, r *http.Request, subject string) {
-	query := r.URL.Query()
-	for _, key := range []string{"container", "expected_image", "image"} {
-		if len(query[key]) != 1 {
-			ui.Message(w, http.StatusBadRequest, "Invalid action", "Image action fields must occur once.")
-			return
-		}
-	}
-	m.directRequest(w, r, subject, "k8s_restore_image", map[string]any{"cluster": r.PathValue("cluster"), "namespace": r.PathValue("namespace"), "name": r.PathValue("name"), "container": query.Get("container"), "expected_image": query.Get("expected_image"), "image": query.Get("image")})
+	m.actionRequest(w, r, subject)
 }
 
-func (m *Manager) directRequest(w http.ResponseWriter, r *http.Request, subject, name string, values map[string]any) {
+func (m *Manager) actionRequest(w http.ResponseWriter, r *http.Request, subject string) {
+	entry, values, source, err := action.Parse(r.URL)
+	if err != nil {
+		ui.Message(w, http.StatusBadRequest, "Invalid action", err.Error())
+		return
+	}
+	m.directRequest(w, r, subject, entry.Tool, values, source)
+}
+
+func (m *Manager) directRequest(w http.ResponseWriter, r *http.Request, subject, name string, values map[string]any, source string) {
 	var d *tool.Direct
 	if m.direct != nil {
 		d = m.direct(name)
@@ -73,7 +74,7 @@ func (m *Manager) directRequest(w http.ResponseWriter, r *http.Request, subject,
 		ui.Message(w, http.StatusBadRequest, "Invalid link", "This action link could not be read.")
 		return
 	}
-	caller := tool.Caller{User: subject, Transport: "web", Scopes: scopes, Tools: tools}
+	caller := tool.Caller{User: subject, Transport: "web", Scopes: scopes, Tools: tools, Source: source}
 	plan, summary, err := d.Plan(r.Context(), caller, raw)
 	if err != nil {
 		message := redact.String(err.Error())
@@ -103,13 +104,13 @@ func (m *Manager) directRequest(w http.ResponseWriter, r *http.Request, subject,
 		return
 	}
 	m.approvals[id] = &pending{
-		id: id, csrf: csrf, user: subject, transport: caller.Transport, tool: name, title: d.Title, summary: summary,
+		id: id, csrf: csrf, user: subject, transport: caller.Transport, tool: name, title: label(name), source: source, summary: summary,
 		target: plan.Target, noWindow: true, args: display, expires: m.now().Add(m.ttl),
 		run: func(ctx context.Context) (string, error) { return d.Run(ctx, caller, raw, summary) },
 	}
 	m.mu.Unlock()
 	m.audit.Record(audit.Event{Time: m.now(), User: redact.String(subject), Transport: caller.Transport, Tool: name, Outcome: "pending",
-		Approval: "web", Plan: summary, Args: map[string]any{"approval_id_prefix": id[:8]}})
+		Approval: "web", Source: source, Plan: summary, Args: map[string]any{"approval_id_prefix": id[:8]}})
 	http.Redirect(w, r, "/approve/"+id, http.StatusSeeOther)
 }
 
@@ -131,4 +132,9 @@ func (m *Manager) runDirect(ctx context.Context, p *pending, run func(context.Co
 	}
 	m.mu.Unlock()
 	return result
+}
+
+func label(name string) string {
+	entry, _ := action.Lookup(name)
+	return entry.Label("en")
 }

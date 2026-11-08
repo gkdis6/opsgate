@@ -14,10 +14,11 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. 각 도구
 | `k8s_service_check` | 서비스 호스트 이름의 DNS 설정과 준비된 백엔드 점검(설정만 확인하며 DNS 질의·연결을 보내지 않고 NetworkPolicy는 평가하지 않음) | 필수 `namespace`(조회하는 쪽 네임스페이스), `host`(소문자 DNS 이름, 최대 253바이트, IP 주소 불가); 선택 `port`(서비스 포트 번호 또는 이름), `pod`(DNS 설정을 가져올 같은 네임스페이스의 파드); 클러스터 도메인은 `cluster.local`로 가정하고, 도메인까지 적은 이름은 다른 도메인도 허용; 조회 후보, Service, 선택자에 맞는 파드(최대 500개), EndpointSlice를 확인; 다른 허용 네임스페이스의 같은 이름 Service를 최대 10개 제안 |
 | `k8s_logs` | 파드 로그(하나 이상의 클러스터에서 `allow_logs=true`일 때 도구 등록) | 필수 `namespace`, `pod`; 일반/init/ephemeral 컨테이너를 통틀어 정확히 하나일 때만 `container` 생략 가능; `tail=200`, 1–`max_log_lines`로 보정(기본 상한 500); `since=""`(시간 필터 없음), 양수 Go 기간 표기(최대 168h); `previous=false`; `grep=""`, 문자열 그대로 대소문자 구분 없이 부분 검색; 스트림 상한 1 MiB |
 | `k8s_events` | 네임스페이스 이벤트 | `namespace=""`(허용된 모든 네임스페이스); `warnings_only=true`; `since="1h"`, 양수 Go 기간 표기(최대 168h); `limit=50`, 1–500으로 보정 |
+| `action_link` | 조회 전용: 현재 Plan으로 카탈로그 조치를 검증하고 승인 URL·이름·요약 반환; 실행 없음 | 필수 `tool`, `arguments` 객체; 선택 `source`(기본 `ai`, 또는 `rule`); `ops:read`; 활성 카탈로그 조치와 클러스터별 `action_approval_url`이 있으면 등록 |
 | `k8s_remediation_options` | 조회 전용: 파드가 이미지를 받지 못할 때, 삭제 중이 아닌 소유 ReplicaSet의 준비된 파드에서 대상 컨테이너가 준비되어 보고된 이미지를 실행 중이면 이미지 복원 승인 링크 제공 | 필수 `namespace`, `name`(파드); `restore_image`와 `action_approval_url`을 설정하지 않으면 결과 없음; 링크 최대 5개 |
 | `k8s_rollout_restart` | 파드 템플릿을 갱신해 워크로드 재시작 | 필수 `kind`(deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` 허용 설정 필요 |
 | `k8s_scale` | 워크로드 복제본 수 설정 | 필수 `kind`(deployment/statefulset), `namespace`, `name`, `replicas`(0–`max_replicas`, 기본 상한 10); `scale` 허용 설정 필요 |
-| `k8s_delete_pod` | UID 사전 조건을 적용한 특정 파드 삭제 | 필수 `namespace`, `name`; `delete_pod` 허용 설정 필요 |
+| `k8s_delete_pod` | UID 사전 조건을 적용한 특정 파드 삭제 | 필수 `namespace`, `name`; `delete_pod` 허용 설정 필요; 링크는 컨트롤러 소유 파드만 허용, MCP는 소유자 없는 파드에 경고 |
 | `k8s_restore_image` | 삭제 중이 아닌 소유 ReplicaSet의 준비된 파드에서 준비되어 실행 중인 컨테이너로 확인한 이미지로 Deployment 컨테이너 이미지 복원. 이미지만 바뀌고 설정은 되돌리지 않음 | 필수 `namespace`, `name`(Deployment), `container`, `expected_image`(현재 이미지와 정확히 일치), `image`(복원할 이미지와 정확히 일치); `restore_image` 허용 설정 필요; 패치 직전 재확인; 승인 시간 창 없음 |
 | `note_search` | 노트 내용/파일명에서 문자열 그대로 검색, 발췌문과 검색한 항목 수 제공 | 필수 `query`(1–4096 UTF-8 바이트); 선택 `folder`, `tag`, `case_sensitive=false`; `limit=20`, 최대 100 |
 | `note_read` | 노트 텍스트와 파일/줄 메타데이터 | 필수 `path`, `.md` 생략 가능; `offset_line=1`, `max_lines=400`, 최대 2000 |
@@ -89,3 +90,10 @@ kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하
 읽기 도구는 원시 JSON 인자를 최대 16 KiB까지 받습니다. 쓰기 인자의 기본 상한도 16 KiB이지만, `note_create`, `note_append`, `note_replace`는 528 KiB까지 허용합니다. JSON 이스케이프도 이 크기에 포함됩니다. 승인 요약의 상한은 `max(64 KiB, argument limit + 16 KiB)`로, 기본 도구는 64 KiB, 노트 내용을 다루는 도구는 544 KiB입니다. 화면에 표시할 마스킹한 인자도 각 도구의 인자 제한을 넘을 수 없습니다. 노트 미리보기에는 별도로 약 8 KiB의 표시 제한이 있습니다.
 
 공유 래퍼는 4 MiB를 초과하는 provider 출력을 통째로 생략합니다. 그 이하는 텍스트를 마스킹한 뒤 `server.max_output_bytes`(기본값 64 KiB)에 맞춰 자르며, 오류도 같은 방식으로 처리합니다. provider별 수집 제한이 더 작으면 그 제한도 적용됩니다. 제한 시간은 도구가 취소 신호를 따를 때 적용됩니다. 쓰기 작업은 계획(Plan)과 실행(Apply)에 각각 별도의 `server.tool_timeout`(기본값 30s)을 적용하며, 사람이 승인할 때까지 기다리는 시간은 제외합니다.
+
+`action_link`는 재시작, 이미지 복구, 규모 조정, 컨트롤러 소유 파드 삭제만
+지원합니다. `ops:write` 없이 서버 등록 상태, 호출자 도구 정책, 카탈로그 인자와
+타입, 현재 대상 허용 목록을 검사합니다. 추가 인자(`arguments` 안의 `source`,
+`approval_id` 포함)와 마스킹된 값은 거부합니다. 링크는 `/approve/action/{tool}`
+형식이며, 승인하려면 브라우저 사용자의 쓰기 스코프와 새 검토가 필요합니다.
+[승인 문서](approval.md#카탈로그-조치-링크)를 참고하세요.

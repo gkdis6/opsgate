@@ -126,3 +126,36 @@ Tool events use `pending`, `denied`, `ok` or `error`. Browser decisions add `app
 Approval confirms a requested action, not arbitrary future actions by the same client. Windows intentionally broaden that promise to a tool on the approved target for their lifetime. OS permissions, Kubernetes RBAC, provider allowlists, scopes and tool restrictions remain necessary.
 
 See [Authentication](authentication.md) to configure built-in sign-in and the [security policy](../SECURITY.md) for trust boundaries.
+
+## Catalog action links
+
+New links use `GET /approve/action/{tool}?<arguments>&source=rule|ai`. The server
+catalog contains only `k8s_rollout_restart`, `k8s_restore_image`, `k8s_scale` and
+`k8s_delete_pod`; note tools are excluded. Each action must also be registered
+as Direct by the enabled provider and server tool policy. The catalog defines
+English/Korean labels, exact link argument names and future undo metadata:
+scale and image restore are reversible; restart and pod deletion are not.
+Restart changes no data directly, but still needs approval.
+
+Allowed arguments are `cluster`, `namespace`, `name`, plus `kind` for restart
+and scale, `replicas` (an integer) for scale, or `container`, `expected_image`,
+`image` for image restore. `cluster` may be omitted on a single-cluster server.
+Unknown or repeated fields, `approval_id`, invalid sources and masked/secret
+values are refused before an approval is created. `source` is display/audit
+metadata, never a tool argument; it defaults to `rule`. The English approval
+page shows the catalog label and either “Suggested by: rule” or “Suggested by:
+AI — review carefully”. Source is a suggestion marker, not authenticated proof
+of authorship. Pending, decision and execution audit events record `source`.
+
+The read-only `action_link` tool defaults to `source=ai`, validates the current
+target with Plan and returns a URL, label and summary. It needs `ops:read` and
+the caller's tool policy, but cannot apply or grant an approval. Opening any
+link still requires browser sign-in and the approver's own `ops:write`, tool
+policy and target allowlists. Approve re-plans and runs once; links never open
+approval windows. Pod deletion from links requires a controller owner, checked
+again at apply with a resource-version precondition. MCP requests retain the
+existing warning for pods without a controller.
+
+Historical `/approve/restart/{cluster}/{kind}/{namespace}/{name}` and
+`/approve/restore-image/{cluster}/{namespace}/{name}?container=…&expected_image=…&image=…`
+remain aliases with the same catalog validation.

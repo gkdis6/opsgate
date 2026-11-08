@@ -14,6 +14,7 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
+	"github.com/gkdis6/opsgate/internal/action"
 	"github.com/gkdis6/opsgate/internal/ui"
 )
 
@@ -267,25 +268,13 @@ func approvalReturn(target string) bool {
 	if err != nil || !strings.HasPrefix(u.Path, "/approve/") || path.Clean(u.Path) != u.Path || len(target) > 8192 {
 		return false
 	}
-	if u.RawQuery == "" {
-		return true
+	// Only catalog link fields may survive a browser switch. In particular no
+	// arbitrary redirect parameter or approval_id can travel in this return URL.
+	if strings.HasPrefix(u.Path, "/approve/action/") || strings.HasPrefix(u.Path, "/approve/restart/") || strings.HasPrefix(u.Path, "/approve/restore-image/") {
+		_, _, _, err := action.Parse(u)
+		return err == nil
 	}
-	// Image restoration needs these parameters to rebuild a fresh plan in the
-	// new browser. Never carry arbitrary return/redirect parameters across.
-	if !strings.HasPrefix(u.Path, "/approve/restore-image/") || len(strings.Split(strings.TrimPrefix(u.Path, "/approve/restore-image/"), "/")) != 3 {
-		return false
-	}
-	q, err := url.ParseQuery(u.RawQuery)
-	if err != nil || len(q) != 3 {
-		return false
-	}
-	for _, key := range []string{"container", "expected_image", "image"} {
-		values := q[key]
-		if len(values) != 1 || values[0] == "" || len(values[0]) > 1024 || strings.ContainsAny(values[0], "\\\r\n\x00") {
-			return false
-		}
-	}
-	return true
+	return u.RawQuery == ""
 }
 
 func (s *Server) passkeyLoginPage(w http.ResponseWriter, r *http.Request) {

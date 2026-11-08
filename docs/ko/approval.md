@@ -126,3 +126,36 @@ approval:
 승인은 요청한 작업에만 유효하며, 같은 클라이언트가 이후에 요청하는 임의의 작업까지 허용하지는 않습니다. 승인 시간 창은 유효 기간 동안 승인한 대상에서 그 도구의 모든 작업으로 승인 범위를 넓히도록 설계했습니다. OS 권한, Kubernetes RBAC, provider 허용 목록, 스코프, 도구 제한은 여전히 필요합니다.
 
 내장 로그인 설정은 [인증](authentication.md)을, 신뢰 경계는 [보안 정책](security.md)을 참고하세요.
+
+## 카탈로그 조치 링크
+
+새 링크는 `GET /approve/action/{tool}?<인자>&source=rule|ai` 형식입니다. 서버
+카탈로그에는 `k8s_rollout_restart`, `k8s_restore_image`, `k8s_scale`,
+`k8s_delete_pod`만 있고 노트 도구는 없습니다. 활성 provider와 서버 도구 정책이
+Direct로 등록한 조치만 사용할 수 있습니다. 카탈로그는 영문·한글 이름, 정확한
+링크 인자 목록과 향후 되돌리기 정보를 정의합니다. 규모 조정과 이미지 복구는
+되돌릴 수 있고, 재시작과 파드 삭제는 되돌릴 수 없습니다. 재시작은 데이터를
+직접 바꾸지 않지만 승인은 필요합니다.
+
+허용 인자는 `cluster`, `namespace`, `name`입니다. 재시작·규모 조정에는 `kind`,
+규모 조정에는 정수 `replicas`, 이미지 복구에는 `container`, `expected_image`,
+`image`를 추가합니다. 클러스터가 하나면 `cluster`는 생략할 수 있습니다.
+알 수 없거나 반복된 필드, `approval_id`, 잘못된 출처와 마스킹·비밀 값은 승인
+생성 전에 거부합니다. `source`는 표시·감사 전용이며 도구 인자로 전달하지 않고
+기본값은 `rule`입니다. 현재 영어 승인 화면에는 카탈로그 이름과
+“Suggested by: rule” 또는 “Suggested by: AI — review carefully”를 표시합니다.
+출처는 제안 표시이며 작성자를 인증한 증거가 아닙니다. 대기·결정·실행 감사
+이벤트에 `source`를 기록합니다.
+
+조회 전용 `action_link`는 기본 `source=ai`로 현재 대상을 Plan으로 검증한 뒤
+URL, 이름, 계획 요약을 반환합니다. `ops:read`와 호출자의 도구 정책을 확인하지만
+실행하거나 승인을 부여하지 않습니다. 링크를 열면 여전히 브라우저 로그인과
+승인자 자신의 `ops:write`, 도구 정책, 대상 허용 목록을 확인합니다. 승인 시
+계획을 다시 확인하고 한 번 실행하며 승인 시간 창은 제공하지 않습니다. 링크의
+파드 삭제는 컨트롤러 소유 파드만 허용하며 실행 직전에도 소유자를 확인하고
+리소스 버전 사전 조건을 적용합니다. MCP 요청은 컨트롤러가 없는 파드에 대한
+기존 경고 동작을 유지합니다.
+
+기존 `/approve/restart/{cluster}/{kind}/{namespace}/{name}`과
+`/approve/restore-image/{cluster}/{namespace}/{name}?container=…&expected_image=…&image=…`
+링크도 같은 카탈로그 검증을 거치는 별칭으로 계속 동작합니다.

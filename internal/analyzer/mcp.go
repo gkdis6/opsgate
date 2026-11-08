@@ -10,7 +10,7 @@ import (
 )
 
 // Explicit names supplement readOnlyHint; a misleading annotation cannot enable writes.
-var readTools = []string{"k8s_clusters", "k8s_overview", "k8s_list", "k8s_get", "k8s_events", "k8s_logs", "k8s_service_check", "k8s_remediation_options", "note_search", "note_read", "note_recent", "note_list", "note_links", "note_tags"}
+var readTools = []string{"k8s_clusters", "k8s_overview", "k8s_list", "k8s_get", "k8s_events", "k8s_logs", "k8s_service_check", "k8s_remediation_options", "action_link", "note_search", "note_read", "note_recent", "note_list", "note_links", "note_tags"}
 
 type toolSession interface {
 	List(context.Context) ([]*mcp.Tool, error)

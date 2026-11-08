@@ -37,6 +37,9 @@ func (m *Manager) Routes(mux *http.ServeMux) {
 			m.browser.RequireUser(m.page).ServeHTTP(w, r)
 		}))))
 	}
+	mux.Handle("GET /approve/action/{tool}", securityHeaders(protect.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		m.browser.RequireUser(m.actionRequest).ServeHTTP(w, r)
+	}))))
 	mux.Handle("GET /approve/restore-image/{cluster}/{namespace}/{name}", securityHeaders(protect.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.browser.RequireUser(m.restoreImageRequest).ServeHTTP(w, r)
 	}))))
@@ -115,11 +118,11 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 			}
 		}
 		decisionEvent = &audit.Event{Time: m.now(), User: redact.String(p.user), Transport: p.transport,
-			Tool: p.tool, Outcome: p.decision, Approval: "web", Args: map[string]any{"approval_id_prefix": p.id[:8]}}
+			Tool: p.tool, Source: p.source, Outcome: p.decision, Approval: "web", Args: map[string]any{"approval_id_prefix": p.id[:8]}}
 	}
 	view := approvalView{
 		PageTitle: "Approve: " + p.title, Tool: p.tool, Lines: planLines(p.summary), User: p.user, Transport: p.transport,
-		Target: p.target, NoWindow: p.noWindow,
+		Target: p.target, NoWindow: p.noWindow, Label: label(p.tool), Source: sourceLabel(p.source),
 		Expires: fmt.Sprintf("Expires in %d min (%s UTC)", int(math.Ceil(p.expires.Sub(m.now()).Minutes())), p.expires.UTC().Format("15:04")),
 		CSRF:    p.csrf, FullReview: p.fullReviewRequired,
 	}
@@ -184,7 +187,18 @@ func unavailablePage(w http.ResponseWriter) {
 	ui.Message(w, http.StatusNotFound, "Approval unavailable", "This approval is unknown or has expired. Ask your assistant to request a new approval.")
 }
 
+func sourceLabel(source string) string {
+	switch source {
+	case "ai":
+		return "AI — review carefully"
+	case "rule":
+		return "rule"
+	}
+	return ""
+}
+
 type approvalView struct {
+	Label, Source                                                         string
 	PageTitle, Tool, Args, User, Transport, Expires, CSRF, Status, Window string
 	// Direct means approving runs the write here, so Result replaces the chat.
 	Direct bool
@@ -229,6 +243,7 @@ var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
 {{define "content"}}
 {{if .Status}}<h1 class="status">{{.Status}}</h1><p>Tool: <strong>{{.Tool}}</strong></p>
 {{else}}<h1>{{.PageTitle}}</h1><p>Review the target and planned changes before approving.</p>{{end}}
+{{if .Source}}<p>{{.Label}}</p><p>Suggested by: {{.Source}}</p>{{end}}
 {{if .Target}}<div class="target"><strong>Target: {{.Target}}</strong></div>{{end}}
 {{if .NoWindow}}<p class="note">This target requires approval for every call.</p>{{end}}
 <div class="target plan" aria-label="Target and plan">{{range .Lines}}<span class="plan-line {{.Class}}">{{if .Text}}{{.Text}}{{else}} {{end}}</span>{{end}}</div>

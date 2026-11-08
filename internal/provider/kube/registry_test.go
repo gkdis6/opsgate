@@ -292,7 +292,7 @@ func TestEveryToolRequiresCluster(t *testing.T) {
 	}
 }
 
-func TestOnlyRolloutRestartIsDirect(t *testing.T) {
+func TestCatalogWritesAreDirect(t *testing.T) {
 	cfg, clients := clusterFixture()
 	env := &tool.Env{Timeout: 5 * time.Second, MaxOutputBytes: 65536}
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
@@ -300,8 +300,8 @@ func TestOnlyRolloutRestartIsDirect(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"k8s_scale", "k8s_delete_pod"} {
-		if env.Direct(name) != nil {
-			t.Fatalf("%s can run without a client", name)
+		if env.Direct(name) == nil {
+			t.Fatalf("%s is not direct", name)
 		}
 	}
 	d := env.Direct("k8s_rollout_restart")

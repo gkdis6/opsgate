@@ -300,7 +300,7 @@ The shared wrapper writes one JSON object per handled tool call, appended to `se
 {"time":"2026-10-24T12:00:00Z","user":"local","transport":"stdio","tool":"k8s_get","args":{"kind":"deployment","namespace":"default","name":"web"},"outcome":"ok","duration_ms":12,"output_bytes":120}
 ```
 
-Fields of `audit.Event`: `time` (RFC3339 timestamp with optional fractional seconds), `user`, `transport`, `tool`, optional redacted `args`, `outcome` (`ok`, `error`, `denied`, `pending`), optional redacted `error`, `duration_ms`, and `output_bytes` (returned success text size; zero on error). Write events additionally include optional redacted `plan` (the summary shown to the human) and `approval` (the confirmation method, `elicitation`, `web` or `window`; may also be present on a refusal or pending call). `pending` means human input is outstanding. Web approval creation records `pending` before waiting, without text output; result retrieval does not duplicate the apply event. Elicitation input requests do not return text output. Planning and applying each receive a separate tool timeout; human confirmation may take longer. Web decisions emit separate audit events with `outcome` `approved` or `rejected`, user, tool and only an eight-character `args.approval_id_prefix`. Denied multi round-trip approval verifications emit `denied` events without request state. Tool output bodies are not stored. Audit write failures are reported to stderr without failing the tool call; audit is not tamper-proof. Protect and rotate logs, which may still contain sensitive information.
+Fields of `audit.Event`: `time` (RFC3339 timestamp with optional fractional seconds), `user`, `transport`, `tool`, optional redacted `args`, `outcome` (`ok`, `error`, `denied`, `pending`), optional redacted `error`, `duration_ms`, and `output_bytes` (returned success text size; zero on error). Write events additionally include optional redacted `plan` (the summary shown to the human) and `approval` (the confirmation method, `elicitation`, `web` or `window`; may also be present on a refusal or pending call). `pending` means human input is outstanding. Web approval creation records `pending` before waiting, without text output; result retrieval does not duplicate the apply event. Elicitation input requests do not return text output. Planning and applying each receive a separate tool timeout; human confirmation may take longer. Web decisions emit separate audit events with `outcome` `approved` or `rejected`, user, tool and only an eight-character `args.approval_id_prefix`. Denied multi round-trip approval verifications emit `denied` events without request state. Link approval creation, decisions and execution also record optional `source` (`rule` or `ai`), separately from tool arguments. Tool output bodies are not stored. Audit write failures are reported to stderr without failing the tool call; audit is not tamper-proof. Protect and rotate logs, which may still contain sensitive information.
 
 Window creation emits `window_granted` with the source approval method and `args.window`/`args.expires_at`; later calls using the grant record `approval: window`.
 
@@ -312,7 +312,11 @@ and [example](../analyzer.example.yaml).
 
 `watch.language: ko|en` selects the default display language for all webhook/Discord outputs.
 Kubernetes `restore_image: ["namespace/deployment"]` and `action_approval_url: https://mcp.example.com`
-opt in to verified image restoration approvals. Both default to disabled; see [analyzer](analyzer.md).
+opt in to verified image restoration approvals. `action_approval_url` is also the
+per-cluster HTTPS origin used by `action_link` for all four catalog actions. No
+new setting is required: set this URL and at least one of `rollout_restart`,
+`restore_image`, `scale` or `delete_pod`; server tool policy still controls
+registration. Both default to disabled; see [analyzer](analyzer.md).
 
 ## Command line
 

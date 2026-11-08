@@ -162,8 +162,11 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 		view.Result = m.runDirect(r.Context(), p, run)
 	}
 	view.Result, view.Undo, _ = m.splitUndo(view.Result)
-	if view.Direct && strings.HasPrefix(view.Result, notApplied) {
-		view.Status, view.PageTitle = "Not applied", "Not applied"
+	switch {
+	case view.Direct && strings.HasPrefix(view.Result, notApplied):
+		view.Status, view.PageTitle = "Not applied / 적용 안 됨", "Not applied"
+	case view.Direct && view.Result != "" && p.decision == "approved" && p.window == 0:
+		view.Status, view.PageTitle = "Applied / 적용됨", "Applied"
 	}
 	var args bytes.Buffer
 	_ = json.Indent(&args, argsJSON, "", "  ")

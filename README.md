@@ -198,7 +198,7 @@ assistant reads it later with `approval_status`; repeating the call with
   browser; messenger in-app browsers often break passkeys.
 - **Push.** With `approval.push` enabled, a change requested from a chat and,
   with `watch.inbox`, a new alert send a Web Push to your devices. Tapping it
-  opens the inbox. The push carries no content. On iPhone, add opsgate to the
+  opens the newest waiting approval directly. The push carries no content. On iPhone, add opsgate to the
   Home Screen first.
 - **Undo.** After scaling or restoring an image, the result offers an Undo link
   back to the previous state. It is a new action with its own plan and approval.

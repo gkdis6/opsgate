@@ -89,7 +89,7 @@ this prints `require_web: true` explicitly. Running that output with
 | `approval.require_web` | `true` when `approval.web` is true; otherwise `false` | Require browser approval on HTTP; explicit `false` allows elicitation; explicit `true` also denies stdio writes |
 | `approval.inbox_notify.secret_file` | empty (disabled) | Shared watch notice HMAC key file (16–4096 bytes, trimmed); requires builtin web approval and subjects |
 | `approval.inbox_notify.subjects` | `[]` | 1–100 unique configured builtin users to receive identifier-only notices; memory-only, max 50/user for 1h; pushes coalesce for 1m |
-| `watch.inbox.url` | empty (disabled) | Server origin for signed `POST /approvals/notify`; HTTPS or webhook-compatible private/loopback HTTP; own queue and fixed 1s batching |
+| `watch.inbox.url` | empty (disabled) | Server origin for signed `POST /approvals/notify`; HTTPS or webhook-compatible private/loopback HTTP; own queue and 1s batching (group batch overrides it) |
 | `watch.inbox.secret_file` | empty | Required shared HMAC key file (16–4096 bytes, trimmed) |
 | `watch.inbox.allow_private_http` | `false` | Permit private HTTP with dial-time address checks, as for watch outputs |
 | `approval.push.enabled` | `false` | Web Push for MCP web approvals and configured inbox notices; requires `approval.web` |
@@ -205,6 +205,7 @@ The `watch` section is read only by `opsgate watch`, a separate process; the MCP
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `approval_url` | empty | Public https origin for choices/restart links; defaults to the inbox origin when inbox is configured |
+| `groups` | absent (broadcast) | Ordered namespace routes: name, namespaces, outputs, problems_only and batch; see [Groups](watch.md#groups) |
 | `clusters` | all | Configured cluster names to watch |
 | `problems_only` | `false` | Produce warnings only for every channel |
 | `batch` | `30s` | Webhook batch interval (1s–10m) |
@@ -218,6 +219,20 @@ The `watch` section is read only by `opsgate watch`, a separate process; the MCP
 | `email.to` | empty | 1–20 bare addresses, no display names or CR/LF |
 | `email.batch` | `5m` | Email batch interval (1m–1h) |
 | `email.problems_only` | `false` | Send warnings only by email |
+
+### Alert groups
+
+Optional `watch.groups` selects the first namespace match before applying group
+and output warning filters. It replaces output batch intervals and keeps batches,
+cooldown and retries independent per `(group, output)`. Namespaces use
+`path.Match`; namespace-less alerts match only literal `""` or `"*"`. Unmatched
+alerts are dropped and counted in local minute/shutdown summaries. Configure
+1–50 uniquely named groups, valid globs and existing outputs; `email`/`inbox`
+refer to enabled dedicated settings and are reserved output names with groups.
+Use 1s–10m batches for webhook/Discord/inbox, 1m–1h for email, or their
+intersection for mixed groups. All existing global and output warning filters
+still apply. See [Groups](watch.md#groups) for the example and complete limits.
+Omit `groups` to retain existing broadcast behavior; `groups: []` is invalid.
 
 ### Direct webhook destinations
 
@@ -266,7 +281,7 @@ Routing/framing headers such as `Host` and `Content-Length`, and
 `X-Opsgate-Signature`, are reserved; duplicate header names are rejected case-insensitively.
 
 Templates receive the exported Go fields of `alert.Batch`: `.Source`, `.SentAt`,
-`.Alerts`, `.Dropped`, `.Text`; alerts have `.Time`, `.Cluster`, `.Namespace`,
+`.Alerts`, `.Dropped`, `.Text`, `.Group` (empty without groups); alerts have `.Time`, `.Cluster`, `.Namespace`,
 `.Kind`, `.Name`, `.Severity`, `.Reason`, `.Summary`, `.Hint`, `.Restart` and
 `.Suppressed`. Use `{{json VALUE}}` without surrounding quotes to safely encode
 strings, arrays and objects. Alert text is data, never another template.
@@ -299,8 +314,9 @@ with webhook delivery.
 
 Namespace, pod and container names and redacted summaries pass through the mail
 provider outside the cluster. Worst-case volume is one message per batch
-interval: `5m` can send up to 288 messages a day and `15m` up to 96. Check the
-account's sending limit, especially when other services share it.
+interval, per group when groups are configured: `5m` can send up to 288
+messages a day and `15m` up to 96. Check the account's sending limit, especially
+when other services share it.
 
 See [watch alerts](watch.md) for what is reported and the payload.
 

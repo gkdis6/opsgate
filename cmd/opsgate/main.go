@@ -183,23 +183,20 @@ func (c *application) runWatch(args []string) error {
 	// Keep delivery alive until watcher callbacks have stopped.
 	deliveryCtx, cancelDeliveries := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancelDeliveries()
-	var deliveries sync.WaitGroup
-	for _, d := range dispatchers {
-		deliveries.Add(1)
-		go func() {
-			defer deliveries.Done()
-			d.Run(deliveryCtx)
-		}()
+	var groups []alert.Group
+	for _, g := range w.Groups {
+		groups = append(groups, alert.Group{Name: g.Name, Namespaces: g.Namespaces, Outputs: g.Outputs, ProblemsOnly: g.ProblemsOnly, Batch: g.Batch})
 	}
+	router := alert.NewRouter(groups, dispatchers)
+	var deliveries sync.WaitGroup
+	deliveries.Go(func() { router.Run(deliveryCtx) })
 	emit := func(a alert.Alert) {
 		base := w.ApprovalURL
 		if base == "" {
 			base = w.Inbox.URL
 		}
 		addApprovalLink(&a, base)
-		for _, d := range dispatchers {
-			d.Emit(a)
-		}
+		router.Emit(a)
 	}
 	err = kube.Watch(ctx, cfg.WatchClusters(), w.ProblemsOnly, emit)
 	stop()

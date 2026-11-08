@@ -15,6 +15,7 @@ import (
 // watches Kubernetes and delivers alerts. The MCP server does not
 // use it.
 type Watch struct {
+	Groups   []WatchGroup  `yaml:"groups,omitempty"`
 	Inbox    WatchInbox    `yaml:"inbox,omitempty"`
 	Language string        `yaml:"language"`
 	Outputs  []WatchOutput `yaml:"outputs,omitempty"`
@@ -116,6 +117,10 @@ func (w Watch) validate(k Kubernetes) error {
 			return fmt.Errorf("watch.outputs: duplicate name %q", o.Name)
 		}
 		outputs[o.Name] = true
+	}
+
+	if err := w.validateGroups(); err != nil {
+		return err
 	}
 
 	if w.ApprovalURL != "" {

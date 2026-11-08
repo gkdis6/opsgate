@@ -72,7 +72,11 @@ func (s *webhookSender) body(b *Batch) ([]byte, error) {
 	}
 	if s.format == "discord" {
 		description := discordClipLanguage(discordDescription(b, s.language), 4096, s.language)
-		return json.Marshal(map[string]any{"allowed_mentions": map[string]any{"parse": []string{}}, "embeds": []any{map[string]any{"title": "opsgate watch", "description": description}}})
+		title := "opsgate watch"
+		if b.Group != "" {
+			title += " · " + b.Group
+		}
+		return json.Marshal(map[string]any{"allowed_mentions": map[string]any{"parse": []string{}}, "embeds": []any{map[string]any{"title": title, "description": description}}})
 	}
 	return json.Marshal(b)
 }

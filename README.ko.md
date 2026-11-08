@@ -307,6 +307,9 @@ MCP 서버와 함께 `opsgate watch`를 실행하면 Kubernetes의 문제와 변
 받을 수 있습니다. Kubernetes API를 감시하고 Discord, 커스텀 JSON 웹훅,
 SMTP 이메일로 직접 전송하므로 n8n은 선택 사항입니다.
 
+선택 기능인 [namespace 그룹](docs/ko/watch.md#groups)으로 그룹별 출력, 경고 전용
+필터와 묶음 주기를 정할 수 있습니다. 처음 일치한 그룹을 사용합니다.
+
 ### 전송 설정
 
 Kubernetes provider가 켜진 설정에 다음 내용을 추가하세요.

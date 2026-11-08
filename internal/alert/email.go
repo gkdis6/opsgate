@@ -217,6 +217,9 @@ func emailSubject(b *Batch) string {
 		slices.Sort(clusters)
 		subject += fmt.Sprintf("%d warnings, %d changes in %s", warnings, len(b.Alerts)-warnings, strings.Join(clusters, ", "))
 	}
+	if b.Group != "" {
+		subject = "[" + b.Group + "] " + subject
+	}
 	subject = strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
 			return -1

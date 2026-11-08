@@ -73,6 +73,7 @@ type Workload struct {
 
 // Batch is one delivery, also the JSON body of a webhook POST.
 type Batch struct {
+	Group    string       `json:"group,omitempty"`
 	Language string       `json:"language,omitempty"`
 	Actions  []ActionLink `json:"actions,omitempty"`
 	Source   string       `json:"source"`
@@ -92,6 +93,8 @@ type Sender interface {
 
 // Options configures a Dispatcher.
 type Options struct {
+	// Group labels batches; empty preserves ungrouped delivery.
+	Group string
 	// Sender delivers batches; nil posts them to URL as a webhook.
 	Sender Sender
 	// ProblemsOnly drops every alert that is not a warning.
@@ -120,6 +123,7 @@ type Dispatcher struct {
 
 	mu      sync.Mutex
 	dropped int
+	// Grouped dispatchers cap last at queueSize keys.
 	// last holds when each warning key was last sent; repeats within the
 	// cooldown only increment suppressed.
 	last       map[string]time.Time
@@ -149,7 +153,7 @@ func (d *Dispatcher) Emit(a Alert) {
 	case d.queue <- a:
 	default:
 		d.mu.Lock()
-		d.dropped++
+		d.dropped = increment(d.dropped)
 		d.mu.Unlock()
 	}
 }
@@ -185,7 +189,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 func (d *Dispatcher) add(pending []Alert, a Alert) []Alert {
 	if len(pending) >= queueSize {
 		d.mu.Lock()
-		d.dropped++
+		d.dropped = increment(d.dropped)
 		d.mu.Unlock()
 		return pending
 	}
@@ -217,7 +221,7 @@ func (d *Dispatcher) prepare(pending []Alert) *Batch {
 		}
 		if i, ok := index[a.Key]; ok {
 			// Keep the first alert of a burst, count the rest.
-			alerts[i].Suppressed++
+			alerts[i].Suppressed = increment(alerts[i].Suppressed)
 			if a.Severity == Info {
 				alerts[i].Summary = a.Summary
 				alerts[i].Time = a.Time
@@ -226,12 +230,15 @@ func (d *Dispatcher) prepare(pending []Alert) *Batch {
 		}
 		if a.Severity == Warning && d.opts.Cooldown > 0 {
 			if sent, ok := d.last[a.Key]; ok && now.Sub(sent) < d.opts.Cooldown {
-				d.suppressed[a.Key]++
+				d.suppressed[a.Key] = increment(d.suppressed[a.Key])
 				continue
 			}
-			a.Suppressed += d.suppressed[a.Key]
+			a.Suppressed = addCount(a.Suppressed, d.suppressed[a.Key])
 			delete(d.suppressed, a.Key)
-			d.last[a.Key] = now
+			_, tracked := d.last[a.Key]
+			if d.opts.Group == "" || tracked || len(d.last) < queueSize {
+				d.last[a.Key] = now
+			}
 		}
 		index[a.Key] = len(alerts)
 		alerts = append(alerts, a)
@@ -246,14 +253,14 @@ func (d *Dispatcher) prepare(pending []Alert) *Batch {
 	}
 	dropped := d.dropped
 	if len(alerts) > d.opts.MaxAlerts {
-		dropped += len(alerts) - d.opts.MaxAlerts
+		dropped = addCount(dropped, len(alerts)-d.opts.MaxAlerts)
 		alerts = alerts[:d.opts.MaxAlerts]
 	}
 	if len(alerts) == 0 && dropped == 0 {
 		return nil
 	}
 	d.dropped = 0
-	b := &Batch{Source: "opsgate", SentAt: now.UTC(), Alerts: alerts, Dropped: dropped}
+	b := &Batch{Group: d.opts.Group, Source: "opsgate", SentAt: now.UTC(), Alerts: alerts, Dropped: dropped}
 	b.Text = render(b)
 	return b
 }
@@ -322,4 +329,20 @@ func Sign(secret []byte, body []byte) string {
 	mac := hmac.New(sha256.New, secret)
 	mac.Write(body)
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+// increment saturates long-running counters rather than wrapping negative.
+func increment(n int) int {
+	if n < int(^uint(0)>>1) {
+		return n + 1
+	}
+	return n
+}
+
+func addCount(n, delta int) int {
+	max := int(^uint(0) >> 1)
+	if delta > max-n {
+		return max
+	}
+	return n + delta
 }

@@ -42,7 +42,8 @@ In order. Each step still goes through security review.
    Done, unreleased; see the [changelog](../CHANGELOG.md). `Pending` scheduling
    problems retain inspection hints; they do not imply a safe catalog write.
 4. **Alert groups by namespace,** each with its own outputs, level
-   (warnings only or all) and batching.
+   (warnings only or all) and batching. Done, unreleased; see the
+   [changelog](../CHANGELOG.md).
 5. **Optional host provider** for systemd units and Docker or Compose
    containers: detection and restart, off by default, with a narrow privilege
    model instead of direct root or Docker socket access.

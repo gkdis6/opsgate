@@ -88,7 +88,7 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 | `approval.require_web` | `approval.web`이 true이면 `true`, 아니면 `false` | HTTP에서 웹 승인을 필수로 합니다. 명시적 `false`는 클라이언트 내 확인을 허용하고, 명시적 `true`는 stdio 쓰기도 거부합니다 |
 | `approval.inbox_notify.secret_file` | 비어 있음(비활성화) | watch 알림 공유 HMAC 키 파일(공백 제거 후 16–4096바이트); builtin 웹 승인과 subjects 필요 |
 | `approval.inbox_notify.subjects` | `[]` | 식별자 알림을 받을 중복 없는 설정된 builtin 사용자 1–100명; 메모리에 사용자당 최대 50개를 1시간 보관하며 푸시는 1분간 묶음 |
-| `watch.inbox.url` | 비어 있음(비활성화) | 서명된 `POST /approvals/notify`를 받을 서버 origin; HTTPS 또는 웹훅과 같은 사설/루프백 HTTP; 별도 큐와 고정 1초 묶음 |
+| `watch.inbox.url` | 비어 있음(비활성화) | 서명된 `POST /approvals/notify`를 받을 서버 origin; HTTPS 또는 웹훅과 같은 사설/루프백 HTTP; 별도 큐와 1초 묶음(그룹 batch로 대체 가능) |
 | `watch.inbox.secret_file` | 비어 있음 | 필수 공유 HMAC 키 파일(공백 제거 후 16–4096바이트) |
 | `watch.inbox.allow_private_http` | `false` | watch 출력과 같이 연결 시 주소를 검사하는 사설 HTTP 허용 |
 | `approval.push.enabled` | `false` | MCP 웹 승인과 설정한 승인함 알림용 Web Push; `approval.web` 필요 |
@@ -212,6 +212,7 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 | 키 | 기본값 | 의미 |
 | --- | --- | --- |
 | `approval_url` | 없음 | 선택지·재시작 링크용 opsgate 서버 공개 https origin. 생략하고 inbox를 설정하면 그 origin을 씁니다 |
+| `groups` | 생략 (전체 전송) | namespace 순서별 경로: name, namespaces, outputs, problems_only, batch. [Groups](watch.md#groups) 참고 |
 | `clusters` | 전체 | watch할 클러스터 이름 |
 | `problems_only` | `false` | 모든 채널에 대해 경고만 생성합니다 |
 | `batch` | `30s` | Webhook 알림을 모아 보내는 간격 (1s–10m) |
@@ -228,9 +229,23 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 
 다른 이메일 항목을 설정하려면 `email.host`가 필요합니다. Webhook과 이메일은 독립적이므로 하나만 쓰거나 둘 다 쓸 수 있습니다. 각 채널은 알림 묶음, 쿨다운 상태, 재시도를 따로 관리하며 `watch.cooldown`과 `watch.max_alerts`를 공통 설정값으로 사용합니다. TLS 1.2 이상과 서버 인증서 검증은 필수입니다. 포트 465에서는 연결 즉시 TLS를 사용하고, 다른 모든 포트에서는 STARTTLS가 필요합니다. 앱 비밀번호처럼 독립적으로 폐기할 수 있는 전용 자격 증명을 사용하세요. 알림은 저장하지 않으며, Webhook과 마찬가지로 재시도 후에도 전송하지 못하면 유실됩니다.
 
-네임스페이스·파드·컨테이너 이름과 민감 정보를 마스킹한 요약이 클러스터 외부의 메일 제공업체를 거칩니다. 최대 발송량은 묶음 간격마다 메시지 한 통으로, `5m`이면 하루 최대 288통, `15m`이면 최대 96통입니다. 특히 다른 서비스와 계정을 공유한다면 계정의 발송 한도를 확인하세요.
+네임스페이스·파드·컨테이너 이름과 민감 정보를 마스킹한 요약이 클러스터 외부의 메일 제공업체를 거칩니다. 최대 발송량은 묶음 간격마다 메시지 한 통으로, `5m`이면 하루 최대 288통, `15m`이면 최대 96통입니다. 그룹을 설정하면 그룹마다 이 발송량을 계산합니다. 특히 다른 서비스와 계정을 공유한다면 계정의 발송 한도를 확인하세요.
 
 알리는 내용과 본문 형식은 [watch 알림](watch.md)을 보세요.
+
+### 알림 그룹
+
+선택 기능인 `watch.groups`는 namespace에 처음 일치한 그룹을 고른 뒤 그룹과 출력의
+경고 필터를 적용합니다. 출력의 batch 주기를 대체하고 `(그룹, 출력)`마다 묶음,
+cooldown과 재시도를 분리합니다. namespace는 `path.Match`를 사용하며 namespace가
+없는 알림은 리터럴 `""` 또는 `"*"`에만 일치합니다. 미일치 알림은 누락으로 집계해
+1분마다 그리고 종료 시 로컬 로그로 요약합니다. 중복 없는 이름의 그룹 1–50개,
+유효한 glob과 기존 출력이 필요합니다. `email`/`inbox`는 활성화된 전용 설정을
+가리키며 그룹 사용 시 일반 출력 이름으로 쓸 수 없습니다. batch는
+webhook/Discord/승인함 1s–10m, 이메일 1m–1h이며 혼합 그룹에는 교집합을 적용합니다.
+기존 전역·출력 경고 필터는 모두 유지됩니다. 예시와 전체 제한은
+[Groups](watch.md#groups)를 참고하세요. `groups`를 생략하면 기존 전체 전송을
+유지하며 `groups: []`는 거부합니다.
 
 ## 감사 로그 형식
 
@@ -268,7 +283,7 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 `header_files`, `secret_file`, `body_template`(최대 64 KiB),
 `allow_private_http`(기본 false), `problems_only`(기본 false)입니다.
 각 대상의 `url`은 https 또는 루프백 http여야 하며 자격 증명이나 프래그먼트는 허용하지 않습니다. 사설 http는 대상에 `allow_private_http: true`를 설정해야 합니다. `secret_file`은 앞뒤 공백 제거 후 16바이트 이상인 HMAC 키입니다.
-공통 `watch.batch`, `watch.cooldown`, `watch.max_alerts`를 사용합니다.
+공통 `watch.batch`, `watch.cooldown`, `watch.max_alerts`를 사용하며 그룹 설정 시 그룹 batch가 주기를 대체합니다. 커스텀 템플릿은 `.Group`(그룹이 없으면 빈 문자열)을 사용할 수 있습니다.
 
 [한글 사용 예시와 제한](watch.md#discord-직접-전송과-커스텀-웹훅),
 [전체 설정 표](../configuration.md#direct-webhook-destinations)를 참고하세요.

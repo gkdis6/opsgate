@@ -100,7 +100,7 @@ providers:
 #         scopes: [ops:read, ops:write]
 #         tools: [k8s_get, k8s_rollout_restart]
 # approval:
-#   web: true # builtin auth only.
+#   web: true # Default with builtin auth.
 #   require_web: true # Browser decisions only; stdio writes denied.
 # providers:
 #   kubernetes:

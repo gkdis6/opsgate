@@ -272,9 +272,10 @@ func Parse(data []byte, name string) (Config, error) {
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return cfg, fmt.Errorf("parse %s: multiple YAML documents are not supported", name)
 	}
-	// Browser approval needs builtin sign-in, so a mode turns it on only
-	// when the file keeps builtin and does not decide itself.
-	if cfg.Mode != "" && cfg.Auth.Mode == AuthBuiltin && lookup(&root, "approval", "web") == nil {
+	// Browser approval is the default wherever builtin sign-in can provide
+	// it: in-client elicitation lets a compromised client approve its own
+	// writes. The file can still decide with approval.web.
+	if cfg.Auth.Mode == AuthBuiltin && lookup(&root, "approval", "web") == nil {
 		cfg.Approval.Web = true
 	}
 	if cfg.Approval.Web && lookup(&root, "approval", "wait") == nil {

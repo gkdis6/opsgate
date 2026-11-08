@@ -85,7 +85,7 @@ this prints `require_web: true` explicitly. Running that output with
 | `auth.static[].scopes` | `[]` | Token grants; include ops:read for HTTP access |
 | `approval.wait` | `25s` when web approval is enabled explicitly or by a mode, otherwise `0s` | Wait for decision and execution, `0s`–`55s`; zero returns the link immediately; cancellation ends only the wait |
 | `approval.ttl` | `10m` | Pending approval/input lifetime |
-| `approval.web` | `false` | Enable browser approval; requires builtin auth; modes enable it by default |
+| `approval.web` | `true` with builtin auth, otherwise `false` | Enable browser approval; requires builtin auth |
 | `approval.require_web` | `true` when `approval.web` is true; otherwise `false` | Require browser approval on HTTP; explicit `false` allows elicitation; explicit `true` also denies stdio writes |
 | `approval.inbox_notify.secret_file` | empty (disabled) | Shared watch notice HMAC key file (16–4096 bytes, trimmed); requires builtin web approval and subjects |
 | `approval.inbox_notify.subjects` | `[]` | 1–100 unique configured builtin users to receive identifier-only notices; memory-only, max 50/user for 1h; pushes coalesce for 1m |

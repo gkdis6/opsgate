@@ -84,7 +84,7 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 | `auth.static[].scopes` | `[]` | 토큰에 줄 스코프이며, HTTP 접근에는 ops:read가 필요합니다 |
 | `approval.wait` | 웹 승인을 직접 또는 모드로 켜면 `25s`, 그 외 `0s` | 결정과 실행 대기, `0s`–`55s`; 0이면 즉시 링크 반환, 취소는 대기만 종료 |
 | `approval.ttl` | `10m` | 대기 중인 승인/입력의 유효 기간입니다 |
-| `approval.web` | `false` | 브라우저 승인을 활성화하며 builtin 인증이 필요합니다. 모드에서는 기본으로 켭니다 |
+| `approval.web` | builtin 인증이면 `true`, 아니면 `false` | 브라우저 승인을 활성화하며 builtin 인증이 필요합니다 |
 | `approval.require_web` | `approval.web`이 true이면 `true`, 아니면 `false` | HTTP에서 웹 승인을 필수로 합니다. 명시적 `false`는 클라이언트 내 확인을 허용하고, 명시적 `true`는 stdio 쓰기도 거부합니다 |
 | `approval.inbox_notify.secret_file` | 비어 있음(비활성화) | watch 알림 공유 HMAC 키 파일(공백 제거 후 16–4096바이트); builtin 웹 승인과 subjects 필요 |
 | `approval.inbox_notify.subjects` | `[]` | 식별자 알림을 받을 중복 없는 설정된 builtin 사용자 1–100명; 메모리에 사용자당 최대 50개를 1시간 보관하며 푸시는 1분간 묶음 |
@@ -206,7 +206,7 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 
 승인 페이지에는 diff를 강조한 계획, 요청자, 전송 방식, 만료 시각을 보여 주며, 인자는 접힌 상태로 표시합니다. 승인 후 페이지에 실행 결과를 보여 줍니다. 채팅으로 돌아가면 어시스턴트는 대기 중인 호출이나 승인 조회로 결과를 받습니다. 결과는 원래 만료 시각까지, 실행 후 최소 10분까지 조회할 수 있으며 보관 중인 결과도 기록 100개 제한에 포함됩니다. 승인 요약은 최대 `max(64 KiB, argument limit + 16 KiB)`까지 허용하며, 원시 JSON 인자의 기본 제한은 16 KiB입니다. 노트 내용 도구는 528 KiB(내용/치환 필드당 256 KiB)를 허용합니다. JSON 이스케이프도 전송 크기 제한에 포함됩니다.
 
-`approval.web`이 활성화되면 `approval.require_web`의 기본값은 `true`입니다. builtin 인증을 쓰는 모드가 웹 승인을 켠 경우도 포함합니다. `approval.require_web: false`를 명시하면 클라이언트 내 확인을 허용하며, 침해된 클라이언트가 자기 쓰기를 스스로 승인할 수 있습니다. external/static 인증이나 `approval.web: false`에서는 웹 승인을 사용할 수 없어 기본값이 `false`입니다. `-transport stdio`는 사용자가 로컬에서 시작한 프로세스이고 웹 채널이 없으므로, 모드 파일이라도 `require_web`을 생략하면 클라이언트 내 확인을 허용합니다. 명시적 `true`는 계속 stdio 쓰기를 거부합니다. HTTP 시작 시 클라이언트 내 확인이 허용되어 있으면 경고를 남깁니다. 프롬프트 인젝션은 여전히 모델이 쓰기를 요청하게 만들 수 있으므로, 사람이 승인 전에 요약을 읽어야 합니다. [SECURITY.md](security.md)를 참고하세요.
+`approval.web`이 활성화되면 `approval.require_web`의 기본값은 `true`입니다. builtin 인증이 웹 승인을 기본으로 켠 경우도 포함합니다. `approval.require_web: false`를 명시하면 클라이언트 내 확인을 허용하며, 침해된 클라이언트가 자기 쓰기를 스스로 승인할 수 있습니다. external/static 인증이나 `approval.web: false`에서는 웹 승인을 사용할 수 없어 기본값이 `false`입니다. `-transport stdio`는 사용자가 로컬에서 시작한 프로세스이고 웹 채널이 없으므로, 모드 파일이라도 `require_web`을 생략하면 클라이언트 내 확인을 허용합니다. 명시적 `true`는 계속 stdio 쓰기를 거부합니다. HTTP 시작 시 클라이언트 내 확인이 허용되어 있으면 경고를 남깁니다. 프롬프트 인젝션은 여전히 모델이 쓰기를 요청하게 만들 수 있으므로, 사람이 승인 전에 요약을 읽어야 합니다. [SECURITY.md](security.md)를 참고하세요.
 
 `allowed_redirect_hosts`로 클라이언트 등록을 제한할 수 있습니다. 목록이 비어 있지 않으면 `unknown_redirect_hosts: deny`는 목록에 없는 호스트를 거부하고, `approve`는 허용 목록의 관리자가 `/admin/clients`에서 승인할 때까지 그 클라이언트를 대기 상태로 둡니다. 대기 중인 클라이언트는 인가를 받을 수 없습니다. `notify_url`은 선택 사항이며, 설정하면 이벤트, 클라이언트 ID/이름, 리다이렉트 호스트, 관리자 URL이 포함된 JSON POST 알림을 보냅니다. 알림에는 제한이 있으며 전달을 보장하지는 않습니다. 클라이언트 이름은 클라이언트가 직접 제공한 값입니다. 등록을 승인해도 사용자 스코프를 주거나 동의를 생략하지는 않습니다. 호스트 목록이 비어 있으면 다른 유효성 조건을 충족하는 모든 리다이렉트 목적지를 허용하며, 목록에 없는 호스트에 대한 정책은 무시합니다.
 

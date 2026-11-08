@@ -27,7 +27,7 @@ stdio: client -> local opsgate process -> configured stdio identity/scopes
 
 All HTTP modes require `ops:read` at `/mcp`. Additional scopes authorize tools: normally `ops:write` for writes. Scopes do not enable providers or bypass human approval. Optional user/token `tools` globs add restrictions on top of server policy.
 
-With `approval.web: true`, HTTP defaults to web-only approval (`approval.require_web: true`); modes with builtin auth enable web approval automatically. Explicit `approval.require_web: false` opts in to in-client elicitation. A compromised client can then approve its own writes. External/static auth has no web channel and keeps `require_web` false by default; HTTP startup warns when elicitation is allowed.
+With `approval.web: true`, HTTP defaults to web-only approval (`approval.require_web: true`); builtin auth enables web approval unless the file sets `approval.web: false`. Explicit `approval.require_web: false` opts in to in-client elicitation. A compromised client can then approve its own writes. External/static auth has no web channel and keeps `require_web` false by default; HTTP startup warns when elicitation is allowed.
 
 ## Built-in OAuth
 

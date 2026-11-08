@@ -7,6 +7,10 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Changed
+
+- Builtin auth now defaults to web approval (`approval.web: true`, hence web-only `require_web: true`) without a `mode`, so a compromised client cannot approve its own writes by default. Set `approval.web: false` or `approval.require_web: false` to keep in-client elicitation. / `mode` 없이 builtin 인증을 써도 웹 승인(`approval.web: true`, 따라서 웹 전용 `require_web: true`)이 기본이 되어, 침해된 클라이언트가 기본 설정에서 자기 쓰기를 스스로 승인할 수 없습니다. 클라이언트 내 확인을 유지하려면 `approval.web: false` 또는 `approval.require_web: false`를 설정하세요.
+
 ## [0.4.0] - 2026-11-08
 
 ### Added

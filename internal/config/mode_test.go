@@ -24,6 +24,23 @@ func TestModeDefaults(t *testing.T) {
 	}
 }
 
+func TestBuiltinAuthDefaultsToWebApproval(t *testing.T) {
+	c, err := Parse([]byte("http:\n  public_url: https://mcp.example.com\nauth:\n  mode: builtin\n  builtin:\n    upstream:\n      provider: passkey\n"), "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Approval.Web || !c.Approval.RequireWeb || !c.Approval.RequireWebDefaulted || c.Approval.Wait == 0 {
+		t.Fatalf("builtin auth without a mode must default to web-only approval: %+v", c.Approval)
+	}
+	off, err := Parse([]byte("http:\n  public_url: https://mcp.example.com\nauth:\n  mode: builtin\n  builtin:\n    upstream:\n      provider: passkey\napproval:\n  web: false\n"), "off")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if off.Approval.Web || off.Approval.RequireWeb {
+		t.Fatalf("explicit approval.web: false must win: %+v", off.Approval)
+	}
+}
+
 func TestModeFileWins(t *testing.T) {
 	c, err := Parse([]byte("mode: kubernetes\nhttp:\n  listen: 127.0.0.1:9000\napproval:\n  web: false\nauth:\n  builtin:\n    state_file: /data/s.json\n"), "c")
 	if err != nil {

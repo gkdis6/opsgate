@@ -13,8 +13,8 @@ service is back, AI clients such as Claude, ChatGPT, Claude Code and Cursor
 investigate the cause through opsgate's MCP server: a fixed set of tools with
 explicit policy, human-approved changes and an audit log.
 
-> **Status:** early release; notes, watch and the analyzer are
-> experimental. Changes require user authorization, allowed targets and human approval. Read restrictions
+> **Status:** early release; notes, watch, the approval inbox and the analyzer
+> are experimental. Changes require user authorization, allowed targets and human approval. Read restrictions
 > and output redaction reduce sensitive data exposure. Third-party security review
 > is pending; the [security policy](SECURITY.md) explains the protections and
 > remaining limitations.
@@ -39,14 +39,14 @@ change in front of a person.
 ## How it handles an incident
 
 1. **Know first.** `opsgate watch` follows the Kubernetes API and sends alerts to
-   Discord, webhooks or email as soon as something fails. The optional signed inbox
-   channel also sends phone Web Push for pod warnings with action choices. See [watch alerts](#watch-alerts).
-2. **Stabilize from anywhere.** Open the phone notification in your normal
-   browser's approval inbox, then **Choose an action** on the pod warning:
-   sign in to see image restore, restart or controller-owned pod deletion choices
-   that fit the current state. Choose one, review its fresh plan and approve to
-   run it. Analyzer reports show rule choices and labeled AI suggestions too.
-   A phone browser and a passkey are enough.
+   Discord, webhooks or email as soon as something fails. It can also put the
+   alert in your approval inbox and push a notification to your phone. See
+   [watch alerts](#watch-alerts).
+2. **Stabilize from anywhere.** Tap the notification or the alert's **Choose an
+   action** link. After a passkey sign-in you see the actions that fit the
+   current state, such as restoring the last working image or restarting the
+   workload. Pick one, review its fresh plan and approve: it runs right away. If
+   it can be reversed, an **Undo** button appears. A phone browser is enough.
 3. **Then find the cause.** With the service back, ask your AI client to
    investigate through opsgate's read tools, or let the optional
    [analyzer](docs/analyzer.md) make a first pass.
@@ -69,17 +69,25 @@ tool and no Kubernetes Secrets tool.
 Providers, write actions and allowlists are disabled
 until you enable them in configuration.
 
-### Changes need a person
+### Changes need a person, and approving runs them
 
-Write tools first plan the exact change, then wait
-for human approval in the browser by default when web approval is available.
-Optional approval windows are explained below.
+Write tools first plan the exact change. A person approves it, by default on a
+web page after signing in; the server then checks the plan again and runs it
+once. Nobody has to go back to a chat to report the approval. Optional approval
+windows are explained below.
+
+### Actions come from a catalog
+
+Alerts, the choices page and AI suggestions can only offer actions from a fixed
+catalog: restart, scale, restore an image and delete a pod that a controller
+recreates. A rule or the AI may suggest one, the button says which, and the
+allowlist and a person still decide.
 
 ### Nothing permanently deletes your data
 
 Note removal moves files to `.trash`. Pod deletion is the only delete action; it
-needs its own allowlist and approval, and the plan warns when no controller will
-recreate the pod.
+needs its own allowlist and approval, the plan warns when no controller will
+recreate the pod, and links refuse such pods.
 
 ### Remote access is authenticated
 
@@ -98,22 +106,10 @@ with one JSON object per line.
 
 ## Where it is heading
 
-These are planned, not implemented. Order and details are in the
-[roadmap](docs/roadmap.md).
+Planned, not released. Details are in the [roadmap](docs/roadmap.md).
 
-- **An approval inbox with Web Push.** Approval requests reach your phone or
-  computer, whichever is at hand, and approving runs the action right away. Chat
-  and messenger alerts will only link to the inbox, so passkeys always work.
-- **The same path for MCP clients.** A change requested in a chat goes to the
-  inbox and runs on approval, without returning to the chat to say so.
-- **More choices per failure.** Each failure state offers the actions that fit
-  it, including ones the analyzer proposes. Every button comes from a fixed
-  catalog of allowlisted actions that never delete data, and shows whether a
-  rule or the AI suggested it.
-- **Alert groups by namespace,** each with its own channels, level and batching.
 - **An optional host provider** for systemd units and Docker or Compose
   containers on servers without Kubernetes. It stays off unless you enable it.
-- **Undo buttons** for actions that can be reversed.
 
 
 
@@ -137,23 +133,25 @@ and memory requests or limits. Those resource settings can be inspected with
 Kubernetes detail tools. See the [tool reference](docs/tools.md) for arguments
 and limits.
 
-### Kubernetes changes and where to approve them
+### Kubernetes changes
 
-Every Kubernetes change is off until its allowlist names the target. A person
-always approves; the table shows where the approval can start.
+Every Kubernetes change is off until its allowlist names the target, and a
+person always approves. Each one can be requested from an MCP client or opened
+as a link (set `action_approval_url` on the cluster for links).
 
-| Change | Enable with | From an MCP client | Ready-made approval link |
+| Change | Enable with | Offered by the choices page when | Undo |
 | --- | --- | --- | --- |
-| Rollout restart | `rollout_restart` | yes | watch's choices page with `watch.approval_url`, or a legacy restart suggestion ([conditions](docs/watch.md#hints-and-restart-suggestions)) |
-| Scale | `scale`, capped by `max_replicas` | yes | from `action_link` / analyzer, with `action_approval_url` |
-| Delete a pod | `delete_pod` | yes | controller-owned pods only: current-state choices page, `action_link` / analyzer; `action_approval_url` required |
-| Restore a previous image | `restore_image` and `action_approval_url` | yes | watch choices page and `k8s_remediation_options`; analyzer report button ([details](#restoring-a-failed-image-optional)) |
+| Rollout restart | `rollout_restart` | a container keeps restarting (not for config errors or Jobs), or keeps hitting its memory limit | none |
+| Restore a previous image | `restore_image` | an image cannot be pulled, or a new rollout crashes or stalls while an older ReplicaSet still runs ready | back to the image before the restore |
+| Delete a pod | `delete_pod` | a controller-owned pod is stuck terminating or on an unreachable node | none |
+| Scale | `scale`, capped by `max_replicas` | never by rule; from an MCP client or an AI suggestion | back to the previous count |
 
-Choices links show the current actions after browser sign-in. Opening an action
-shows a fresh plan; nothing changes until someone presses Approve, and approval
-windows never cover these links. The analyzer
-proposes fixes only through the read-only `action_link` tool and prefers the least invasive catalog action. It never runs a change; buttons use
-server-validated links and show rule/AI provenance. See [approval](docs/approval.md#catalog-action-links).
+Opening a link shows a fresh plan after browser sign-in; nothing changes until
+someone presses Approve, and approval windows never cover links. The analyzer
+proposes fixes only through the read-only `action_link` tool and prefers the
+least invasive action; its buttons are marked as AI suggestions. See
+[catalog action links](docs/approval.md#catalog-action-links) and
+[choices per failure](docs/approval.md#live-choices-per-failure).
 
 
 
@@ -185,17 +183,28 @@ available. Explicit `approval.require_web: false` opts in to in-client elicitati
 a compromised client can then approve its own writes. External/static auth and
 stdio keep elicitation because they have no web channel. An omitted `require_web`
 also allows elicitation with `-transport stdio` for mode-based files; explicit
-`true` denies stdio writes. One-call approval binds the exact arguments and plan. Approving in the browser
-rechecks the plan and runs the change immediately, once. The call waits up to
-`approval.wait` (default 25s with web approval, maximum 55s; 0 disables waiting).
-If it returns pending, show the link; read the result with `approval_status`
-and `approval_id`, or retry the same arguments plus `approval_id` to retrieve
-the stored outcome. Retries never apply again.
+`true` denies stdio writes. One-call approval binds the exact arguments and plan.
 
-Open `/approvals` in a normal phone or desktop browser for your approval inbox.
-Optional Web Push opens that inbox outside messenger in-app browsers; on iPhone,
-add it to the Home Screen first. Push carries no approval content.
-See [setup](docs/approval.md#approval-inbox-and-notifications).
+Approving in the browser rechecks the plan and runs the change immediately,
+once. The MCP call waits up to `approval.wait` (default 25s with web approval,
+maximum 55s) and returns the result if approval comes in time. Otherwise the
+assistant reads it later with `approval_status`; repeating the call with
+`approval_id` returns the stored outcome and never applies again.
+
+### Approve from anywhere
+
+- **Inbox.** `/approvals` lists your pending and recent approvals, alerts
+  waiting for a decision and their results. Open it in a normal phone or desktop
+  browser; messenger in-app browsers often break passkeys.
+- **Push.** With `approval.push` enabled, a change requested from a chat and,
+  with `watch.inbox`, a new alert send a Web Push to your devices. Tapping it
+  opens the inbox. The push carries no content. On iPhone, add opsgate to the
+  Home Screen first.
+- **Undo.** After scaling or restoring an image, the result offers an Undo link
+  back to the previous state. It is a new action with its own plan and approval.
+
+See [approval inbox and notifications](docs/approval.md#approval-inbox-and-notifications)
+and [undo](docs/approval.md#undo).
 
 Optional approval windows let a person approve a particular tool for a limited
 time. During that window, subsequent calls by the same user can skip a new
@@ -316,8 +325,12 @@ Run `opsgate watch` alongside the MCP server to receive Kubernetes problem and
 change notifications. It watches the Kubernetes API and sends alerts directly
 to Discord, custom JSON webhooks or SMTP email. n8n is optional.
 
-Optional [namespace groups](docs/watch.md#groups) choose outputs, warnings-only
-filtering and batch intervals per group; the first match wins.
+- With `watch.approval_url`, pod warnings carry a **Choose an action** link to
+  the choices page.
+- With `watch.inbox`, warnings also go to the approval inbox and push a
+  notification to your phone ([signed watch notices](docs/approval.md#signed-watch-notices)).
+- [Namespace groups](docs/watch.md#groups) choose the outputs, warnings-only
+  filtering and batch interval per group of namespaces; the first match wins.
 
 ### Delivery configuration
 
@@ -397,11 +410,16 @@ Report language and action proposals are set with `report.language` and
 Set `restore_image` (a `namespace/deployment` allowlist) and `action_approval_url`
 on a Kubernetes cluster to enable this. For a Pod failing with `ImagePullBackOff`,
 `ErrImagePull` or `InvalidImageName`, `k8s_remediation_options` returns an approval
-link when a non-deleting ReplicaSet of the same Deployment has a ready owned Pod whose target container is ready and running the proposed image. Readiness does not guarantee application health, and image tags can change in the registry. The analyzer can attach the link to its report. The same rule engine also offers restoration for a failing new rollout, and watch warnings link to its live choices page.
+link when a non-deleting ReplicaSet of the same Deployment has a ready owned Pod
+whose target container is ready and running the proposed image. Readiness does
+not guarantee application health, and image tags can change in the registry.
+The same rule also covers a crashing or stalled new rollout, the choices page
+shows it, and the analyzer can attach it to its report.
 
 Opening the link needs sign-in and shows a fresh plan. Nothing changes until a
 person approves, and the plan is checked again before the patch. Only that
-container's image changes; configuration is not rolled back.
+container's image changes; configuration is not rolled back. The result offers
+an Undo link back to the previous image.
 
 
 
@@ -428,13 +446,13 @@ Full details: [SECURITY.md](SECURITY.md).
 | --- | --- |
 | [Architecture](docs/architecture.md) | Request flow, packages, design principles |
 | [Authentication](docs/authentication.md) | Passkey, GitHub, OIDC, external JWT, static tokens, stdio |
-| [Approval](docs/approval.md) | Plan/apply, approval channels, approval windows |
+| [Approval](docs/approval.md) | Plan/apply, approval channels and windows, action links, choices per failure, inbox and push, undo |
 | [Client setup](docs/clients.md) | Claude Code, Claude Desktop, claude.ai, ChatGPT, Cursor |
 | [Configuration](docs/configuration.md) | Every configuration key, defaults and audit log format |
 | [Tools](docs/tools.md) | Tool arguments, limits, redaction |
 | [Notes](docs/notes.md) | Runbooks and incident memory in a Markdown folder |
 | [Deployment](docs/deploy.md) | Release verification, Kubernetes, reverse proxy |
-| [Watch alerts](docs/watch.md) | Kubernetes alerts to Discord, custom JSON webhooks and email through a separate `opsgate watch` process |
+| [Watch alerts](docs/watch.md) | Kubernetes alerts to Discord, custom JSON webhooks, email and the approval inbox through a separate `opsgate watch` process; namespace groups |
 | [Automatic investigation](docs/analyzer.md) | Optional model worker, read-only MCP authentication and investigation limits |
 | [Roadmap](docs/roadmap.md) | What is done and what may come |
 

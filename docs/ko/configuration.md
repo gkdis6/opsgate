@@ -212,7 +212,7 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 | 키 | 기본값 | 의미 |
 | --- | --- | --- |
 | `approval_url` | 없음 | 선택지·재시작 링크용 opsgate 서버 공개 https origin. 생략하고 inbox를 설정하면 그 origin을 씁니다 |
-| `groups` | 생략 (전체 전송) | namespace 순서별 경로: name, namespaces, outputs, problems_only, batch. [Groups](watch.md#groups) 참고 |
+| `groups` | 생략 (전체 전송) | namespace 순서별 경로: name, namespaces, outputs, problems_only, batch. [그룹](watch.md#그룹) 참고 |
 | `clusters` | 전체 | watch할 클러스터 이름 |
 | `problems_only` | `false` | 모든 채널에 대해 경고만 생성합니다 |
 | `batch` | `30s` | Webhook 알림을 모아 보내는 간격 (1s–10m) |
@@ -244,7 +244,7 @@ cooldown과 재시도를 분리합니다. namespace는 `path.Match`를 사용하
 가리키며 그룹 사용 시 일반 출력 이름으로 쓸 수 없습니다. batch는
 webhook/Discord/승인함 1s–10m, 이메일 1m–1h이며 혼합 그룹에는 교집합을 적용합니다.
 기존 전역·출력 경고 필터는 모두 유지됩니다. 예시와 전체 제한은
-[Groups](watch.md#groups)를 참고하세요. `groups`를 생략하면 기존 전체 전송을
+[그룹](watch.md#그룹)를 참고하세요. `groups`를 생략하면 기존 전체 전송을
 유지하며 `groups: []`는 거부합니다.
 
 ## 감사 로그 형식

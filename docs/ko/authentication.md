@@ -27,7 +27,7 @@ stdio: 클라이언트 -> 로컬 opsgate 프로세스 -> 설정된 stdio ID/스�
 
 모든 HTTP 모드는 `/mcp`에서 `ops:read`를 요구합니다. 추가 스코프로 도구별 사용 권한을 제어하며, 보통 쓰기에는 `ops:write`가 필요합니다. 스코프가 있어도 provider가 활성화되거나 사람의 승인을 건너뛸 수 있는 것은 아닙니다. 사용자/토큰에 `tools` 글로브를 설정하면 서버 정책에 더해 호출 범위를 제한할 수 있습니다.
 
-`approval.web: true`인 HTTP에서는 기본적으로 웹 승인만 허용합니다(`approval.require_web: true`). builtin 인증을 쓰는 모드는 웹 승인을 자동으로 켭니다. `approval.require_web: false`를 명시하면 클라이언트 내 확인을 허용하며, 침해된 클라이언트가 자기 쓰기를 스스로 승인할 수 있습니다. external/static 인증에는 웹 채널이 없어 `require_web`의 기본값이 계속 false입니다. HTTP 시작 시 클라이언트 내 확인이 허용되어 있으면 경고를 남깁니다.
+`approval.web: true`인 HTTP에서는 기본적으로 웹 승인만 허용합니다(`approval.require_web: true`). builtin 인증은 `approval.web: false`를 명시하지 않는 한 웹 승인을 켭니다. `approval.require_web: false`를 명시하면 클라이언트 내 확인을 허용하며, 침해된 클라이언트가 자기 쓰기를 스스로 승인할 수 있습니다. external/static 인증에는 웹 채널이 없어 `require_web`의 기본값이 계속 false입니다. HTTP 시작 시 클라이언트 내 확인이 허용되어 있으면 경고를 남깁니다.
 
 ## 내장 OAuth
 

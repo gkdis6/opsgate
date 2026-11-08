@@ -65,7 +65,7 @@ This opt-in lets a compromised client approve its own writes: the server cannot 
 
 ### Web approval
 
-Web approval requires HTTP with `auth.mode: builtin` and `approval.web: true`. It uses the built-in sign-in session; it is unavailable in external/static modes and stdio.
+Web approval requires HTTP with `auth.mode: builtin`; `approval.web` defaults to `true` there. It uses the built-in sign-in session; it is unavailable in external/static modes and stdio.
 
 ```text
 initial call -> create approval and wait up to approval.wait
@@ -94,7 +94,7 @@ The page displays the plan line by line, highlights diff lines only after consec
 
 Result retries must match the requester, transport, tool and canonical unredacted argument hash (excluding `approval_id`). The stored runner binds the approved summary, target and review requirements and checks them before applying. Reading a completed result does not compare against a new live plan: the approved change may itself have changed that plan. A retry carrying `approval_id` never uses an approval window to authorize another apply. Fresh calls without an ID can still use eligible windows.
 
-Web-only decisions are the default when `approval.web` is enabled, either explicitly or by a mode with builtin auth. This fragment makes that choice explicit in a working built-in HTTP configuration:
+Web-only decisions are the default when `approval.web` is enabled, which builtin auth does unless the file sets `approval.web: false`. This fragment makes that choice explicit in a working built-in HTTP configuration:
 
 ```yaml
 approval:

@@ -17,9 +17,9 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. 각 도구
 | `action_link` | 조회 전용: 현재 Plan으로 카탈로그 조치를 검증하고 승인 URL·이름·요약 반환; 실행 없음 | 필수 `tool`, `arguments` 객체; 선택 `source`(기본 `ai`, 또는 `rule`); `ops:read`; 활성 카탈로그 조치와 클러스터별 `action_approval_url`이 있으면 등록 |
 | `k8s_remediation_options` | 조회 전용: 이미지 받기 실패, 실패·정체된 배포, 반복 재시작/OOM, 멈추거나 연결할 수 없는 컨트롤러 소유 파드에 현재 상태 기반 카탈로그 선택지 제공. 고정 영어·한국어 이유와 `source=rule` | 필수 `namespace`, `name`(파드); 사라진 파드는 선택 `workload=kind/name` 힌트. `action_approval_url`과 활성화·허용된 조치만 제공. 이미지 최대 5개와 재시작·삭제(총 7개). 없으면 빈 `actions`와 `hint`; [규칙](approval.md#장애별-현재-선택지). |
 | `k8s_rollout_restart` | 파드 템플릿을 갱신해 워크로드 재시작 | 필수 `kind`(deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` 허용 설정 필요 |
-| `k8s_scale` | 워크로드 복제본 수 설정 | 필수 `kind`(deployment/statefulset), `namespace`, `name`, `replicas`(0–`max_replicas`, 기본 상한 10); `scale` 허용 설정 필요 |
+| `k8s_scale` | 워크로드 복제본 수 설정 | 필수 `kind`(deployment/statefulset), `namespace`, `name`, `replicas`(0–`max_replicas`, 기본 상한 10); `scale` 허용 설정 필요; 결과에 이전 파드 수로 돌아가는 되돌리기 링크가 붙음([되돌리기](approval.md#되돌리기)) |
 | `k8s_delete_pod` | UID 사전 조건을 적용한 특정 파드 삭제 | 필수 `namespace`, `name`; `delete_pod` 허용 설정 필요; 링크는 컨트롤러 소유 파드만 허용, MCP는 소유자 없는 파드에 경고 |
-| `k8s_restore_image` | 삭제 중이 아닌 소유 ReplicaSet의 준비된 파드에서 준비되어 실행 중인 컨테이너로 확인한 이미지로 Deployment 컨테이너 이미지 복원. 이미지만 바뀌고 설정은 되돌리지 않음 | 필수 `namespace`, `name`(Deployment), `container`, `expected_image`(현재 이미지와 정확히 일치), `image`(복원할 이미지와 정확히 일치); `restore_image` 허용 설정 필요; 패치 직전 재확인; 승인 시간 창 없음 |
+| `k8s_restore_image` | 삭제 중이 아닌 소유 ReplicaSet의 준비된 파드에서 준비되어 실행 중인 컨테이너로 확인한 이미지로 Deployment 컨테이너 이미지 복원. 이미지만 바뀌고 설정은 되돌리지 않음 | 필수 `namespace`, `name`(Deployment), `container`, `expected_image`(현재 이미지와 정확히 일치), `image`(복원할 이미지와 정확히 일치); 선택 `revert: true`는 이 Deployment의 ReplicaSet 이력에 있는, 정상 동작이 확인되지 않은 이미지를 받음(되돌리기에 사용); `restore_image` 허용 설정 필요; 패치 직전 재확인; 승인 시간 창 없음; 결과에 되돌리기 링크가 붙음([되돌리기](approval.md#되돌리기)) |
 | `note_search` | 노트 내용/파일명에서 문자열 그대로 검색, 발췌문과 검색한 항목 수 제공 | 필수 `query`(1–4096 UTF-8 바이트); 선택 `folder`, `tag`, `case_sensitive=false`; `limit=20`, 최대 100 |
 | `note_read` | 노트 텍스트와 파일/줄 메타데이터 | 필수 `path`, `.md` 생략 가능; `offset_line=1`, `max_lines=400`, 최대 2000 |
 | `note_list` | 폴더를 먼저 표시한 뒤 .md/.canvas/.base 파일 표시 | `folder=""`(볼트 루트), `recursive=false`, `limit=200`, 최대 1000; 잘림 여부 보고 |

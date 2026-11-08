@@ -36,6 +36,11 @@ func (r *registry) registerActionLink(s *mcp.Server, env *tool.Env) {
 		if err := action.Validate(in.Tool, in.Arguments); err != nil {
 			return "", tool.Denied("%s", err)
 		}
+		// An unverified history image is offered only as the undo of a restore
+		// a person just approved, never as a fresh suggestion.
+		if revert, _ := in.Arguments["revert"].(bool); revert {
+			return "", tool.Denied("revert is offered only as an undo link")
+		}
 		d := env.Direct(in.Tool)
 		if d == nil {
 			return "", tool.Denied("link action is disabled")

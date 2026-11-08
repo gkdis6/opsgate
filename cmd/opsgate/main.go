@@ -129,6 +129,9 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 	defer am.Close()
 	env.Confirm = am
 	am.SetDirect(env.Direct)
+	if browser != nil {
+		env.UndoURL = undoURL(cfg.HTTP.PublicURL, env)
+	}
 	o.Routes = append(o.Routes, am.Routes)
 
 	s, err := server.New(cfg, env)
@@ -287,4 +290,23 @@ func (c *application) runPasskeyInvite(args []string) error {
 	}
 	_, err = fmt.Fprintln(c.stdout, link)
 	return err
+}
+
+// undoURL links an undo to this server's approval page. Only catalog actions
+// that are enabled for links qualify; a plain http origin (local testing)
+// falls back to a relative link that the approval page can still use.
+func undoURL(base string, env *tool.Env) func(tool.Undo) string {
+	return func(u tool.Undo) string {
+		if env.Direct(u.Tool) == nil {
+			return ""
+		}
+		link, err := action.URL(base, u.Tool, u.Args, "rule")
+		if err != nil {
+			link, err = action.URL("", u.Tool, u.Args, "rule")
+		}
+		if err != nil {
+			return ""
+		}
+		return link
+	}
 }

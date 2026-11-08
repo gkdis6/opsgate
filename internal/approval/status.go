@@ -30,12 +30,14 @@ func (m *Manager) RegisterStatus(s *mcp.Server, env *tool.Env) {
 				return "", tool.Denied("unknown or expired approval")
 			}
 			status := approvalStatus(p)
+			text, _, undo := m.splitUndo(p.result)
 			result, err := json.Marshal(struct {
-				Tool   string `json:"tool"`
-				Target string `json:"target"`
-				Status string `json:"status"`
-				Result string `json:"result,omitempty"`
-			}{p.tool, p.target, status, p.result})
+				Tool    string `json:"tool"`
+				Target  string `json:"target"`
+				Status  string `json:"status"`
+				Result  string `json:"result,omitempty"`
+				UndoURL string `json:"undo_url,omitempty"`
+			}{p.tool, p.target, status, text, undo})
 			return string(result), err
 		})
 }

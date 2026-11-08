@@ -78,6 +78,7 @@ func TestActionLinkReadOnlyAndPolicy(t *testing.T) {
 		{"masked", "k8s_rollout_restart", "apps", "masked", true},
 		{"naked pod", "k8s_delete_pod", "apps", "", true},
 		{"caller tool policy", "k8s_rollout_restart", "apps", "policy", true},
+		{"revert suggestion", "k8s_restore_image", "apps", "revert", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			args := map[string]any{"cluster": "kind", "namespace": tc.namespace, "name": "web"}
@@ -108,6 +109,8 @@ func TestActionLinkReadOnlyAndPolicy(t *testing.T) {
 					_, _ = clients["kind"].CoreV1().Pods("apps").Update(ctx, pod, metav1.UpdateOptions{})
 					clients["kind"].(*fake.Clientset).ClearActions()
 				})
+			case "revert":
+				args["container"], args["expected_image"], args["image"], args["revert"] = "app", "app:2", "app:1", true
 			case "rule":
 				source = "rule"
 			case "bad source":

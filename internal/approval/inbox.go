@@ -144,9 +144,9 @@ func (m *Manager) subscription(w http.ResponseWriter, r *http.Request, user stri
 }
 
 type inboxItem struct {
-	ID, Title, Target, Source, Status, Result string
-	Created, Expires                          time.Time
-	Pending                                   bool
+	ID, Title, Target, Source, Status, Result, Undo string
+	Created, Expires                                time.Time
+	Pending                                         bool
 }
 
 type inboxView struct {
@@ -169,9 +169,10 @@ func (m *Manager) inbox(w http.ResponseWriter, _ *http.Request, user string) {
 		if p.user != user {
 			continue
 		}
+		result, undo, _ := m.splitUndo(p.result)
 		view.Items = append(view.Items, inboxItem{
 			ID: p.id, Title: p.title, Target: p.target, Source: sourceLabel(p.source),
-			Status: approvalStatus(p), Result: p.result, Created: p.created, Expires: p.expires, Pending: p.decision == "",
+			Status: approvalStatus(p), Result: result, Undo: undo, Created: p.created, Expires: p.expires, Pending: p.decision == "",
 		})
 	}
 	m.mu.Unlock()
@@ -208,5 +209,6 @@ var inboxPage = ui.NewTemplate(`{{define "title"}}Approval inbox{{end}}
 {{if .Target}}<p>Target: {{.Target}}</p>{{end}}
 <dl><dt>Status</dt><dd>{{.Status}}</dd><dt>Requested</dt><dd>{{.Created.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd><dt>Expires</dt><dd>{{.Expires.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd>
 {{if .Source}}<dt>Suggested by</dt><dd>{{.Source}}</dd>{{end}}</dl>
-{{if .Result}}<pre>{{.Result}}</pre>{{end}}</article>{{else}}<p>No live approvals.</p>{{end}}
+{{if .Result}}<pre>{{.Result}}</pre>{{end}}
+{{if .Undo}}<p><a href="{{.Undo}}">Undo</a></p>{{end}}</article>{{else}}<p>No live approvals.</p>{{end}}
 {{end}}`)

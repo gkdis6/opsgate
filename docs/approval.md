@@ -229,6 +229,36 @@ policy causes startup to fail; remove its subscription before narrowing the
 allowlist. Invalid or unreadable state also fails startup rather than replacing
 the signing key silently.
 
+## Undo
+
+A reversible action's plan also records how to go back. After it is applied,
+the result offers an **Undo** link: on the approval page and in the inbox as a
+button, and in the MCP tool result and `approval_status` as `undo_url`. The
+audit event for the apply records `"undo": true`.
+
+| Action | Undo |
+| --- | --- |
+| `k8s_scale` | Scale back to the replica count the plan saw. A scale to the current count offers no undo. |
+| `k8s_restore_image` | Return the container to the image it had before the restore, with `revert: true`. |
+| Restart, pod deletion | None. |
+
+An undo link is an ordinary catalog link. It holds no secret, and opening it
+shows a fresh plan of the current state; nothing changes until a person signs in
+and approves it. If someone changed the workload in the meantime, the plan shows
+that. The approval page shows the button only for a catalog link on this
+server's own origin. Undo links need web approval; without it the result has no
+`undo_url`.
+
+`revert: true` lets `k8s_restore_image` accept, as `image`, only an image used by
+the same container in the pod template of a non-deleting ReplicaSet owned by the
+same Deployment. Unlike a normal restore it does not require a ready Pod running
+that image, because the image before a restore is usually the failing one. The
+plan says so: "This image is NOT verified healthy". `expected_image` must still
+match the current image, a person approves every call and no approval window
+applies. Undoing a revert is an ordinary restore, which again needs a ready
+source. `action_link` refuses `revert`, so the analyzer cannot suggest an
+unverified image; a revert link only comes from the undo of a restore.
+
 ## Live choices per failure
 
 `GET /approve/options/{cluster}/{namespace}/{pod}` requires sign-in and evaluates

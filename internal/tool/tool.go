@@ -47,6 +47,9 @@ type Env struct {
 	Confirm Confirmer
 	// Policy filters tools during registration. Nil allows every tool.
 	Policy *Policy
+	// UndoURL builds an approval link for an undo action, or "" when the
+	// server offers no link for it. Nil disables undo links.
+	UndoURL func(Undo) string
 	// direct holds writes a person may run from a browser approval page.
 	direct map[string]*Direct
 	// Remediation is a read-only provider callback shared with browser choices.

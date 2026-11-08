@@ -19,6 +19,9 @@ func TestCatalogRoundTrip(t *testing.T) {
 		if name == "k8s_scale" {
 			args["replicas"] = 3
 		}
+		if name == "k8s_restore_image" {
+			args["revert"] = true
+		}
 		link, err := URL("https://ops.example/", name, args, "ai")
 		if err != nil {
 			t.Fatal(err)
@@ -40,6 +43,29 @@ func TestCatalogRoundTrip(t *testing.T) {
 	}
 	if _, ok := Lookup("note_trash"); ok {
 		t.Fatal("note in catalog")
+	}
+}
+
+func TestRevertArgument(t *testing.T) {
+	base := "/approve/action/k8s_restore_image?namespace=apps&name=web&container=app&expected_image=web:2&image=web:1"
+	for tail, want := range map[string]any{"": nil, "&revert=true": true, "&revert=false": false} {
+		u, _ := url.Parse(base + tail)
+		_, args, _, err := Parse(u)
+		if err != nil || args["revert"] != want {
+			t.Fatalf("%q: %v %v", tail, args, err)
+		}
+	}
+	for _, tail := range []string{"&revert=yes", "&revert=1", "&revert=TRUE", "&revert=true&revert=false"} {
+		u, _ := url.Parse(base + tail)
+		if _, _, _, err := Parse(u); err == nil {
+			t.Fatalf("accepted %q", tail)
+		}
+	}
+	if err := Validate("k8s_restore_image", map[string]any{"namespace": "apps", "name": "web", "container": "app", "expected_image": "a", "image": "b", "revert": "true"}); err == nil {
+		t.Fatal("string revert accepted")
+	}
+	if err := Validate("k8s_scale", map[string]any{"kind": "deployment", "namespace": "apps", "name": "web", "replicas": 1, "revert": true}); err == nil {
+		t.Fatal("revert accepted outside restore")
 	}
 }
 

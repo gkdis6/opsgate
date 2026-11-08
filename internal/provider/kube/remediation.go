@@ -36,6 +36,7 @@ type restoreImageInput struct {
 	Container     string `json:"container" jsonschema:"Required regular container name"`
 	ExpectedImage string `json:"expected_image" jsonschema:"Exact currently configured failing image; changed values refuse the action"`
 	Image         string `json:"image" jsonschema:"Exact image reported by a ready running container in a ready Pod owned by a non-deleting previous ReplicaSet"`
+	Revert        bool   `json:"revert,omitempty" jsonschema:"Undo a restore: accept an image from this Deployment's ReplicaSet history even if no ready Pod runs it. The image is not verified healthy."`
 }
 
 func (in restoreImageInput) clusterName() string { return in.Cluster }
@@ -528,12 +529,50 @@ func (p *provider) planRestoreImage(ctx context.Context, _ tool.Caller, in resto
 	if index < 0 {
 		return tool.Plan{}, tool.Denied("Deployment image changed; reopen a fresh action link")
 	}
+	undo := &tool.Undo{Tool: "k8s_restore_image", Args: map[string]any{"cluster": p.cfg.Name, "namespace": in.Namespace, "name": in.Name, "container": in.Container, "expected_image": in.Image, "image": in.ExpectedImage}}
+	if in.Revert {
+		source, err := p.historyImage(ctx, d, in.Container, in.Image)
+		if err != nil {
+			return tool.Plan{}, err
+		}
+		// Undoing a revert is an ordinary restore, which needs a ready source.
+		summary := fmt.Sprintf("Return container image of deployment %s/%s (UID %q), container %q: %q -> %q. Source: non-deleting ReplicaSet %q (UID %q) in this Deployment's history. This image is NOT verified healthy: no ready Pod may be running it. Only this container image changes; configuration is not rolled back.", in.Namespace, in.Name, d.UID, in.Container, in.ExpectedImage, in.Image, source.Name, source.UID)
+		return tool.Plan{Summary: summary, NoWindow: true, Undo: undo, Data: restoreSnapshot{Summary: summary, UID: d.UID, Version: d.ResourceVersion, Index: index, SourceUID: source.UID}}, nil
+	}
 	source, image, err := p.healthyImage(ctx, d, in.Container, in.ExpectedImage, in.Image)
 	if err != nil {
 		return tool.Plan{}, err
 	}
+	undo.Args["revert"] = true
 	summary := fmt.Sprintf("Restore container image of deployment %s/%s (UID %q), container %q: %q -> %q. Source: non-deleting ReplicaSet %q (UID %q) has a ready owned Pod with this container ready and running the reported image. Readiness does not guarantee application health or immutable tags. Only this container image changes; configuration is not rolled back.", in.Namespace, in.Name, d.UID, in.Container, in.ExpectedImage, image, source.Name, source.UID)
-	return tool.Plan{Summary: summary, NoWindow: true, Data: restoreSnapshot{Summary: summary, UID: d.UID, Version: d.ResourceVersion, Index: index, SourceUID: source.UID}}, nil
+	return tool.Plan{Summary: summary, NoWindow: true, Undo: undo, Data: restoreSnapshot{Summary: summary, UID: d.UID, Version: d.ResourceVersion, Index: index, SourceUID: source.UID}}, nil
+}
+
+// historyImage finds a non-deleting ReplicaSet owned by d whose pod template
+// runs target in container. Unlike healthyImage it needs no ready Pod, so it is
+// only used to undo a restore, which a person approves knowing that.
+func (p *provider) historyImage(ctx context.Context, d *appsv1.Deployment, container, target string) (*appsv1.ReplicaSet, error) {
+	list, err := p.client.AppsV1().ReplicaSets(d.Namespace).List(ctx, metav1.ListOptions{Limit: 501})
+	if err != nil {
+		return nil, err
+	}
+	if len(list.Items) > 500 || list.Continue != "" {
+		return nil, tool.Denied("too many ReplicaSets to safely select an image")
+	}
+	sort.Slice(list.Items, func(i, j int) bool { return list.Items[j].CreationTimestamp.Before(&list.Items[i].CreationTimestamp) })
+	for i := range list.Items {
+		rs := &list.Items[i]
+		owner := metav1.GetControllerOf(rs)
+		if owner == nil || owner.Kind != "Deployment" || owner.UID != d.UID || rs.UID == "" || rs.DeletionTimestamp != nil {
+			continue
+		}
+		for _, c := range rs.Spec.Template.Spec.Containers {
+			if c.Name == container && c.Image == target {
+				return rs, nil
+			}
+		}
+	}
+	return nil, tool.Denied("no non-deleting ReplicaSet of this Deployment has used that image")
 }
 func (p *provider) applyRestoreImage(ctx context.Context, c tool.Caller, in restoreImageInput, approved tool.Plan) (string, error) {
 	old, ok := approved.Data.(restoreSnapshot)

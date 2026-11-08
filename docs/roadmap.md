@@ -48,7 +48,7 @@ In order. Each step still goes through security review.
    containers: detection and restart, off by default, with a narrow privilege
    model instead of direct root or Docker socket access.
 6. **Undo buttons** for reversible actions, such as returning to the previous
-   replica count or image.
+   replica count or image. Done, unreleased; see the [changelog](../CHANGELOG.md).
 
 ## Done
 

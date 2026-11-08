@@ -205,6 +205,7 @@ type Approval struct {
 
 // Providers configures the available tool providers.
 type Providers struct {
+	Host       Host       `yaml:"host"`
 	Kubernetes Kubernetes `yaml:"kubernetes"`
 	Note       Note       `yaml:"note"`
 }

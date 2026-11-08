@@ -53,6 +53,7 @@ type Manager struct {
 	grants      map[grantKey]time.Time
 	direct      func(name string) *tool.Direct
 	options     func(context.Context, tool.Caller, string, string, string, string) (action.Options, error)
+	hostOptions func(context.Context, tool.Caller, string, string) (action.Options, error)
 }
 
 const splitWriteMessage = "change is too large to review in the client; split it into smaller writes"

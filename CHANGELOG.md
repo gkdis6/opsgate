@@ -9,6 +9,8 @@ GitHub releases carry generated release notes.
 
 ### Added
 
+- Optional host provider for servers without Kubernetes: `host_units`, `host_unit_logs`, `host_containers`, `host_container_logs` and the catalog actions `host_restart_unit` (systemd through polkit, no sudo) and `host_restart_container` (Docker through a socket proxy, bound to the container ID). It has a `/approve/host-options/...` choices page and `opsgate watch` alerts for failing or restarting units and containers. Off by default and refused with `mode: kubernetes`. / Kubernetes 없는 서버를 위한 선택 기능 호스트 provider를 추가합니다. `host_units`, `host_unit_logs`, `host_containers`, `host_container_logs`와 카탈로그 조치 `host_restart_unit`(polkit을 거치는 systemd, sudo 없음), `host_restart_container`(소켓 프록시를 거치는 Docker, 컨테이너 ID에 고정)를 제공합니다. `/approve/host-options/...` 선택지 페이지와, 실패하거나 재시작하는 유닛·컨테이너에 대한 `opsgate watch` 알림이 있습니다. 기본값은 꺼짐이며 `mode: kubernetes`에서는 거부됩니다.
+
 - Undo links for reversible actions: after `k8s_scale` or `k8s_restore_image` is applied, the approval page, inbox, MCP result and `approval_status` offer a catalog link back to the previous replica count or image. `k8s_restore_image` gains `revert: true`, limited to images in the Deployment's ReplicaSet history. / 되돌릴 수 있는 조치에 되돌리기 링크를 추가합니다. `k8s_scale`이나 `k8s_restore_image`를 실행하면 승인 페이지, 승인함, MCP 결과, `approval_status`에 이전 파드 수나 이전 이미지로 돌아가는 카탈로그 링크가 붙습니다. `k8s_restore_image`에 Deployment의 ReplicaSet 이력 이미지로 제한한 `revert: true`를 추가합니다.
 
 - Namespace alert groups with ordered routing, output selection, warning filters and independent batching/cooldown per group and output; unmatched alerts are counted locally. / namespace 알림 그룹에 순서별 경로, 출력 선택, 경고 필터와 그룹·출력별 묶음 및 cooldown을 추가하고 미일치 알림은 로컬 누락 개수로 집계합니다.

@@ -21,7 +21,29 @@ import (
 const (
 	Warning = "warning"
 	Info    = "info"
+	// HostCluster is the cluster and namespace of alerts about the host
+	// itself (systemd units and Docker containers), so groups can match them.
+	HostCluster = "host"
 )
+
+// HostKind returns "unit" or "container" for a host alert, or "".
+func HostKind(a Alert) string {
+	if a.Cluster != HostCluster || a.Namespace != HostCluster {
+		return ""
+	}
+	switch a.Kind {
+	case "Unit":
+		return "unit"
+	case "Container":
+		return "container"
+	}
+	return ""
+}
+
+// choiceAlert reports a warning that links to live action choices.
+func choiceAlert(a Alert) bool {
+	return a.OptionsURL != "" && a.Severity == Warning && (a.Kind == "Pod" || HostKind(a) != "")
+}
 
 // Alert is one observed change. Text fields must already be redacted.
 // Display holds human-facing localization while source fields stay unchanged.
@@ -143,7 +165,7 @@ func New(opts Options) *Dispatcher {
 
 // Emit queues a without blocking.
 func (d *Dispatcher) Emit(a Alert) {
-	if d.opts.ChoicesOnly && (a.OptionsURL == "" || a.Kind != "Pod" || a.Severity != Warning) {
+	if d.opts.ChoicesOnly && !choiceAlert(a) {
 		return
 	}
 	if d.opts.ProblemsOnly && a.Severity != Warning {

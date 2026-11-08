@@ -20,6 +20,12 @@ Kubernetes and note read tools require `ops:read`. Tools are registered only whe
 | `k8s_scale` | Set workload replicas | Required `kind` (deployment/statefulset), `namespace`, `name`, `replicas` (0–`max_replicas`, default cap 10); `scale` gate; the result offers an undo link back to the previous count ([undo](approval.md#undo)) |
 | `k8s_delete_pod` | Delete a specific pod with UID precondition | Required `namespace`, `name`; `delete_pod` gate; links require a controller owner; MCP warns for an unowned pod |
 | `k8s_restore_image` | Restore a Deployment container's image observed in a ready/running container of a ready Pod owned by a non-deleting ReplicaSet; only the image changes and configuration is not rolled back | Required `namespace`, `name` (Deployment), `container`, `expected_image` (exact current image), `image` (exact source image); optional `revert: true` accepts an image from this Deployment's ReplicaSet history that is not verified healthy (used by undo); `restore_image` gate; rechecked before patching; no approval window; the result offers an undo link ([undo](approval.md#undo)) |
+| `host_units` | Host provider: state of allowlisted systemd units | None; see [host provider](host.md) |
+| `host_unit_logs` | Host provider: masked journal tail of one unit | Required `unit`; `lines=100`, max 500 |
+| `host_restart_unit` | Host provider: restart one systemd unit through systemd and polkit | Required `unit`; must match `systemd.units` and `systemd.restart`; catalog action, no undo |
+| `host_containers` | Host provider: state of allowlisted Docker containers | None |
+| `host_container_logs` | Host provider: masked, demultiplexed log tail of one container | Required `container`; `lines=100`, max 500 |
+| `host_restart_container` | Host provider: restart one Docker container | Required `container`; must match `docker.containers` and `docker.restart`; plan binds the full container ID; catalog action, no undo |
 | `note_search` | Literal note content/filename search with snippets and scanned counts | Required `query` (1–4096 UTF-8 bytes); optional `folder`, `tag`, `case_sensitive=false`; `limit=20`, max 100 |
 | `note_read` | Note text and file/line metadata | Required `path`, `.md` optional; `offset_line=1`, `max_lines=400`, max 2000 |
 | `note_list` | Folders first, then .md/.canvas/.base files | `folder=""` (vault root), `recursive=false`, `limit=200`, max 1000; reports truncation |

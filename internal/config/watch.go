@@ -163,8 +163,8 @@ func (c Config) ValidateWatch() error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
-	if !c.Providers.Kubernetes.Enabled {
-		return fmt.Errorf("opsgate watch requires providers.kubernetes.enabled")
+	if !c.Providers.Kubernetes.Enabled && !c.Providers.Host.Enabled {
+		return fmt.Errorf("opsgate watch requires providers.kubernetes.enabled or providers.host.enabled")
 	}
 	if c.Watch.Inbox.URL == "" && c.Watch.Email.Host == "" && len(c.Watch.Outputs) == 0 {
 		return fmt.Errorf("opsgate watch requires watch.outputs, watch.inbox or watch.email.host")

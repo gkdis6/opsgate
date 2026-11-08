@@ -46,8 +46,8 @@ func TestModeRejects(t *testing.T) {
 	for in, want := range map[string]string{
 		"mode: pod\n":  "mode must be",
 		"mode: host\n": "mode must be",
-		"providers:\n  host:\n    enabled: true\n": "field host not found",
-		"mode: kubernetes\nunknown: 1\n":           "field unknown not found",
+		"mode: kubernetes\nproviders:\n  host:\n    enabled: true\n": "cannot enable providers.host",
+		"mode: kubernetes\nunknown: 1\n":                             "field unknown not found",
 	} {
 		if _, err := Parse([]byte(in), "bad"); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: err = %v, want %q", in, err, want)

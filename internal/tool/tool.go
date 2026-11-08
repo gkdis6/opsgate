@@ -54,6 +54,8 @@ type Env struct {
 	direct map[string]*Direct
 	// Remediation is a read-only provider callback shared with browser choices.
 	Remediation func(context.Context, Caller, string, string, string, string) (action.Options, error)
+	// HostOptions evaluates live choices for a host unit or container.
+	HostOptions func(ctx context.Context, c Caller, kind, name string) (action.Options, error)
 }
 
 // Spec describes a tool. Scope defaults to ops:read.

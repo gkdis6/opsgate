@@ -16,6 +16,12 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("mode must be %s, got %q", ModeKubernetes, c.Mode)
 	}
+	if c.Mode == ModeKubernetes && c.Providers.Host.Enabled {
+		return fmt.Errorf("mode: kubernetes cannot enable providers.host")
+	}
+	if err := c.Providers.Host.validate(); err != nil {
+		return err
+	}
 	if err := checkToolGlobs("server.tools.allow", c.Server.Tools.Allow); err != nil {
 		return err
 	}

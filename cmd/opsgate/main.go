@@ -27,6 +27,7 @@ import (
 	"github.com/gkdis6/opsgate/internal/config"
 	"github.com/gkdis6/opsgate/internal/httpserver"
 	"github.com/gkdis6/opsgate/internal/oauth"
+	"github.com/gkdis6/opsgate/internal/provider/host"
 	"github.com/gkdis6/opsgate/internal/provider/kube"
 	"github.com/gkdis6/opsgate/internal/server"
 	"github.com/gkdis6/opsgate/internal/tool"
@@ -139,6 +140,7 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 		return err
 	}
 	am.SetOptions(env.Remediation)
+	am.SetHostOptions(env.HostOptions)
 	o.Server = s
 	if !cfg.Approval.RequireWeb {
 		log.Printf("warning: a compromised client can approve its own writes through elicitation; approval.require_web: true avoids this where web approval is available")
@@ -201,15 +203,53 @@ func (c *application) runWatch(args []string) error {
 		addApprovalLink(&a, base)
 		router.Emit(a)
 	}
-	err = kube.Watch(ctx, cfg.WatchClusters(), w.ProblemsOnly, emit)
+	err = runWatchers(ctx, cfg, emit)
 	stop()
 	cancelDeliveries()
 	deliveries.Wait()
 	return err
 }
 
+// runWatchers runs the Kubernetes and host watchers that are enabled until ctx
+// ends or one of them fails, which stops the others.
+func runWatchers(ctx context.Context, cfg config.Config, emit func(alert.Alert)) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var (
+		wg       sync.WaitGroup
+		once     sync.Once
+		firstErr error
+	)
+	start := func(run func(context.Context) error) {
+		wg.Go(func() {
+			if err := run(ctx); err != nil {
+				once.Do(func() { firstErr = err })
+				cancel()
+			}
+		})
+	}
+	if cfg.Providers.Kubernetes.Enabled {
+		start(func(ctx context.Context) error {
+			return kube.Watch(ctx, cfg.WatchClusters(), cfg.Watch.ProblemsOnly, emit)
+		})
+	}
+	if cfg.Providers.Host.Enabled {
+		start(func(ctx context.Context) error { return host.Watch(ctx, cfg.Providers.Host, emit) })
+	}
+	wg.Wait()
+	return firstErr
+}
+
 // addApprovalLink adds live choices and retains the legacy restart link.
 func addApprovalLink(a *alert.Alert, base string) {
+	if kind := alert.HostKind(*a); kind != "" {
+		if base != "" && a.Severity == alert.Warning {
+			if link, err := action.HostOptionsURL("", kind, a.Name); err == nil {
+				a.OptionsURL = strings.TrimRight(base, "/") + link
+			}
+		}
+		return
+	}
 	if base != "" && a.Severity == alert.Warning && a.Kind == "Pod" && a.Namespace != "" && a.Workload != nil {
 		a.OptionsURL, _ = action.OptionsURL("", a.Cluster, a.Namespace, a.Name, a.Workload.Kind+"/"+a.Workload.Name)
 		if a.OptionsURL != "" {

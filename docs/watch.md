@@ -53,6 +53,14 @@ the URL is never logged.
 
 `watch.webhook_url`, `watch.secret_file` and `watch.allow_private_http` were removed. Configurations containing these keys are rejected. Move them into a `type: webhook` entry in `watch.outputs`, using `url`, `secret_file` and `allow_private_http` on that output. The default webhook JSON body and HMAC signature are preserved.
 
+## Host alerts
+
+With the optional [host provider](host.md) enabled, `opsgate watch` also polls
+systemd units and Docker containers and sends `UnitFailed`, `UnitRestarted`,
+`ContainerUnhealthy`, `ContainerExited` and `ContainerRestarted` warnings. Their
+cluster and namespace are `host`, so groups match them with `host` or `*`.
+Kubernetes is optional for watch when the host provider is enabled.
+
 ## Groups
 
 Use `watch.groups` to choose destinations, warning filtering and batching by the

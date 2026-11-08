@@ -13,8 +13,8 @@ service is back, AI clients such as Claude, ChatGPT, Claude Code and Cursor
 investigate the cause through opsgate's MCP server: a fixed set of tools with
 explicit policy, human-approved changes and an audit log.
 
-> **Status:** early release; notes, watch, the approval inbox and the analyzer
-> are experimental. Changes require user authorization, allowed targets and human approval. Read restrictions
+> **Status:** early release; notes, the host provider, watch, the approval inbox
+> and the analyzer are experimental. Changes require user authorization, allowed targets and human approval. Read restrictions
 > and output redaction reduce sensitive data exposure. Third-party security review
 > is pending; the [security policy](SECURITY.md) explains the protections and
 > remaining limitations.
@@ -106,10 +106,9 @@ with one JSON object per line.
 
 ## Where it is heading
 
-Planned, not released. Details are in the [roadmap](docs/roadmap.md).
-
-- **An optional host provider** for systemd units and Docker or Compose
-  containers on servers without Kubernetes. It stays off unless you enable it.
+Every step of the current [roadmap](docs/roadmap.md) is implemented and awaits
+the next release. Remaining ideas, such as a PostgreSQL provider and
+configuration reload, are listed there without commitments.
 
 
 
@@ -120,6 +119,7 @@ Providers are groups of tools; enable only the groups you need.
 | Provider | Read tools | Write tools (approval required) |
 | --- | --- | --- |
 | Kubernetes | clusters, overview, list, get, environment, service check, events, pod logs, remediation options | rollout restart, scale, delete pod, restore a previous image |
+| Host: systemd units and Docker/Compose containers on a server without Kubernetes *(experimental, off by default)* | units, unit logs, containers, container logs | restart a unit, restart a container |
 | Notes: runbooks and memory, Markdown folder or Obsidian vault *(experimental)* | search, read, list, recent, links, tags | create, append, replace, move to `.trash` |
 
 Scopes define the kinds of work a user can perform through opsgate: `ops:read` for inspection
@@ -451,6 +451,7 @@ Full details: [SECURITY.md](SECURITY.md).
 | [Configuration](docs/configuration.md) | Every configuration key, defaults and audit log format |
 | [Tools](docs/tools.md) | Tool arguments, limits, redaction |
 | [Notes](docs/notes.md) | Runbooks and incident memory in a Markdown folder |
+| [Host provider](docs/host.md) | systemd units and Docker/Compose containers without Kubernetes; polkit and socket proxy setup |
 | [Deployment](docs/deploy.md) | Release verification, Kubernetes, reverse proxy |
 | [Watch alerts](docs/watch.md) | Kubernetes alerts to Discord, custom JSON webhooks, email and the approval inbox through a separate `opsgate watch` process; namespace groups |
 | [Automatic investigation](docs/analyzer.md) | Optional model worker, read-only MCP authentication and investigation limits |

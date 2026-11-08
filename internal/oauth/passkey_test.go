@@ -543,3 +543,16 @@ func TestChoicesPasskeyBrowserSwitch(t *testing.T) {
 		}
 	}
 }
+
+func TestHostChoicesReturnPath(t *testing.T) {
+	for _, good := range []string{"/approve/host-options/unit/app@1.service", "/approve/host-options/container/shop-api-1"} {
+		if !approvalReturn(good) {
+			t.Fatalf("rejected %q", good)
+		}
+	}
+	for _, bad := range []string{"/approve/host-options/unit/app.service?next=https://evil.example", "/approve/host-options/unit/app", "/approve/host-options/pod/web", "/approve/host-options/unit/%2e%2e"} {
+		if approvalReturn(bad) {
+			t.Fatalf("unsafe return %q", bad)
+		}
+	}
+}

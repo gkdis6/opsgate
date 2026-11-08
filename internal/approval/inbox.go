@@ -202,7 +202,7 @@ var inboxPage = ui.NewTemplate(`{{define "title"}}Approval inbox{{end}}
 <p class="note">On iPhone, use Add to Home Screen first, then open opsgate from the Home Screen and enable notifications.</p>
 <p id="push-status" role="status"></p>{{else}}<p class="note">Notifications are unavailable for this account or disabled on this server.</p>{{end}}
 {{if .Notices}}<h2>Alerts waiting for a decision</h2>
-{{range .Notices}}<article class="target"><h3>{{.Reason}}</h3><p>{{.Cluster}} / {{.Namespace}} / {{.Pod}}</p>
+{{range .Notices}}<article class="target"><h3>{{.Reason}}</h3><p>{{if .HostKind}}host {{.HostKind}} / {{.Pod}}{{else}}{{.Cluster}} / {{.Namespace}} / {{.Pod}}{{end}}</p>
 <p>{{.OccurredAt.UTC.Format "2006-01-02 15:04:05 UTC"}}</p><a href="{{.URL}}">Choose an action</a>
 <form method="post" action="/approvals/dismiss"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button type="submit">Dismiss</button></form></article>{{end}}{{end}}
 {{range .Items}}<article class="target"><h2><a href="/approve/{{.ID}}">{{.Title}}</a></h2>

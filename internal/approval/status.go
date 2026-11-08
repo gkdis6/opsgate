@@ -29,17 +29,7 @@ func (m *Manager) RegisterStatus(s *mcp.Server, env *tool.Env) {
 			if !validID(in.ApprovalID) || p == nil || p.user != c.User {
 				return "", tool.Denied("unknown or expired approval")
 			}
-			status := "pending"
-			switch {
-			case p.decision == "rejected":
-				status = "rejected"
-			case p.finished && p.failed:
-				status = "not_applied"
-			case p.finished:
-				status = "applied"
-			case p.decision == "approved":
-				status = "running"
-			}
+			status := approvalStatus(p)
 			result, err := json.Marshal(struct {
 				Tool   string `json:"tool"`
 				Target string `json:"target"`
@@ -48,4 +38,19 @@ func (m *Manager) RegisterStatus(s *mcp.Server, env *tool.Env) {
 			}{p.tool, p.target, status, p.result})
 			return string(result), err
 		})
+}
+
+func approvalStatus(p *pending) string {
+	switch {
+	case p.decision == "rejected":
+		return "rejected"
+	case p.finished && p.failed:
+		return "not_applied"
+	case p.finished:
+		return "applied"
+	case p.decision == "approved":
+		return "running"
+	default:
+		return "pending"
+	}
 }

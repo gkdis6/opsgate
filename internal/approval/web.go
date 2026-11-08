@@ -24,6 +24,7 @@ func (m *Manager) Routes(mux *http.ServeMux) {
 	protect.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		ui.Message(w, http.StatusForbidden, "Approval forbidden", "This request cannot be accepted from another site.")
 	}))
+	m.inboxRoutes(mux, protect)
 	for _, method := range []string{"GET", "POST"} {
 		mux.Handle(method+" /approve/{id}", securityHeaders(protect.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			m.mu.Lock()
@@ -241,6 +242,7 @@ func planLines(summary string) []planLine {
 
 var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
 {{define "content"}}
+<p><a href="/approvals">Approval inbox</a></p>
 {{if .Status}}<h1 class="status">{{.Status}}</h1><p>Tool: <strong>{{.Tool}}</strong></p>
 {{else}}<h1>{{.PageTitle}}</h1><p>Review the target and planned changes before approving.</p>{{end}}
 {{if .Source}}<p>{{.Label}}</p><p>Suggested by: {{.Source}}</p>{{end}}

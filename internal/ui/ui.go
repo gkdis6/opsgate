@@ -1,5 +1,5 @@
 // Package ui renders the shared browser pages. Pages are script-free except
-// those that define a "scripts" block (passkey ceremonies), which load only a
+// those that define a "scripts" block (passkey ceremonies and the approval inbox), which load only a
 // same-origin script under a matching Content-Security-Policy.
 package ui
 
@@ -8,7 +8,10 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"html/template"
+	"image"
+	"image/png"
 	"net/http"
+	"sync"
 )
 
 //go:embed layout.html
@@ -49,4 +52,30 @@ var messagePage = NewTemplate(`{{define "title"}}{{.Title}}{{end}}
 // Message renders a short informational or error page in the shared layout.
 func Message(w http.ResponseWriter, status int, title, message string) {
 	Render(w, status, messagePage, struct{ Title, Message string }{title, message})
+}
+
+var installIcon = sync.OnceValue(func() []byte {
+	// The shared favicon is 64px. Install manifests need a 512px icon.
+	source, err := png.Decode(bytes.NewReader(icon))
+	if err != nil {
+		return icon
+	}
+	scaled := image.NewRGBA(image.Rect(0, 0, 512, 512))
+	bounds := source.Bounds()
+	for y := 0; y < 512; y++ {
+		for x := 0; x < 512; x++ {
+			scaled.Set(x, y, source.At(bounds.Min.X+x*bounds.Dx()/512, bounds.Min.Y+y*bounds.Dy()/512))
+		}
+	}
+	var b bytes.Buffer
+	if png.Encode(&b, scaled) != nil {
+		return icon
+	}
+	return b.Bytes()
+})
+
+// Icon serves the shared application icon for installed approval inboxes.
+func Icon(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "image/png")
+	_, _ = w.Write(installIcon())
 }

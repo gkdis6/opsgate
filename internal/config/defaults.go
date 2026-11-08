@@ -31,7 +31,8 @@ func Default() Config {
 			},
 		},
 		Approval: Approval{
-			TTL: 10 * time.Minute,
+			TTL:  10 * time.Minute,
+			Push: ApprovalPush{Language: "en", AllowedHosts: []string{"fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com", "*.notify.windows.com"}},
 		},
 		Providers: Providers{
 			Kubernetes: Kubernetes{
@@ -70,6 +71,7 @@ func DefaultFor(mode string) (Config, error) {
 	}
 	c.Auth.Mode = AuthBuiltin
 	c.Auth.Builtin.StateFile = "/var/lib/opsgate/oauth.json"
+	c.Approval.Push.StateFile = "/var/lib/opsgate/push.json"
 	c.Auth.Builtin.Upstream.Provider = "passkey"
 	return c, nil
 }

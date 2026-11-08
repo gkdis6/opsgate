@@ -105,7 +105,7 @@ func (m *Manager) directRequest(w http.ResponseWriter, r *http.Request, subject,
 	}
 	m.approvals[id] = &pending{
 		id: id, csrf: csrf, user: subject, transport: caller.Transport, tool: name, title: label(name), source: source, summary: summary,
-		target: plan.Target, noWindow: true, args: display, expires: m.now().Add(m.ttl),
+		target: plan.Target, noWindow: true, args: display, created: m.now(), expires: m.now().Add(m.ttl),
 		run: func(ctx context.Context) (string, error) { return d.Run(ctx, caller, raw, summary) },
 	}
 	m.mu.Unlock()

@@ -9,6 +9,8 @@ GitHub releases carry generated release notes.
 
 ### Added
 
+- Installable, per-user `/approvals` inbox and optional payload-less Web Push with durable VAPID keys, protected device subscriptions and bounded delivery. / 사용자별 설치 가능한 `/approvals` 승인함과 VAPID 키 영구 저장, 보호된 기기 구독, 제한된 큐를 사용하는 내용 없는 Web Push 선택 기능을 추가합니다.
+
 - Shared action catalog and generic approval links for restart, image restore, scale and controller-owned pod deletion; read-only `action_link` validates live plans, and analyzer buttons use catalog labels and rule/AI provenance. Legacy restart/image links remain aliases. / 재시작·이미지 복구·규모 조정·컨트롤러 소유 파드 삭제의 공통 카탈로그와 승인 링크, 현재 계획을 검증하는 조회 전용 `action_link`, 출처를 표시하는 분석기 버튼을 추가하고 기존 링크 별칭을 유지합니다.
 
 ### Changed

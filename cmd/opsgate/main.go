@@ -119,6 +119,10 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 		browser = nil
 	}
 	am := approval.New(cfg.Approval, cfg.HTTP.PublicURL, browser, env.Audit)
+	if err := am.EnablePush(cfg.Approval.Push); err != nil {
+		return fmt.Errorf("approval push: %w", err)
+	}
+	defer am.Close()
 	env.Confirm = am
 	am.SetDirect(env.Direct)
 	o.Routes = append(o.Routes, am.Routes)

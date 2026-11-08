@@ -115,7 +115,7 @@ approval:
 | Outcome retention | Until at least the original expiry; executions remain readable for at least 10 minutes after finishing. Rejections remain until original expiry |
 | Nonce capacity | 1,000 live consumed nonces; live entries are not evicted to accept another continuation |
 | Window capacity | 100 live user/tool/target combinations |
-| Persistence | Pending records, windows, consumed nonces and signing key are memory-only; restart discards all of them |
+| Persistence | Pending records, windows, consumed nonces and elicitation signing key are memory-only; restart discards all of them |
 
 The default raw write argument limit is 16 KiB; some content-bearing tools raise it. Summary limits scale with each tool's argument limit. See [Tools](tools.md) for limits.
 
@@ -159,3 +159,70 @@ existing warning for pods without a controller.
 Historical `/approve/restart/{cluster}/{kind}/{namespace}/{name}` and
 `/approve/restore-image/{cluster}/{namespace}/{name}?container=…&expected_image=…&image=…`
 remain aliases with the same catalog validation.
+
+## Approval inbox and notifications
+
+Open `/approvals` in your phone or desktop's normal browser and sign in as the
+user who requests changes. The inbox shows only your live approvals, with
+pending requests first, followed by decisions and execution results. Open a
+request to review its plan; approving re-plans and runs it once as usual. The
+inbox also works without notifications. Use it outside Telegram/Discord's
+in-app browser so passkey sign-in can use the browser's normal credentials.
+
+To receive Web Push notifications:
+
+1. Enable push in your builtin-auth HTTP configuration (`approval.web` is required):
+
+   ```yaml
+   approval:
+     web: true
+     push:
+       enabled: true
+       subject: mailto:owner@example.com
+       state_file: /var/lib/opsgate/push.json
+       language: en
+   ```
+
+   Use your own contact `mailto:` or `https:` URL for `subject`. Mode-based files
+   default `state_file` to `/var/lib/opsgate/push.json`; other files must set it.
+   Keep it separate from the OAuth state file. Forward `/approvals` and its
+   subpaths through your HTTPS reverse proxy, along with the existing auth and
+   approval routes.
+2. Open `/approvals` on each device in a normal browser and sign in. On iPhone,
+   choose **Add to Home Screen** first, then open opsgate from the Home Screen.
+   Desktop and other supported browsers can also install the inbox.
+3. Click **Enable notifications on this device** and allow notifications. The
+   account must have `ops:write`. Up to 10 devices per user are kept; adding or
+   renewing a subscription makes it newest and evicts the oldest if necessary.
+   Use **Disable notifications on this device** to remove that device.
+
+A new MCP web approval queues a notification to the requester's devices;
+link-created requests do not notify because the person is already in the
+browser. Clicking the notification opens or focuses `/approvals`, including
+sign-in if needed. Notifications never approve anything. `language: ko` shows
+“승인 요청이 있습니다”; the default `en` shows “An approval is waiting”.
+
+**Privacy:** push carries no approval content, ID, target or result. The push
+service sees an empty request with VAPID contact information and timing; the
+service worker generates a generic “opsgate” notification locally. Device
+subscription URLs are capabilities and are never written to logs or audit.
+Subscriptions and the server-generated VAPID key pair persist atomically in a
+0600 state file; preserve it across restarts. Deleting it requires devices to
+unsubscribe and enable notifications again. Approval records remain memory-only.
+
+Delivery is best effort: one worker drains a bounded 100-request queue, with
+short timeouts and no retries; a full queue drops the notification and logs a
+generic warning. An offline device may receive it before the approval expires;
+404/410 responses remove that subscription. The inbox remains the source of
+current status. The pending MCP message does not claim delivery succeeded.
+
+Endpoints must use HTTPS on port 443, be at most 1 KiB and match
+`approval.push.allowed_hosts` (defaults: `fcm.googleapis.com`,
+`updates.push.services.mozilla.com`, `web.push.apple.com`,
+`*.notify.windows.com`). Wildcards match subdomains only. Dial-time checks reject
+private, loopback and other nonpublic addresses, including after DNS resolution;
+redirects and environment proxies are disabled. Only change this allowlist for
+a trusted browser push service. A persisted endpoint outside the configured
+policy causes startup to fail; remove its subscription before narrowing the
+allowlist. Invalid or unreadable state also fails startup rather than replacing
+the signing key silently.

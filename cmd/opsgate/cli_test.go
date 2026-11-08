@@ -31,7 +31,7 @@ func testApp() (*application, *bytes.Buffer, *bytes.Buffer, *int) {
 
 func TestHelp(t *testing.T) {
 	for _, args := range [][]string{
-		{"-h"}, {"-help"}, {"watch", "-h"}, {"dev-runner", "-h"}, {"init", "-h"},
+		{"-h"}, {"-help"}, {"watch", "-h"}, {"init", "-h"},
 		{"config", "-h"}, {"config", "show", "-h"}, {"passkey", "-h"}, {"passkey", "invite", "-h"},
 		{"version", "-h"}, {"help", "-h"}, {"help"}, {"help", "watch"},
 		{"help", "config"}, {"help", "config", "show"}, {"help", "passkey", "invite"},
@@ -46,7 +46,7 @@ func TestHelp(t *testing.T) {
 				t.Fatalf("stdout=%q stderr=%q server calls=%d", out, errout, *calls)
 			}
 			if len(args) == 1 && args[0] == "-h" {
-				for _, name := range []string{"dev-runner", "watch", "init", "config", "passkey", "version", "help", "-config", "-transport", "-version", "-gen-token"} {
+				for _, name := range []string{"watch", "init", "config", "passkey", "version", "help", "-config", "-transport", "-version", "-gen-token"} {
 					if !strings.Contains(out.String(), name) {
 						t.Errorf("root help missing %q", name)
 					}
@@ -61,15 +61,15 @@ func TestUsageErrors(t *testing.T) {
 		{"wat"}, {"config"}, {"passkey"}, {"config", "typo"}, {"passkey", "typo"},
 		{"config", "typo", "-config", "x.yaml"}, {"passkey", "typo", "-config", "x.yaml"},
 		{"-bogus"}, {"-config"}, {"-config", "x.yaml", "-transport", "bogus"}, {"-config", "x.yaml", "extra"}, {"-version", "extra"}, {"-gen-token", "extra"}, {"--", "extra"},
-		{"dev-runner"}, {"watch"}, {"passkey", "invite"}, {"passkey", "invite", "-config", "x.yaml"},
+		{"watch"}, {"passkey", "invite"}, {"passkey", "invite", "-config", "x.yaml"},
 		{"passkey", "invite", "-subject", "passkey:alice"}, {"init", "-yes"},
-		{"dev-runner", "-config", "x.yaml", "extra"}, {"watch", "-config", "x.yaml", "extra"},
+		{"watch", "-config", "x.yaml", "extra"},
 		{"init", "extra"}, {"config", "show", "-config", "x.yaml", "extra"},
 		{"-config", "x.yaml", "watch"}, {"init", "-force=invalid"},
 		{"passkey", "invite", "-config", "x.yaml", "-subject", "passkey:alice", "extra"},
 		{"version", "extra"}, {"help", "version", "extra"}, {"help", "wat"}, {"help", "passkey", "typo"},
 		{"help", "config", "show", "extra"},
-		{"config", "-bogus"}, {"passkey", "-bogus"}, {"watch", "-bogus"}, {"dev-runner", "-bogus"},
+		{"config", "-bogus"}, {"passkey", "-bogus"}, {"watch", "-bogus"},
 		{"init", "-bogus"}, {"config", "show", "-bogus"}, {"passkey", "invite", "-ttl", "invalid"}, {"version", "-bogus"},
 		{"passkey", "invite", "-config", "x.yaml", "-subject", "passkey:alice", "-ttl", "0"},
 		{"passkey", "invite", "-config", "x.yaml", "-subject", "passkey:alice", "-ttl", "-1h"},
@@ -92,7 +92,7 @@ func TestUsageErrors(t *testing.T) {
 }
 
 func TestRouting(t *testing.T) {
-	for _, path := range []string{"dev-runner", "watch", "init", "config show", "passkey invite", "version", "help"} {
+	for _, path := range []string{"watch", "init", "config show", "passkey invite", "version", "help"} {
 		t.Run(path, func(t *testing.T) {
 			c, _, errout, _ := testApp()
 			commands := c.commands()
@@ -225,7 +225,7 @@ func TestOutputFailure(t *testing.T) {
 func TestOperationalErrors(t *testing.T) {
 	missing := t.TempDir() + "/missing.yaml"
 	for _, args := range [][]string{
-		{"dev-runner", "-config", missing}, {"watch", "-config", missing},
+		{"watch", "-config", missing},
 		{"config", "show", "-config", missing},
 		{"passkey", "invite", "-config", missing, "-subject", "passkey:alice"},
 	} {

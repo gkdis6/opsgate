@@ -7,12 +7,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-func TestDevRunnerExampleConfig(t *testing.T) {
-	if _, err := LoadDevRunner("../../deploy/dev-runner.example.yaml"); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestKubernetesExampleApproval(t *testing.T) {
 	f, err := os.Open("../../deploy/kubernetes/opsgate-deployment.yaml")
 	if err != nil {

@@ -2,7 +2,7 @@
 
 [한국어](ko/tools.md)
 
-Kubernetes and note read tools require `ops:read`; dev tools require `dev:run`. Tools are registered only when their provider is enabled. Kubernetes namespaces are filtered by configuration; namespace denies win. Kubernetes has no Secrets tool. Read-only metadata and logs can still disclose sensitive information.
+Kubernetes and note read tools require `ops:read`. Tools are registered only when their provider is enabled. Kubernetes namespaces are filtered by configuration; namespace denies win. Kubernetes has no Secrets tool. Read-only metadata and logs can still disclose sensitive information.
 
 | Tool | Purpose | Main arguments, defaults and limits |
 | --- | --- | --- |
@@ -29,13 +29,6 @@ Kubernetes and note read tools require `ops:read`; dev tools require `dev:run`. 
 | `note_append` | Append at end or under a unique exact heading | Required `path`, `content`; optional `heading` (at most 1024 bytes); same write gate |
 | `note_replace` | Exact substring replacement | Required `path`, nonempty `old_text`, `new_text`; `expected_count=1` must match; same write gate |
 | `note_trash` | Retain a note in local .trash with collision suffixes | Required `path`; same write gate; never permanently deletes |
-| `dev_projects` | Coding projects and agent allowlists (`dev:run`) | None; includes runner limits |
-| `dev_task_start` | Start an agent after human approval (`dev:run`) | Required `project`, `agent`, `prompt`; optional `approval_id`; prompt up to 32 KiB (MCP arguments 48 KiB, approval summary 64 KiB) |
-| `dev_task_status` | Own task state and final message (runner admins may access all tasks) (`dev:run`) | Required `id` |
-| `dev_task_log` | Untrusted task log page (`dev:run`) | Required `id`; `offset=0` (0–20 MiB), `limit=65536`, maximum 262144 bytes; raw `next_offset` |
-| `dev_task_diff` | Untrusted stat and patch against pinned base (`dev:run`) | Required `id`; maximum 256 KiB before MCP output cap |
-| `dev_task_list` | Retained tasks newest first (`dev:run`) | `limit=20`, range 1..100; final messages omitted |
-| `dev_task_cancel` | Cancel an owned task without new approval (runner admins may cancel any task) (`dev:run`) | Required `id`; changes state, terminates running process group |
 
 Image restore checks the source Pod controller UID, Pod/container readiness and running state, and exact spec image. Status image references must match after Docker Hub/default-tag normalization; a SHA-256/SHA-512 runtime imageID is required and digest-pinned images must match it. Source checks repeat before apply; namespace scans above 500 ReplicaSets or 500 Pods fail closed. Readiness does not guarantee application health, and registry tags remain mutable.
 
@@ -73,8 +66,8 @@ The shared `internal/redact` layer masks PEM private keys, Authorization/Proxy-A
 
 ## Shared limits
 
-All eight approval-gated tools accept optional `approval_id` for browser retries; omit it on the first call. Dev task IDs are 20 lowercase base32 characters. Task status, log, diff, list and cancellation enforce requester ownership, with runner admins permitted access to all tasks.
+All approval-gated tools accept optional `approval_id` for browser retries; omit it on the first call.
 
-Read tools and `dev_task_cancel` accept up to 16 KiB of raw JSON arguments. Write arguments default to 16 KiB; `note_create`, `note_append` and `note_replace` allow 528 KiB, and `dev_task_start` allows 48 KiB. JSON escaping counts toward these limits. Approval summaries are bounded by `max(64 KiB, argument limit + 16 KiB)`: 64 KiB for default tools and dev starts, 544 KiB for note content tools. Redacted display arguments must fit the tool's argument limit. Note previews have a separate approximately 8 KiB display bound.
+Read tools accept up to 16 KiB of raw JSON arguments. Write arguments default to 16 KiB; `note_create`, `note_append` and `note_replace` allow 528 KiB. JSON escaping counts toward these limits. Approval summaries are bounded by `max(64 KiB, argument limit + 16 KiB)`: 64 KiB for default tools, 544 KiB for note content tools. Redacted display arguments must fit the tool's argument limit. Note previews have a separate approximately 8 KiB display bound.
 
 The shared wrapper omits provider output above 4 MiB entirely, then redacts text before truncating it to `server.max_output_bytes` (default 64 KiB). Errors follow the same path. Smaller provider-specific collection limits still apply. Deadlines are cooperative; write planning and applying each receive a separate `server.tool_timeout` (default 30s), excluding human waiting time.

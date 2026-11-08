@@ -117,7 +117,7 @@ func TestAuthentication(t *testing.T) {
 			if tt.status == 401 && strings.Contains(challenge, "scope=") {
 				t.Fatalf("401 challenge narrows scopes: %q", challenge)
 			}
-			if tt.status == 403 && !strings.Contains(challenge, `error="insufficient_scope", scope="ops:read ops:write dev:run"`) {
+			if tt.status == 403 && !strings.Contains(challenge, `error="insufficient_scope", scope="ops:read ops:write"`) {
 				t.Fatalf("403 challenge=%q", challenge)
 			}
 		})
@@ -154,7 +154,7 @@ func TestMetadata(t *testing.T) {
 			if len(servers) > 0 && data["authorization_servers"].([]any)[0] != servers[0] {
 				t.Fatal("wrong authorization server")
 			}
-			if got := data["scopes_supported"].([]any); len(got) != len(config.Scopes) || got[0] != config.ScopeRead || got[1] != config.ScopeWrite || got[2] != config.ScopeDev {
+			if got := data["scopes_supported"].([]any); len(got) != len(config.Scopes) || got[0] != config.ScopeRead || got[1] != config.ScopeWrite {
 				t.Fatal("wrong scopes")
 			}
 			if got := data["bearer_methods_supported"].([]any); len(got) != 1 || got[0] != "header" {

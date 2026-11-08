@@ -149,7 +149,7 @@ func (s *Server) rotate(r *http.Request, c *client) response {
 	}
 	scopes := intersection(refresh.Scopes, current)
 	if r.PostForm.Has("scope") {
-		requested := strings.Fields(r.PostForm.Get("scope"))
+		requested := withoutRemovedScope(strings.Fields(r.PostForm.Get("scope")))
 		if !subset(requested, scopes) {
 			return errorResponse(400, "invalid_scope")
 		}

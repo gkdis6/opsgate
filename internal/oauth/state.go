@@ -114,16 +114,19 @@ func (s *Server) load() error {
 		if t == nil {
 			return fmt.Errorf("invalid OAuth token state")
 		}
+		t.Scopes = withoutRemovedScope(t.Scopes)
 	}
 	for _, t := range d.Refresh {
 		if t == nil {
 			return fmt.Errorf("invalid OAuth token state")
 		}
+		t.Scopes = withoutRemovedScope(t.Scopes)
 	}
 	for _, c := range d.Codes {
 		if c == nil {
 			return fmt.Errorf("invalid OAuth code state")
 		}
+		c.Scopes = withoutRemovedScope(c.Scopes)
 	}
 	for subject, u := range d.Passkeys {
 		if u == nil || len(u.Handle) == 0 || subject == "" {

@@ -44,7 +44,7 @@ text { fill: #202936; }
 <text x="24" y="30" class="title">쓰기 호출: 미리보기 → 결정 → 실행</text>
 <rect x="80" y="62" width="520" height="74" rx="9" class="box"/>
 <text x="96" y="88" class="head">스코프 · 도구 정책 · 인자 검사</text>
-<text x="96" y="113" class="small">ops:write (dev_task_start: dev:run) · Plan에서 provider 검사</text>
+<text x="96" y="113" class="small">ops:write · Plan에서 provider 검사</text>
 <path d="M340 136 V166" class="line "/>
 <rect x="80" y="166" width="520" height="90" rx="9" class="accent"/>
 <text x="96" y="193" class="head">Plan · 부작용 없음</text>

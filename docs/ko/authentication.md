@@ -25,7 +25,7 @@ static: 클라이언트 -> 설정한 Bearer 토큰 -> opsgate SHA-256 비교
 stdio: 클라이언트 -> 로컬 opsgate 프로세스 -> 설정된 stdio ID/스코프
 ```
 
-모든 HTTP 모드는 `/mcp`에서 `ops:read`를 요구합니다. 추가 스코프로 도구별 사용 권한을 제어하며, 보통 쓰기에는 `ops:write`, 코딩 도구에는 `dev:run`이 필요합니다. 스코프가 있어도 provider가 활성화되거나 사람의 승인을 건너뛸 수 있는 것은 아닙니다. 사용자/토큰에 `tools` 글로브를 설정하면 서버 정책에 더해 호출 범위를 제한할 수 있습니다.
+모든 HTTP 모드는 `/mcp`에서 `ops:read`를 요구합니다. 추가 스코프로 도구별 사용 권한을 제어하며, 보통 쓰기에는 `ops:write`가 필요합니다. 스코프가 있어도 provider가 활성화되거나 사람의 승인을 건너뛸 수 있는 것은 아닙니다. 사용자/토큰에 `tools` 글로브를 설정하면 서버 정책에 더해 호출 범위를 제한할 수 있습니다.
 
 `approval.web: true`인 HTTP에서는 기본적으로 웹 승인만 허용합니다(`approval.require_web: true`). builtin 인증을 쓰는 모드는 웹 승인을 자동으로 켭니다. `approval.require_web: false`를 명시하면 클라이언트 내 확인을 허용하며, 침해된 클라이언트가 자기 쓰기를 스스로 승인할 수 있습니다. external/static 인증에는 웹 채널이 없어 `require_web`의 기본값이 계속 false입니다. HTTP 시작 시 클라이언트 내 확인이 허용되어 있으면 경고를 남깁니다.
 
@@ -199,7 +199,7 @@ opsgate -config opsgate.yaml -transport stdio
 
 1. 전환할 인증 provider나 토큰을 준비하고, 가능하면 HTTP origin을 유지하세요. 내장 상태를 파일로 저장하고 있다면 상태 파일을 백업하세요.
 2. HTTP는 `auth.mode`를 바꾸고, stdio는 `-transport stdio`를 사용하세요. 내장 로그인에서는 `auth.builtin.upstream.provider`를 정확히 하나 지정하고 필수 항목을 설정하세요. 설정은 시작할 때 읽으므로 변경 사항을 적용하려면 재시작하세요.
-3. `users`, `admins`, runner 관리자 목록의 subject와 권한을 갱신하세요. 예시는 `passkey:alice`, `github:alice`, `email:alice@example.com`, 사용자의 정확한 `oidc:<sub>`, 외부 설정의 `claim:alice`(호출자는 `alice`), `static:alice`입니다.
+3. `users`, `admins`의 subject와 권한을 갱신하세요. 예시는 `passkey:alice`, `github:alice`, `email:alice@example.com`, 사용자의 정확한 `oidc:<sub>`, 외부 설정의 `claim:alice`(호출자는 `alice`), `static:alice`입니다.
 4. 내장 HTTP에서 다른 방식으로 바꿀 때는 `approval.web: false`로 설정하고 `approval.require_web`을 지우거나 `false`로 바꾸세요. 승인이 필요한 쓰기에는 클라이언트 내 확인을 지원하는 클라이언트를 선택하세요. 이 경로에서는 침해된 클라이언트가 자기 쓰기를 스스로 승인할 수 있습니다. stdio에는 웹 채널이 없으며 `require_web`을 생략하면 클라이언트 내 확인을 허용합니다. 내장 HTTP로 돌아올 때는 명시적 `require_web: false`를 지워 웹 전용 기본값을 복원하세요.
 5. 서버를 재시작하고 새 방식으로 클라이언트를 다시 연결하거나 인가하세요. 쓰기를 요청하기 전에 읽기 작업으로 ID, 스코프, provider/도구 정책을 확인하세요.
 

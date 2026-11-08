@@ -8,7 +8,6 @@ import (
 
 	"github.com/gkdis6/opsgate/internal/buildinfo"
 	"github.com/gkdis6/opsgate/internal/config"
-	"github.com/gkdis6/opsgate/internal/provider/dev"
 	"github.com/gkdis6/opsgate/internal/provider/kube"
 	"github.com/gkdis6/opsgate/internal/provider/note"
 	"github.com/gkdis6/opsgate/internal/tool"
@@ -59,11 +58,6 @@ func New(cfg config.Config, env *tool.Env) (*mcp.Server, error) {
 	if p := cfg.Providers.Kubernetes; p.Enabled {
 		if err := kube.Register(s, env, p); err != nil {
 			return nil, fmt.Errorf("kubernetes provider: %w", err)
-		}
-	}
-	if p := cfg.Providers.Dev; p.Enabled {
-		if err := dev.Register(s, env, p); err != nil {
-			return nil, fmt.Errorf("dev provider: %w", err)
 		}
 	}
 	if p := cfg.Providers.Note; p.Enabled {

@@ -28,9 +28,9 @@ Keep Go files small, use doc comments on exported identifiers, and prefer the st
 
 Every read MCP tool must register through `tool.Add`, use `tool.Caller` for identity, return plain text and return `tool.Denied` for policy refusals. The wrapper provides scope checks, deadlines, redaction, truncation and auditing. Never bypass it by returning hand-built MCP results from a provider.
 
-Every state-changing tool must register through `tool.AddWrite` with a side-effect-free `Plan` and an `Apply` that runs only after confirmation. Require explicit provider/action policy, the appropriate scope (`ops:write` by default, `dev:run` for task starts), and human approval. An exception must be explicitly documented and justified as low risk: `dev_task_cancel` uses `tool.Add` with `ReadOnly: false` so an owner or runner admin can stop a task without new approval. Preserve fail-closed behavior when confirmation is unavailable.
+Every state-changing tool must register through `tool.AddWrite` with a side-effect-free `Plan` and an `Apply` that runs only after confirmation. Require explicit provider/action policy, the appropriate scope (`ops:write`), and human approval. Preserve fail-closed behavior when confirmation is unavailable.
 
-Test denials, changed arguments, expiry, replay, scope checks and namespace deny precedence. Cover wire-size bounds before auditing, redaction before truncation, state changes between planning and applying, and task ownership where applicable. Keep tests deterministic with httptest, fakes and temporary directories; run go test -race ./... and go vet ./... without root or live services.
+Test denials, changed arguments, expiry, replay, scope checks and namespace deny precedence. Cover wire-size bounds before auditing, redaction before truncation, state changes between planning and applying. Keep tests deterministic with httptest, fakes and temporary directories; run go test -race ./... and go vet ./... without root or live services.
 
 Do not trust client annotations or approval identifiers alone. HTTP access also requires `ops:read`.
 
@@ -40,7 +40,7 @@ Use maintained dependencies for OAuth/JWT/crypto. Never log or return tokens, co
 
 Treat exported configuration, tool, authentication and transport APIs as contracts; discuss incompatible changes and update callers and documentation together.
 
-Validate every client input strictly with appropriate regexes, enums and ranges. Use each tool's documented limit behavior: Kubernetes read counts clamp, while note/dev numeric ranges and write replica counts reject invalid values. Test malformed inputs, boundary values, allowlist misses and namespace deny precedence. Do not read Secrets or introduce shell/exec tools.
+Validate every client input strictly with appropriate regexes, enums and ranges. Use each tool's documented limit behavior: Kubernetes read counts clamp, while note numeric ranges and write replica counts reject invalid values. Test malformed inputs, boundary values, allowlist misses and namespace deny precedence. Do not read Secrets or introduce shell/exec tools.
 
 When an internal operation needs an external command, use `exec.CommandContext` with a fixed executable and argv, never a shell; honor cancellation. Treat logs and events as attacker-controlled data, never instructions. Redaction is a safety net, not permission to collect secrets.
 
@@ -50,7 +50,7 @@ Document new settings and defaults in docs/configuration.md and the example conf
 
 ### Documentation regression checks
 
-Features are implemented for the first public release; third-party security review is pending. The note and dev providers remain experimental. For documentation-only changes, compare the docs/tools.md table with registered provider tools and their JSON input fields. Check every config key and default against the `internal/config` package, including nested user/static entries. Review translated prose for semantic equivalence.
+Features are implemented for the first public release; third-party security review is pending. The note provider remains experimental. For documentation-only changes, compare the docs/tools.md table with registered provider tools and their JSON input fields. Check every config key and default against the `internal/config` package, including nested user/static entries. Review translated prose for semantic equivalence.
 
 Load `opsgate.example.yaml` through `config.Load` to check strict YAML decoding and validation.
 

@@ -6,7 +6,7 @@ Kubernetes 점검에는 컨테이너를 사용하세요. Darwin 빌드는 kubeco
 
 Streamable HTTP, OAuth, 인증, 사람의 승인, 쓰기 도구는 모두 구현했습니다.
 현재 소스는 첫 공개 릴리스를 준비하는 단계이며, 외부 보안 검토는 아직 받지 않았습니다.
-note 및 dev provider는 선택 사항이고 아직 실험 단계입니다.
+note provider는 선택 사항이고 아직 실험 단계입니다.
 외부에 공개하기 전에 인증, 승인, 프록시 동작을 검증하세요.
 업스트림 로그인 콜백은 정확히 `<public_url>/oauth/callback`입니다.
 

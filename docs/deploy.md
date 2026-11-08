@@ -6,7 +6,7 @@ Use the container for Kubernetes inspection. Darwin builds are provided for loca
 
 Streamable HTTP, OAuth, authentication, human approval and write tools are
 implemented. This checkout is preparing for its first public release; third-party
-security review is pending. The optional note and dev providers are
+security review is pending. The optional note provider is
 experimental. Verify authentication, approval and proxy behavior before exposure.
 The upstream login callback is exactly `<public_url>/oauth/callback`.
 

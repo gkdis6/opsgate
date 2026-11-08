@@ -27,7 +27,7 @@ var page = ui.NewTemplate(`{{define "title"}}{{if .Error}}Authorization failed{{
 <dt>Redirect URI</dt><dd>{{.URI}}</dd>
 <dt>Signed in as</dt><dd>{{.Subject}}</dd></dl>
 <h2>Access to grant</h2><ul class="scopes">{{range .Scopes}}<li><span class="chip">{{.}}</span>
-{{if eq . "ops:read"}}Read server, Kubernetes and notes{{else if eq . "ops:write"}}Change them after approval{{else if eq . "dev:run"}}Start coding agents after approval{{end}}</li>{{end}}</ul>
+{{if eq . "ops:read"}}Read server, Kubernetes and notes{{else if eq . "ops:write"}}Change them after approval{{end}}</li>{{end}}</ul>
 <form method="post" action="/oauth/consent"><input type="hidden" name="csrf_token" value="{{.CSRF}}"><div class="actions">
 <button class="secondary" name="decision" value="deny">Deny</button><button class="primary" name="decision" value="approve">Approve</button>
 </div></form>{{end}}{{end}}`)
@@ -92,8 +92,10 @@ func (s *Server) authorizeResponse(v url.Values) response {
 	if v.Get("code_challenge_method") != "S256" || !pkceSyntax(v.Get("code_challenge")) {
 		return fail("invalid_request")
 	}
+	// Retain the original request so a removed-only scope list cannot fall
+	// back to all user scopes when consent intersects it with current grants.
 	scopes := strings.Fields(v.Get("scope"))
-	if !supportedScopes(scopes) {
+	if !supportedScopes(withoutRemovedScope(scopes)) {
 		return fail("invalid_scope")
 	}
 	if target := v.Get("resource"); v.Has("resource") && target != s.resource {

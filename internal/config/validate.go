@@ -106,6 +106,9 @@ func isLoopback(host string) bool {
 
 func checkScopes(where string, scopes []string) error {
 	for _, s := range scopes {
+		if s == "dev:run" {
+			return fmt.Errorf("%s: scope dev:run was removed in v0.4.0; delete it from this scope list", where)
+		}
 		if !KnownScope(s) {
 			return fmt.Errorf("%s: unknown scope %q", where, s)
 		}

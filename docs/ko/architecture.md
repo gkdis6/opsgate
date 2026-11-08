@@ -27,22 +27,16 @@ AI 클라이언트 (claude.ai, ChatGPT, Claude Code 등 MCP 클라이언트)
                   |
              공통 도구 래퍼
                   |
-                  +----------+------------+
-                  |          |            |
-                 kube       note         dev
-                                          |
-                                      Unix 소켓
-                                          |
-                                      dev-runner
-                                          |
-                                 Git worktree + 에이전트
+                  +----------+
+                  |          |
+                 kube       note
 ```
 
 HTTP 리스너는 일반 HTTP로 통신하므로, 외부에 HTTPS로 제공하려면 리버스 프록시를 사용하세요. `http.public_url`은 루프백 HTTP를 제외하면 HTTPS origin이어야 합니다. Host 검사에서는 설정된 공개 authority를 허용하며, 리스너와 로컬 연결 주소가 모두 루프백이면 루프백 호스트도 허용합니다. CORS는 검색 및 일부 MCP/OAuth 엔드포인트에만 적용하고, 브라우저에서 승인 여부 등을 결정하는 페이지에는 적용하지 않습니다.
 
 `/mcp`에서는 `Mcp-Protocol-Version` 값을 문자열로 비교해 `2026-07-28` 이상이면 stateless 핸들러를 선택합니다. 그보다 이전 값이거나 헤더가 없으면 세션 핸들러를 사용하며, 세션 제한 시간은 30분입니다. 이렇게 하면 ChatGPT를 비롯한 최신 세션리스 클라이언트를 지원하면서도 이전 클라이언트와 클라이언트 내 확인(elicitation)에 필요한 세션을 유지할 수 있습니다. 이 라우팅 결정만으로 접근 권한을 주지는 않습니다.
 
-프로세스마다 전송 방식을 하나만 선택하며, 기본값은 stdio입니다. HTTP를 사용하려면 인증 모드를 명시해야 하고, `dev:run` 도구를 쓰는 호출자에게도 `ops:read`가 있어야 합니다.
+프로세스마다 전송 방식을 하나만 선택하며, 기본값은 stdio입니다. HTTP를 사용하려면 인증 모드를 명시해야 하고, 모든 호출자에게 `ops:read`가 있어야 합니다.
 
 ## 자동 알림 조사
 
@@ -52,7 +46,7 @@ HTTP 리스너는 일반 HTTP로 통신하므로, 외부에 HTTPS로 제공하�
 
 | 패키지 | 역할 |
 | --- | --- |
-| `cmd/opsgate` | 설정을 읽고 프로세스를 구성하며, `init`, `config show`, `-gen-token`, `passkey invite`, `watch`, `dev-runner`를 지원합니다. |
+| `cmd/opsgate` | 설정을 읽고 프로세스를 구성하며, `init`, `config show`, `-gen-token`, `passkey invite`, `watch`를 지원합니다. |
 | `cmd/opsgate-analyzer` | analyzer 설정을 읽고 `opsgate-analyzer` 수신기와 조사 worker를 시작하며, `-check`로 설정과 자격 증명을 확인합니다. |
 | `internal/analyzer` | 서명 배치 수신, 큐, 모델 어댑터, 제한된 읽기 전용 MCP 조사, 보고서 전송을 담당합니다. |
 | `internal/alert` | watch 알림을 묶고 중복을 줄이며, webhook, Discord, SMTP로 전송합니다. |
@@ -69,7 +63,6 @@ HTTP 리스너는 일반 HTTP로 통신하므로, 외부에 HTTPS로 제공하�
 | `internal/ui` | 동의, 승인, 패스키, 관리 페이지의 공통 레이아웃을 제공합니다. |
 | `internal/provider/kube` | Kubernetes 오브젝트, 이벤트, 로그를 제공하고, 네임스페이스 정책과 허용 목록에 따라 rollout restart, scale, 파드 삭제, 이미지 복원을 실행하고 읽기 전용 복구 선택지를 제공합니다. |
 | `internal/provider/note` | Markdown 볼트를 검색하고 읽으며, 선택 사항인 create/append/replace/trash 도구에서는 내용/diff 미리보기와 스냅샷 검사를 사용합니다. |
-| `internal/provider/dev`, `internal/devrunner` | 별도 runner에 요청을 보내면, runner가 설정된 프로젝트/에이전트를 선택해 Git worktree에서 작업을 실행합니다. |
 
 ## 도구 실행
 
@@ -86,7 +79,7 @@ HTTP 리스너는 일반 HTTP로 통신하므로, 외부에 HTTPS로 제공하�
   -> 출력 처리 -> 감사 -> MCP 결과
 ```
 
-대부분의 도구에는 `ops:read`가 필요하고, 승인이 필요한 쓰기에는 보통 `ops:write`가 필요합니다. Dev 도구에는 `dev:run`이 필요하며, `dev_task_start`는 이 스코프로 승인 래퍼를 사용합니다. `dev_task_cancel`은 상태를 바꾸는 일반 도구이지만, 작업을 중지할 때는 의도적으로 사람의 승인을 요구하지 않습니다.
+대부분의 도구에는 `ops:read`가 필요하고, 승인이 필요한 쓰기에는 보통 `ops:write`가 필요합니다.
 
 기본 인자 크기 제한은 16 KiB이며, 내용을 전달하는 쓰기 도구에는 개별적으로 더 큰 제한을 적용할 수 있습니다. 기본 제한 시간은 30초이고 context 취소를 사용합니다. 쓰기는 계획(Plan)과 실행(Apply)에 각각 제한 시간을 적용하며, 그 사이에 승인을 받습니다. 도구별 제한은 [도구](tools.md)를 참고하세요.
 
@@ -103,8 +96,6 @@ HTTP 리스너는 일반 HTTP로 통신하므로, 외부에 HTTPS로 제공하�
 analyzer는 `k8s_clusters`, `k8s_overview`, `k8s_list`, `k8s_get`, `k8s_events`, `k8s_logs`, `k8s_service_check`, `k8s_remediation_options`, `note_search`, `note_read`, `note_recent`, `note_list`, `note_links`, `note_tags`만 호출하며, `readOnlyHint`도 요구합니다. 호출 직전에 정책을 다시 검사하고, 승인 시간 창으로 이 목록을 넓힐 수 없습니다. 전용 reader의 `ops:read` 토큰, 도구 정책, 네임스페이스 정책과 읽기 전용 RBAC가 추가로 범위를 제한합니다.
 
 analyzer는 공유 HMAC 키, MCP Bearer 토큰, Discord webhook URL, API 백엔드의 모델 API 키 또는 CLI 백엔드 실행 계정의 로그인 자격 증명에 접근합니다. 선택 사항인 보고서 전달에는 별도 HMAC 키를 사용합니다. 참조 파드의 ServiceAccount는 `opsgate-readonly`에 연결됩니다. `/alerts`는 공개 ingress 없이 Service로 제공하므로 watch만 접근하도록 네트워크를 제한하세요. reader에는 루프백으로, 선택한 모델 제공자와 Discord 및 설정된 전달 수신기에는 외부 통신이 필요합니다. 참조 매니페스트는 NetworkPolicy를 정의하지 않습니다. 알림과 도구 출력은 모델에 보내기 전에 마스킹하고 보고서는 Discord 전송 전에 마스킹하지만, 민감한 정보를 모두 찾아낸다는 보장은 없습니다. 선택한 모델 제공자와 Discord에 전달해도 되는 데이터만 허용하세요. [자동 알림 조사](analyzer.md)를 참고하세요.
-
-`dev-runner`는 자체 설정, 프로젝트, 에이전트 명령을 사용하는 별도 계정으로 실행하세요. 서버는 Unix 소켓으로 runner와 통신합니다. Linux에서 runner는 `SO_PEERCRED`로 연결 상대의 자격 증명을 검사하고, 자신과 UID가 같거나 설정된 소켓 그룹에 속한 호출자를 허용합니다. 에이전트가 실행할 수 있는 작업의 범위는 runner 계정과 설정된 에이전트 샌드박스가 결정하며, 요청한 사람의 OS 권한을 따르지는 않습니다. [개발 도구](dev.md)와 [보안 정책](security.md)을 참고하세요.
 
 ## 최소 로컬 설정
 

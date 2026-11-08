@@ -106,8 +106,7 @@ with one JSON object per line.
 
 ## Where it is heading
 
-Every step of the current [roadmap](docs/roadmap.md) is implemented and awaits
-the next release. Remaining ideas, such as a PostgreSQL provider and
+Every step of the current [roadmap](docs/roadmap.md) shipped in v0.4.0. Remaining ideas, such as a PostgreSQL provider and
 configuration reload, are listed there without commitments.
 
 

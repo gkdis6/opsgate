@@ -27,37 +27,29 @@ The work below follows these principles:
 
 ## Next
 
-All six steps below are implemented and unreleased, awaiting the next release.
-In order. Each step still goes through security review.
-
-1. **Remove the Dev provider** (`dev_*` tools, `opsgate dev-runner`, the
-   `dev:run` scope). Coding agents are outside the focus above. Done,
-   unreleased; see the [changelog](../CHANGELOG.md).
-2. **Common action gate.** An action catalog shared by alerts and MCP tools,
-   execution on approval, and an approval inbox with Web Push, reachable from
-   messenger approval links, with signed watch notices and phone push for alerts.
-   Done, unreleased; see the [changelog](../CHANGELOG.md).
-3. **More choices per failure.** Current-state rule choices for image failures,
-   failing rollouts, repeated crashes/OOM and stuck or unreachable controller-owned
-   pods; live choices pages from watch and rule/AI buttons in analyzer reports.
-   Done, unreleased; see the [changelog](../CHANGELOG.md). `Pending` scheduling
-   problems retain inspection hints; they do not imply a safe catalog write.
-4. **Alert groups by namespace,** each with its own outputs, level
-   (warnings only or all) and batching. Done, unreleased; see the
-   [changelog](../CHANGELOG.md).
-5. **Optional host provider** for systemd units and Docker or Compose
-   containers: detection and restart, off by default, with a narrow privilege
-   model instead of direct root or Docker socket access. Done, unreleased; see
-   [host provider](host.md).
-6. **Undo buttons** for reversible actions, such as returning to the previous
-   replica count or image. Done, unreleased; see the [changelog](../CHANGELOG.md).
+Nothing is scheduled yet. The six steps that followed from the direction above
+shipped in v0.4.0; see the [changelog](../CHANGELOG.md).
 
 ## Done
 
-The features below are implemented through v0.3.0. They have not yet been
+The features below are implemented through v0.4.0. They have not yet been
 security-reviewed by third parties.
 
-
+- Approving runs the action: the server rechecks the plan and runs it once, as
+  the original caller. Chat calls wait up to `approval.wait`; `approval_status`
+  reads the result later.
+- Action catalog shared by alerts, the analyzer and MCP tools (restart, image
+  restore, scale, deleting a controller-owned pod), with rule or AI provenance
+  on each button and the read-only `action_link`.
+- Installable `/approvals` inbox with optional Web Push; a notification opens
+  the newest waiting approval. Signed watch notices put alerts in the inbox.
+- Current-state choices per failure (image failures, failing rollouts, repeated
+  crashes or OOM, stuck or unreachable pods) on signed-in choices pages.
+- Namespace alert groups with their own outputs, level and batching.
+- Optional host provider for systemd units and Docker containers, off by
+  default, using polkit and a socket proxy instead of root or the Docker socket.
+- Undo links for scale and image restore.
+- The experimental Dev provider was removed.
 - Passkey sign-in for builtin auth with upstream provider `passkey` and one-time registration invites via `opsgate passkey invite`.
 - Stateless serving of the sessionless MCP protocol `2026-07-28`, required by ChatGPT.
 - Stdio Kubernetes inspection, allowlists, namespace denies, scope checks, bounded output, redaction and JSONL audit persistence.

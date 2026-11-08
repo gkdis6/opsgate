@@ -1,6 +1,7 @@
 package approval
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -21,13 +22,13 @@ func TestCapacityAndExpiry(t *testing.T) {
 	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
 	m.now = func() time.Time { return now }
 	var first string
-	for range 100 {
-		id := pendingID(t, m, approvalRequest())
+	for i := range 100 {
+		id := pendingID(t, m, distinctRequest(i))
 		if first == "" {
 			first = id
 		}
 	}
-	if _, err := m.Confirm(context.Background(), nil, approvalRequest()); !errors.Is(err, tool.ErrDenied) {
+	if _, err := m.Confirm(context.Background(), nil, distinctRequest(100)); !errors.Is(err, tool.ErrDenied) {
 		t.Fatalf("over capacity = %v", err)
 	}
 	if len(m.approvals) != 100 {
@@ -122,8 +123,8 @@ func TestWebDisabled(t *testing.T) {
 
 func TestCSRFIsPerApproval(t *testing.T) {
 	m, mux := newWebManager(t)
-	id1 := pendingID(t, m, approvalRequest())
-	id2 := pendingID(t, m, approvalRequest())
+	id1 := pendingID(t, m, distinctRequest(1))
+	id2 := pendingID(t, m, distinctRequest(2))
 	csrf := readCSRF(t, mux, id1)
 	w := webRequest(mux, "POST", id2, "github:operator", map[string][]string{"csrf": {csrf}, "decision": {"approve"}}, nil)
 	if w.Code != http.StatusForbidden {
@@ -153,5 +154,32 @@ func TestRequireWebYAML(t *testing.T) {
 	cfg, err := config.Load(path)
 	if err != nil || !cfg.Approval.RequireWeb || !cfg.Approval.Web {
 		t.Fatalf("config = %+v; err %v", cfg.Approval, err)
+	}
+}
+
+// distinctRequest differs from approvalRequest only in its arguments, so it
+// gets its own approval instead of joining a waiting one.
+func distinctRequest(i int) tool.ConfirmRequest {
+	r := approvalRequest()
+	r.Args = map[string]any{"unit": fmt.Sprintf("u%d.service", i)}
+	return hashedRequest(r)
+}
+
+func TestRepeatedCallJoinsWaitingApproval(t *testing.T) {
+	m, mux := newWebManager(t)
+	first := pendingID(t, m, approvalRequest())
+	if again := pendingID(t, m, approvalRequest()); again != first || len(m.approvals) != 1 {
+		t.Fatalf("repeat created a second approval: %s %s (%d)", first, again, len(m.approvals))
+	}
+	if other := pendingID(t, m, distinctRequest(1)); other == first {
+		t.Fatal("different arguments joined the same approval")
+	}
+	csrf := readCSRF(t, mux, first)
+	if w := webRequest(mux, "POST", first, "github:operator", map[string][]string{"csrf": {csrf}, "decision": {"approve"}}, nil); w.Code != 200 || !strings.Contains(w.Body.String(), "Applied / 적용됨") {
+		t.Fatalf("approve: %d %s", w.Code, w.Body)
+	}
+	// A finished approval is not reused: a deliberate repeat asks again.
+	if again := pendingID(t, m, approvalRequest()); again == first {
+		t.Fatal("finished approval reused")
 	}
 }

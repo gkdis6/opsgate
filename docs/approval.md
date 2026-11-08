@@ -82,6 +82,8 @@ Approving runs the original call exactly once, including **Approve + allow for**
 
 If the wait ends first, the normal text tool result asks the assistant to show the link and includes the expiry and `approval_id`. After approval, no further call is needed to execute the write. To read its outcome, call the read-only `approval_status` tool with `{"approval_id":"<id>"}` (`ops:read` required). Only the requester can read it; other users receive the same unknown-or-expired response as an unknown ID. It returns `tool`, `target`, `status` (`pending`, `running`, `applied`, `not_applied`, `rejected`) and `result` when available.
 
+If the assistant repeats the same call (same requester, arguments and plan) while its approval is still undecided or running, the call joins that approval and waits on it instead of creating a second one. After approval the page shows **Applied** or **Not applied** with the result.
+
 A compatibility retry of the original tool with the same arguments plus `approval_id` returns the stored outcome and never executes again:
 
 ```json
@@ -199,8 +201,9 @@ To receive Web Push notifications:
 
 A new MCP web approval queues a notification to the requester's devices;
 link-created requests do not notify because the person is already in the
-browser. Clicking the notification opens or focuses `/approvals`, including
-sign-in if needed. Notifications never approve anything. Without inbox notices,
+browser. Clicking the notification opens `/approvals/next`, which after sign-in
+redirects to the newest undecided approval or alert notice, or to the inbox when
+nothing is waiting. Notifications never approve anything. Without inbox notices,
 `language: ko` shows
 “승인 요청이 있습니다”; the default `en` shows “An approval is waiting”.
 
@@ -332,7 +335,7 @@ trailing push. The existing best-effort push queue and device delivery limits
 apply. With inbox notices enabled, the service worker uses generic wording for
 all pushes: **An alert needs a decision** (`en`) or **알림에 대한 조치가 필요합니다**
 (`ko`), because the payload-less channel carries no event type. Clicking opens
-`/approvals`. Without inbox notices, the existing approval wording remains.
+`/approvals/next`. Without inbox notices, the existing approval wording remains.
 
 Notices, replay protection and the coalescing window are memory-only and lost
 on restart. Watch delivery retries are bounded; notifications can be missed.

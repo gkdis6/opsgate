@@ -63,7 +63,7 @@ func TestApprovalPagesEscaping(t *testing.T) {
 					}
 				}
 			} else {
-				status := map[string]string{"approved": "Approved", "rejected": "Rejected", "window": "Allowed for 30m"}[page]
+				status := map[string]string{"approved": "Applied / 적용됨", "rejected": "Rejected", "window": "Allowed for 30m"}[page]
 				if !strings.Contains(body, `class="status">`+status) || !strings.Contains(body, "You can return to your chat; the assistant receives the result when its call is still waiting or when it checks the approval.") || strings.Contains(body, "<form") || w.Header().Get("Location") != "" {
 					t.Fatalf("bad result page: %s", body)
 				}

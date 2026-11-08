@@ -183,3 +183,34 @@ func TestInboxUsesBrowserAuthentication(t *testing.T) {
 		t.Fatal("inbox bypassed BrowserAuth.RequireUser")
 	}
 }
+
+func TestNextOpensNewestWaitingApproval(t *testing.T) {
+	m, mux := newWebManager(t)
+	base := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	now := base
+	m.now = func() time.Time { return now }
+	next := func(user string) string {
+		w := inboxRequest(mux, "GET", "/approvals/next", user, "", "", nil)
+		if w.Code != http.StatusSeeOther {
+			t.Fatalf("next: %d %s", w.Code, w.Body)
+		}
+		return w.Header().Get("Location")
+	}
+	if got := next("github:operator"); got != "/approvals" {
+		t.Fatalf("empty inbox: %s", got)
+	}
+	older := pendingID(t, m, distinctRequest(1))
+	now = base.Add(time.Second)
+	newer := pendingID(t, m, distinctRequest(2))
+	if got := next("github:operator"); got != "/approve/"+newer {
+		t.Fatalf("want newest %s, got %s", newer, got)
+	}
+	if got := next("github:other"); got != "/approvals" {
+		t.Fatalf("another user's approval leaked: %s", got)
+	}
+	csrf := readCSRF(t, mux, newer)
+	webRequest(mux, "POST", newer, "github:operator", map[string][]string{"csrf": {csrf}, "decision": {"reject"}}, nil)
+	if got := next("github:operator"); got != "/approve/"+older {
+		t.Fatalf("decided approval still chosen: %s", got)
+	}
+}

@@ -40,6 +40,7 @@ func (m *Manager) inboxRoutes(mux *http.ServeMux, protect *http.CrossOriginProte
 	mux.Handle("POST /approvals/notify", securityHeaders(http.HandlerFunc(m.notify)))
 	mux.Handle("POST /approvals/dismiss", wrap(authenticated(m.dismissNotice)))
 	mux.Handle("GET /approvals", wrap(authenticated(m.inbox)))
+	mux.Handle("GET /approvals/next", wrap(authenticated(m.next)))
 	mux.Handle("GET /approvals/inbox.js", wrap(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		_, _ = io.WriteString(w, inboxScript)
@@ -212,3 +213,27 @@ var inboxPage = ui.NewTemplate(`{{define "title"}}Approval inbox{{end}}
 {{if .Result}}<pre>{{.Result}}</pre>{{end}}
 {{if .Undo}}<p><a href="{{.Undo}}">Undo</a></p>{{end}}</article>{{else}}<p>No live approvals.</p>{{end}}
 {{end}}`)
+
+// next sends a person who tapped a notification straight to what is waiting:
+// their newest undecided approval or alert notice, else the inbox. The push
+// itself carries no content, so the server decides after sign-in.
+func (m *Manager) next(w http.ResponseWriter, r *http.Request, user string) {
+	target, newest := "/approvals", time.Time{}
+	m.mu.Lock()
+	m.sweepLocked()
+	for _, p := range m.approvals {
+		if p.user == user && p.decision == "" && p.created.After(newest) {
+			target, newest = "/approve/"+p.id, p.created
+		}
+	}
+	if m.notices != nil {
+		m.notices.sweep(m.now())
+		for _, n := range m.notices.users[user] {
+			if n.Updated.After(newest) {
+				target, newest = n.URL, n.Updated
+			}
+		}
+	}
+	m.mu.Unlock()
+	http.Redirect(w, r, target, http.StatusSeeOther)
+}

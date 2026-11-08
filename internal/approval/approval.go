@@ -182,6 +182,15 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	}
 	m.mu.Lock()
 	m.sweepLocked()
+	// An assistant that repeats a call while the first is still waiting must
+	// not create a second approval: wait on the existing one instead.
+	if p := m.sameRequestLocked(r, hash); p != nil {
+		m.mu.Unlock()
+		if r.Pending != nil {
+			r.Pending()
+		}
+		return "web", m.waitOutcome(ctx, p)
+	}
 	// Bound all live records, including running and retained outcomes.
 	if len(m.approvals) >= 100 {
 		m.mu.Unlock()
@@ -214,19 +223,42 @@ func (m *Manager) Confirm(ctx context.Context, req *mcp.CallToolRequest, r tool.
 	if m.push != nil {
 		m.push.enqueue(p.user, p.expires)
 	}
+	return "web", m.waitOutcome(ctx, p)
+}
+
+// waitOutcome waits up to approval.wait for a decision and run, then reports
+// the outcome or the pending message.
+func (m *Manager) waitOutcome(ctx context.Context, p *pending) error {
 	if m.wait > 0 {
 		timer := time.NewTimer(m.wait)
 		defer timer.Stop()
 		select {
 		case <-p.done:
 		case <-ctx.Done():
-			return "web", ctx.Err()
+			return ctx.Err()
 		case <-timer.C:
 		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return "web", m.outcomeLocked(p)
+	return m.outcomeLocked(p)
+}
+
+// sameRequestLocked finds a live, undecided or running approval for exactly
+// this call: same requester, transport, tool, arguments and plan. Finished
+// ones are not reused, so a deliberate repeat gets its own approval.
+func (m *Manager) sameRequestLocked(r tool.ConfirmRequest, hash [sha256.Size]byte) *pending {
+	var found *pending
+	for _, p := range m.approvals {
+		if !p.mcp || p.finished || p.decision == "rejected" || p.user != r.Caller.User || p.transport != r.Caller.Transport ||
+			p.tool != r.Tool || p.hash != hash || p.summary != r.Summary || p.target != r.Target || p.noWindow != r.NoWindow {
+			continue
+		}
+		if found == nil || p.created.After(found.created) {
+			found = p
+		}
+	}
+	return found
 }
 
 func supportsElicitation(req *mcp.CallToolRequest) bool {

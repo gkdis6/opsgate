@@ -62,7 +62,9 @@ func TestHostOptionsPage(t *testing.T) {
 	}
 	reader := &restartFixture{manager: New(config.Approval{TTL: time.Minute, Web: true, RequireWeb: true}, "https://ops.example", accessBrowser{scopes: []string{config.ScopeRead}, known: true}, nil)}
 	reader.manager.SetDirect(env.Direct)
-	reader.manager.SetHostOptions(func(context.Context, tool.Caller, string, string) (action.Options, error) { return action.Options{}, nil })
+	reader.manager.SetHostOptions(func(context.Context, tool.Caller, string, string) (action.Options, error) {
+		return action.Options{}, nil
+	})
 	reader.mux = http.NewServeMux()
 	reader.manager.Routes(reader.mux)
 	if w := reader.do("GET", "/approve/host-options/unit/app.service", "bob", nil); w.Code != http.StatusForbidden {

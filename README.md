@@ -40,10 +40,11 @@ change in front of a person.
 
 1. **Know first.** `opsgate watch` follows the Kubernetes API and sends alerts to
    Discord, webhooks or email as soon as something fails. See [watch alerts](#watch-alerts).
-2. **Stabilize from anywhere.** An alert, or the analyzer's report on it, can
-   carry a ready-made action: restarting a workload or restoring the last working
-   image. Opening it shows a fresh plan after sign-in, and approving runs it. A
-   phone browser and a passkey are enough.
+2. **Stabilize from anywhere.** A pod warning offers **Choose an action**:
+   sign in to see image restore, restart or controller-owned pod deletion choices
+   that fit the current state. Choose one, review its fresh plan and approve to
+   run it. Analyzer reports show rule choices and labeled AI suggestions too.
+   A phone browser and a passkey are enough.
 3. **Then find the cause.** With the service back, ask your AI client to
    investigate through opsgate's read tools, or let the optional
    [analyzer](docs/analyzer.md) make a first pass.
@@ -141,13 +142,14 @@ always approves; the table shows where the approval can start.
 
 | Change | Enable with | From an MCP client | Ready-made approval link |
 | --- | --- | --- | --- |
-| Rollout restart | `rollout_restart` | yes | in a watch alert's restart suggestion, with `watch.approval_url` ([conditions](docs/watch.md#hints-and-restart-suggestions)) |
+| Rollout restart | `rollout_restart` | yes | watch's choices page with `watch.approval_url`, or a legacy restart suggestion ([conditions](docs/watch.md#hints-and-restart-suggestions)) |
 | Scale | `scale`, capped by `max_replicas` | yes | from `action_link` / analyzer, with `action_approval_url` |
-| Delete a pod | `delete_pod` | yes | controller-owned pods only, from `action_link` / analyzer, with `action_approval_url` |
-| Restore a previous image | `restore_image` and `action_approval_url` | yes | from `k8s_remediation_options`; the analyzer adds it to its report as a button ([details](#restoring-a-failed-image-optional)) |
+| Delete a pod | `delete_pod` | yes | controller-owned pods only: current-state choices page, `action_link` / analyzer; `action_approval_url` required |
+| Restore a previous image | `restore_image` and `action_approval_url` | yes | watch choices page and `k8s_remediation_options`; analyzer report button ([details](#restoring-a-failed-image-optional)) |
 
-A ready-made link opens a fresh plan after browser sign-in; nothing changes until
-someone presses Approve, and approval windows never cover these links. The analyzer
+Choices links show the current actions after browser sign-in. Opening an action
+shows a fresh plan; nothing changes until someone presses Approve, and approval
+windows never cover these links. The analyzer
 proposes fixes only through the read-only `action_link` tool and prefers the least invasive catalog action. It never runs a change; buttons use
 server-validated links and show rule/AI provenance. See [approval](docs/approval.md#catalog-action-links).
 
@@ -390,7 +392,7 @@ Report language and action proposals are set with `report.language` and
 Set `restore_image` (a `namespace/deployment` allowlist) and `action_approval_url`
 on a Kubernetes cluster to enable this. For a Pod failing with `ImagePullBackOff`,
 `ErrImagePull` or `InvalidImageName`, `k8s_remediation_options` returns an approval
-link when a non-deleting ReplicaSet of the same Deployment has a ready owned Pod whose target container is ready and running the proposed image. Readiness does not guarantee application health, and image tags can change in the registry. The analyzer can attach the link to its report.
+link when a non-deleting ReplicaSet of the same Deployment has a ready owned Pod whose target container is ready and running the proposed image. Readiness does not guarantee application health, and image tags can change in the registry. The analyzer can attach the link to its report. The same rule engine also offers restoration for a failing new rollout, and watch warnings link to its live choices page.
 
 Opening the link needs sign-in and shows a fresh plan. Nothing changes until a
 person approves, and the plan is checked again before the patch. Only that

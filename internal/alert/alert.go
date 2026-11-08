@@ -52,6 +52,9 @@ type Alert struct {
 	// Restart names a workload a person may choose to restart. Nothing acts on
 	// it automatically.
 	Restart *Workload `json:"restart,omitempty"`
+	// OptionsURL navigates to live choices; Workload is an untrusted owner hint.
+	OptionsURL string    `json:"options_url,omitempty"`
+	Workload   *Workload `json:"workload,omitempty"`
 	// Suppressed counts repeats folded into this alert during the cooldown.
 	Suppressed int `json:"suppressed,omitempty"`
 	// Key identifies repeats; it includes the container for pod alerts.
@@ -267,6 +270,9 @@ func renderAlerts(b *Batch, advice bool) string {
 		s.WriteByte('\n')
 		if advice && a.Hint != "" {
 			fmt.Fprintf(&s, "  hint: %s\n", a.Hint)
+		}
+		if advice && a.OptionsURL != "" {
+			fmt.Fprintf(&s, "  Choose an action: %s\n", a.OptionsURL)
 		}
 		if advice && a.Restart != nil {
 			fmt.Fprintf(&s, "  if needed, ask to restart: %s %s/%s\n", a.Restart.Kind, a.Restart.Namespace, a.Restart.Name)

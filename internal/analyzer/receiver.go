@@ -183,6 +183,12 @@ func alertFieldsFit(a alert.Alert) bool {
 			return false
 		}
 	}
+	if len(a.OptionsURL) > 4096 {
+		return false
+	}
+	if owner := a.Workload; owner != nil && (len(owner.Kind) > 64 || len(owner.Namespace) > 63 || len(owner.Name) > 253 || len(owner.URL) > 4096) {
+		return false
+	}
 	if r := a.Restart; r != nil {
 		return len(r.Kind) <= 64 && len(r.Namespace) <= 63 && len(r.Name) <= 253 && len(r.URL) <= 4096
 	}

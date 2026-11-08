@@ -15,7 +15,7 @@ Kubernetes and note read tools require `ops:read`. Tools are registered only whe
 | `k8s_logs` | Pod logs; registered if any cluster has `allow_logs=true` | Required `namespace`, `pod`; `container` may be omitted only if exactly one regular/init/ephemeral container exists; `tail=200`, clamped to 1–`max_log_lines` (default cap 500); `since=""` (no time filter), positive Go duration up to 168h; `previous=false`; `grep=""`, literal case-insensitive substring; stream capped at 1 MiB |
 | `k8s_events` | Namespace events | `namespace=""` (all allowed namespaces); `warnings_only=true`; `since="1h"`, positive Go duration up to 168h; `limit=50`, clamped to 1–500 |
 | `action_link` | Read-only: validate a catalog action with its current Plan and return approval URL, label and summary; never applies | Required `tool`, `arguments` object; optional `source` (`ai` default, or `rule`); `ops:read`; registered when an enabled catalog action and per-cluster `action_approval_url` exist |
-| `k8s_remediation_options` | Read-only: image-restore approval links for a Pod failing to pull its image, backed by a non-deleting owned ReplicaSet with a ready owned Pod whose target container is ready/running the reported image | Required `namespace`, `name` (Pod); no actions unless `restore_image` and `action_approval_url` are set; at most 5 links |
+| `k8s_remediation_options` | Read-only current-state catalog choices for image pull failures, failing/stalled rollouts, repeated restarts/OOM and stuck/unreachable controller-owned pods; fixed English/Korean reasons, `source=rule` | Required `namespace`, `name` (Pod); optional `workload=kind/name` hint for a gone Pod. Only enabled, allowlisted actions with `action_approval_url`; up to 5 image choices plus restart/delete (7 total). Empty `actions` plus `hint` when none fit; [rules](approval.md#live-choices-per-failure). |
 | `k8s_rollout_restart` | Restart a workload by updating its pod template | Required `kind` (deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` gate |
 | `k8s_scale` | Set workload replicas | Required `kind` (deployment/statefulset), `namespace`, `name`, `replicas` (0–`max_replicas`, default cap 10); `scale` gate |
 | `k8s_delete_pod` | Delete a specific pod with UID precondition | Required `namespace`, `name`; `delete_pod` gate; links require a controller owner; MCP warns for an unowned pod |
@@ -81,3 +81,12 @@ arguments and live target allowlists without requiring `ops:write`. It rejects
 extra arguments (including `source` inside `arguments` or `approval_id`) and
 masked values. Links use `/approve/action/{tool}`; approving still requires the
 browser user's write scope and a fresh review. See [approval](approval.md#catalog-action-links).
+
+The remediation tool retains `actions`, `label`, `url`, `container`,
+`current_image` and `image`. It adds `tool`, `label_ko`, `reason`, `reason_ko`,
+`hint` and `pod_gone`. `source` now consistently means `rule`; the old
+ReplicaSet source name is in `source_replicaset`. Rule selection never writes.
+Candidate verification and workload scans refuse partial lists and more than
+500 objects per namespace. The approving browser independently checks write
+scope, user tool policy and allowlists, then follows plan → approval → re-plan
+→ apply → audit.

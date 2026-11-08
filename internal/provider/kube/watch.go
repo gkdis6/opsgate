@@ -159,6 +159,12 @@ func (w *watcher) send(alerts []alert.Alert) {
 			d.Reason, d.Summary, d.Hint = clean(d.Reason), clean(d.Summary), clean(d.Hint)
 			a.Display = &d
 		}
+		if a.Workload != nil {
+			owner := *a.Workload
+			owner.Kind, owner.Namespace, owner.Name = clean(owner.Kind), clean(owner.Namespace), clean(owner.Name)
+			owner.URL = ""
+			a.Workload = &owner
+		}
 		if a.Restart != nil {
 			r := *a.Restart
 			r.Kind, r.Namespace, r.Name, r.URL = clean(r.Kind), clean(r.Namespace), clean(r.Name), clean(r.URL)

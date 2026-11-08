@@ -15,6 +15,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/gkdis6/opsgate/internal/action"
 	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/config"
 	"github.com/gkdis6/opsgate/internal/redact"
@@ -48,6 +49,8 @@ type Env struct {
 	Policy *Policy
 	// direct holds writes a person may run from a browser approval page.
 	direct map[string]*Direct
+	// Remediation is a read-only provider callback shared with browser choices.
+	Remediation func(context.Context, Caller, string, string, string, string) (action.Options, error)
 }
 
 // Spec describes a tool. Scope defaults to ops:read.

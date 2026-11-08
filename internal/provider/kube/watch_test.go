@@ -371,3 +371,27 @@ func TestWarningsCarryHints(t *testing.T) {
 		t.Fatalf("info alert has a hint: %+v", got)
 	}
 }
+
+func TestWarningChoiceOwnerAndNamespace(t *testing.T) {
+	for _, denied := range []bool{false, true} {
+		var emitted []alert.Alert
+		w := &watcher{cluster: "main", policy: namespacePolicy{allow: []string{"apps"}}, now: time.Now, emit: func(a alert.Alert) { emitted = append(emitted, a) }}
+		if denied {
+			w.policy.deny = []string{"apps"}
+		}
+		controller := true
+		old := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web-hash-pod", Namespace: "apps", Labels: map[string]string{"pod-template-hash": "hash"}, OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "web-hash", Controller: &controller}}}}
+		cur := old.DeepCopy()
+		cur.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}}}}
+		w.send(w.pod(old, cur))
+		if denied {
+			if len(emitted) != 0 {
+				t.Fatal(emitted)
+			}
+			continue
+		}
+		if len(emitted) != 1 || emitted[0].Severity != alert.Warning || emitted[0].Workload == nil || emitted[0].Workload.Kind != "deployment" || emitted[0].Workload.Name != "web" || emitted[0].Restart != nil {
+			t.Fatalf("%+v", emitted)
+		}
+	}
+}

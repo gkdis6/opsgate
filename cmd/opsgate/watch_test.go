@@ -165,3 +165,24 @@ func TestWatchWebhookOutputWire(t *testing.T) {
 		t.Fatalf("Send() = %v, %v", retry, err)
 	}
 }
+
+func TestWatchChoicesLinks(t *testing.T) {
+	for _, tc := range []struct {
+		severity, kind, owner, base string
+		want                        bool
+	}{
+		{alert.Warning, "Pod", "deployment", "https://ops.example", true},
+		{alert.Warning, "Pod", "statefulset", "https://ops.example", true},
+		{alert.Warning, "Pod", "daemonset", "https://ops.example", true},
+		{alert.Info, "Pod", "deployment", "https://ops.example", false},
+		{alert.Warning, "Node", "deployment", "https://ops.example", false},
+		{alert.Warning, "Pod", "job", "https://ops.example", false},
+		{alert.Warning, "Pod", "deployment", "", false},
+	} {
+		a := alert.Alert{Severity: tc.severity, Kind: tc.kind, Cluster: "main", Namespace: "apps", Name: "web-abc", Workload: &alert.Workload{Kind: tc.owner, Namespace: "apps", Name: "web"}}
+		addApprovalLink(&a, tc.base)
+		if (a.OptionsURL != "") != tc.want {
+			t.Fatalf("%+v => %s", tc, a.OptionsURL)
+		}
+	}
+}

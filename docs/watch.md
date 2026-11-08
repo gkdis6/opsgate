@@ -127,10 +127,10 @@ cluster-wide list/watch RBAC. Nodes are always watched.
 Warnings carry a `hint`: fixed advice chosen from the alert type, never text
 from the cluster. A pod that fails while it is being deleted is not reported.
 
-An alert also names a workload in `restart` when all of these hold:
+For compatibility, an alert also names a workload in `restart` when all of these hold:
 
 - the container has restarted at least 3 times;
-- its exit reason is not `OOMKilled`, `Unknown` or `Completed`;
+- its exit reason is not `OOMKilled`, `Unknown`, `ContainerStatusUnknown` or `Completed`;
 - the pod belongs to a Deployment, StatefulSet or DaemonSet, not a Job;
 - the watch configuration lists the workload under
   `providers.kubernetes.rollout_restart`. Use the same list as the server.
@@ -152,7 +152,27 @@ approval with built-in sign-in. New restart URLs use the shared catalog builder:
 `/approve/action/k8s_rollout_restart?...&source=rule`. The page shows “Restart
 workload” and “Suggested by: rule”. Historical restart links still work as
 aliases. Other catalog actions can be suggested through `action_link` and the
-analyzer; watch's restart conditions above are unchanged.
+analyzer. The legacy restart conditions above remain conservative; live choices
+also offer an OOM restart with an explicit warning that it only buys time.
+
+With `watch.approval_url`, every **pod warning** in an allowed namespace whose
+owner resolves to a Deployment, StatefulSet or DaemonSet also carries
+`options_url`: a **Choose an action** / **조치 선택** link to
+`/approve/options/{cluster}/{namespace}/{pod}?workload=kind/name`. Info alerts,
+bare pods and unsupported owners never get it. This needs no restart allowlist
+match: the server, after sign-in, computes the applicable enabled/allowlisted
+actions from the current cluster state. The watcher only supplies a workload
+navigation hint; the server re-verifies live ownership by UID. Image pull errors
+can offer image restore; failing rollouts can offer restore before restart;
+repeated OOM can offer a temporary restart; stuck or unreachable controller-owned
+pods can offer deletion. [Full rules](approval.md#live-choices-per-failure).
+
+Discord embeds, webhook JSON/text and email text include the same choices link,
+localized per output. Existing `restart` and `restart.url` fields are preserved
+for external n8n/Telegram receivers; `options_url` and `workload` are additive.
+Custom webhook templates can use `.OptionsURL` on an alert. A choices link has
+no secret, grants no approval and may show no choices if the state recovered or
+policy changed. Opening a choice creates a fresh plan; only approval applies it.
 
 ## Webhook payload
 

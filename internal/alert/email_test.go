@@ -2,6 +2,7 @@ package alert
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -353,5 +354,25 @@ func TestSMTPFailureClassification(t *testing.T) {
 	}
 	if _, err := smtpFailure("TLS", errors.New("x509: bad certificate")); !strings.Contains(err.Error(), "x509: bad certificate") {
 		t.Fatalf("TLS cause lost: %v", err)
+	}
+}
+
+func TestEmailChoicesLink(t *testing.T) {
+	b := &Batch{Alerts: []Alert{{Severity: Warning, Kind: "Pod", Namespace: "apps", Name: "web", OptionsURL: "https://ops.example/approve/options/main/apps/web"}}}
+	b.Text = render(b)
+	raw, err := emailMessage(EmailOptions{From: "ops@example.com", To: []string{"owner@example.com"}}, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := mail.ReadMessage(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(quotedprintable.NewReader(parsed.Body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "Choose an action: "+b.Alerts[0].OptionsURL) {
+		t.Fatal(string(body))
 	}
 }

@@ -134,3 +134,59 @@ func TestInvestigationCollectsActionLinkResult(t *testing.T) {
 		t.Fatalf("actions=%v error=%v", result.Actions, err)
 	}
 }
+
+func TestRuleAndAIButtonsTogether(t *testing.T) {
+	for _, language := range []string{"en", "ko"} {
+		c := Default()
+		c.Report.ApprovalURL = "https://ops.example"
+		c.Report.Language = language
+		args := map[string]any{"cluster": "main", "namespace": "apps", "kind": "deployment", "name": "web"}
+		rule, _ := action.URL(c.Report.ApprovalURL, "k8s_rollout_restart", args, "rule")
+		args["replicas"] = 2
+		ai, _ := action.URL(c.Report.ApprovalURL, "k8s_scale", args, "ai")
+		links := mergeLinks(remediationLinks(c, actionResult(map[string]any{"actions": []any{map[string]string{"url": rule, "label": "untrusted"}}})), remediationLinks(c, actionResult(map[string]string{"url": ai})))
+		prefix := "AI suggestion: "
+		if language == "ko" {
+			prefix = "AI 제안: "
+		}
+		restart, _ := action.Lookup("k8s_rollout_restart")
+		scale, _ := action.Lookup("k8s_scale")
+		if len(links) != 2 || links[0].Label != restart.Label(language) || links[1].Label != prefix+scale.Label(language) {
+			t.Fatal(links)
+		}
+		batch := testBatch(time.Now())
+		batch.Alerts[0].OptionsURL = "https://evil.example/do-not-follow"
+		report := reportNotification(c, batch, investigation{Text: "report"}, "completed", "")
+		label := "All choices"
+		if language == "ko" {
+			label = "모든 선택지 보기"
+		}
+		if !strings.Contains(report, "["+label+"](https://ops.example/approve/options/main/apps/web)") || strings.Contains(report, "evil.example") {
+			t.Fatal(report)
+		}
+	}
+}
+
+type mixedLinkSession struct{ linkSession }
+
+func (s *mixedLinkSession) List(ctx context.Context) ([]*mcp.Tool, error) {
+	tools, err := s.linkSession.List(ctx)
+	return append(tools, &mcp.Tool{Name: "k8s_remediation_options", InputSchema: map[string]any{"type": "object"}, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}), err
+}
+func (s *mixedLinkSession) Call(ctx context.Context, name string, args map[string]any) (*mcp.CallToolResult, error) {
+	if name == "k8s_remediation_options" {
+		return actionResult(map[string]any{"actions": []any{map[string]string{"url": "https://ops.example/approve/action/k8s_rollout_restart?cluster=main&kind=deployment&namespace=apps&name=web&source=rule"}}}), nil
+	}
+	return s.linkSession.Call(ctx, name, args)
+}
+func TestInvestigationCollectsRulesAndAI(t *testing.T) {
+	c := Default()
+	c.Report.ApprovalURL = "https://ops.example"
+	c.Report.Language = "en"
+	s := &mixedLinkSession{}
+	e := engine{cfg: c, model: &linkModel{}, dial: func(context.Context) (toolSession, error) { return s, nil }}
+	result, err := e.investigate(context.Background(), testBatch(time.Now()))
+	if err != nil || len(result.Actions) != 2 || result.Actions[0].Label != "Restart workload" || result.Actions[1].Label != "AI suggestion: Scale workload" {
+		t.Fatalf("actions=%v err=%v", result.Actions, err)
+	}
+}

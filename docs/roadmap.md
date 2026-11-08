@@ -35,9 +35,11 @@ In order. Each step still goes through security review.
 2. **Common action gate.** An action catalog shared by alerts and MCP tools,
    execution on approval, and an approval inbox with Web Push, reachable from
    messenger approval links. Done, unreleased; see the [changelog](../CHANGELOG.md).
-3. **More choices per failure.** Rule-based suggestions for more failure states
-   (for example `OOMKilled` and `Pending`), and analyzer proposals that become
-   buttons when they match the catalog.
+3. **More choices per failure.** Current-state rule choices for image failures,
+   failing rollouts, repeated crashes/OOM and stuck or unreachable controller-owned
+   pods; live choices pages from watch and rule/AI buttons in analyzer reports.
+   Done, unreleased; see the [changelog](../CHANGELOG.md). `Pending` scheduling
+   problems retain inspection hints; they do not imply a safe catalog write.
 4. **Alert groups by namespace,** each with its own outputs, level
    (warnings only or all) and batching.
 5. **Optional host provider** for systemd units and Docker or Compose

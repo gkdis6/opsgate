@@ -9,6 +9,8 @@ GitHub releases carry generated release notes.
 
 ### Added
 
+- Current-state rule choices for image failures, failing rollouts, repeated crashes/OOM and stuck/unreachable controller-owned pods; signed-in choices pages linked from watch alerts and analyzer reports, with fixed bilingual reasons and preserved webhook fields. / 이미지 실패·배포 정체·반복 종료/OOM·멈추거나 연결할 수 없는 컨트롤러 소유 파드에 현재 상태 규칙 선택지를 제공하고, watch·분석기에서 로그인 후 선택지 페이지로 연결하며 고정 이중 언어 이유와 기존 웹훅 필드를 유지합니다.
+
 - Installable, per-user `/approvals` inbox and optional payload-less Web Push with durable VAPID keys, protected device subscriptions and bounded delivery. / 사용자별 설치 가능한 `/approvals` 승인함과 VAPID 키 영구 저장, 보호된 기기 구독, 제한된 큐를 사용하는 내용 없는 Web Push 선택 기능을 추가합니다.
 
 - Shared action catalog and generic approval links for restart, image restore, scale and controller-owned pod deletion; read-only `action_link` validates live plans, and analyzer buttons use catalog labels and rule/AI provenance. Legacy restart/image links remain aliases. / 재시작·이미지 복구·규모 조정·컨트롤러 소유 파드 삭제의 공통 카탈로그와 승인 링크, 현재 계획을 검증하는 조회 전용 `action_link`, 출처를 표시하는 분석기 버튼을 추가하고 기존 링크 별칭을 유지합니다.

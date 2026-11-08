@@ -15,7 +15,7 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. 각 도구
 | `k8s_logs` | 파드 로그(하나 이상의 클러스터에서 `allow_logs=true`일 때 도구 등록) | 필수 `namespace`, `pod`; 일반/init/ephemeral 컨테이너를 통틀어 정확히 하나일 때만 `container` 생략 가능; `tail=200`, 1–`max_log_lines`로 보정(기본 상한 500); `since=""`(시간 필터 없음), 양수 Go 기간 표기(최대 168h); `previous=false`; `grep=""`, 문자열 그대로 대소문자 구분 없이 부분 검색; 스트림 상한 1 MiB |
 | `k8s_events` | 네임스페이스 이벤트 | `namespace=""`(허용된 모든 네임스페이스); `warnings_only=true`; `since="1h"`, 양수 Go 기간 표기(최대 168h); `limit=50`, 1–500으로 보정 |
 | `action_link` | 조회 전용: 현재 Plan으로 카탈로그 조치를 검증하고 승인 URL·이름·요약 반환; 실행 없음 | 필수 `tool`, `arguments` 객체; 선택 `source`(기본 `ai`, 또는 `rule`); `ops:read`; 활성 카탈로그 조치와 클러스터별 `action_approval_url`이 있으면 등록 |
-| `k8s_remediation_options` | 조회 전용: 파드가 이미지를 받지 못할 때, 삭제 중이 아닌 소유 ReplicaSet의 준비된 파드에서 대상 컨테이너가 준비되어 보고된 이미지를 실행 중이면 이미지 복원 승인 링크 제공 | 필수 `namespace`, `name`(파드); `restore_image`와 `action_approval_url`을 설정하지 않으면 결과 없음; 링크 최대 5개 |
+| `k8s_remediation_options` | 조회 전용: 이미지 받기 실패, 실패·정체된 배포, 반복 재시작/OOM, 멈추거나 연결할 수 없는 컨트롤러 소유 파드에 현재 상태 기반 카탈로그 선택지 제공. 고정 영어·한국어 이유와 `source=rule` | 필수 `namespace`, `name`(파드); 사라진 파드는 선택 `workload=kind/name` 힌트. `action_approval_url`과 활성화·허용된 조치만 제공. 이미지 최대 5개와 재시작·삭제(총 7개). 없으면 빈 `actions`와 `hint`; [규칙](approval.md#장애별-현재-선택지). |
 | `k8s_rollout_restart` | 파드 템플릿을 갱신해 워크로드 재시작 | 필수 `kind`(deployment/statefulset/daemonset), `namespace`, `name`; `rollout_restart` 허용 설정 필요 |
 | `k8s_scale` | 워크로드 복제본 수 설정 | 필수 `kind`(deployment/statefulset), `namespace`, `name`, `replicas`(0–`max_replicas`, 기본 상한 10); `scale` 허용 설정 필요 |
 | `k8s_delete_pod` | UID 사전 조건을 적용한 특정 파드 삭제 | 필수 `namespace`, `name`; `delete_pod` 허용 설정 필요; 링크는 컨트롤러 소유 파드만 허용, MCP는 소유자 없는 파드에 경고 |
@@ -97,3 +97,11 @@ kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하
 `approval_id` 포함)와 마스킹된 값은 거부합니다. 링크는 `/approve/action/{tool}`
 형식이며, 승인하려면 브라우저 사용자의 쓰기 스코프와 새 검토가 필요합니다.
 [승인 문서](approval.md#카탈로그-조치-링크)를 참고하세요.
+
+복구 도구는 `actions`, `label`, `url`, `container`, `current_image`, `image`를
+유지하고 `tool`, `label_ko`, `reason`, `reason_ko`, `hint`, `pod_gone`을 추가합니다.
+`source`는 이제 일관되게 `rule`이며, 이전 ReplicaSet 이름은
+`source_replicaset`에 담습니다. 규칙 선택은 쓰기를 수행하지 않습니다. 후보 검증과
+워크로드 조회는 namespace당 500개 초과 또는 부분 목록이면 거부합니다. 승인
+브라우저는 쓰기 스코프·사용자 도구 정책·허용 목록을 독립적으로 확인하고 계획 →
+사람 승인 → 재계획 → 적용 → 감사를 따릅니다.

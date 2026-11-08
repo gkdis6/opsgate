@@ -383,3 +383,18 @@ the catalog arguments, and uses the catalog label in the report language.
 `source=ai` adds “AI suggestion: ” / “AI 제안: ”. Generated prose URLs never
 become buttons. Sign-in, the approver's write scope/tool policy, fresh review,
 approval and re-plan checks remain mandatory. See [approval](approval.md).
+
+Reports collect the same current-state rule choices as the browser choices
+page, including restore-before-restart for failing releases, temporary OOM
+restarts and stuck/unreachable controller-owned pod deletion. Each choice must
+pass its enabled catalog entry, target allowlist and current Plan. Rule buttons
+use the catalog label; `action_link` proposals use **AI suggestion** / **AI 제안**
+labels, and both kinds can appear together. Existing five-button limits remain.
+Every pod report also includes **All choices** / **모든 선택지 보기** pointing to
+`/approve/options/{cluster}/{namespace}/{pod}` on `report.approval_url`, with a
+workload hint when available. This navigation URL is built from bounded alert
+identity fields, never copied from model prose or an alert-supplied URL. It
+remains available when analysis fails; sign-in and fresh user policy/state
+checks still apply. A recovered incident may have no applicable choices.
+The receiver also caps `options_url` at 4096 bytes and workload hint fields at
+the corresponding restart identity limits.

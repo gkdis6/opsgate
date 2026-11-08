@@ -79,6 +79,9 @@ func discordDescription(b *Batch, language string) string {
 		if a.Suppressed > 0 {
 			fmt.Fprintf(&text, "유사 알림 %d회 추가\n", a.Suppressed)
 		}
+		if a.OptionsURL != "" {
+			fmt.Fprintf(&text, "조치 선택: %s\n", a.OptionsURL)
+		}
 		if a.Restart != nil {
 			fmt.Fprintf(&text, "필요 시 재시작 승인: %s %s/%s %s\n", a.Restart.Kind, a.Restart.Namespace, a.Restart.Name, a.Restart.URL)
 		}
@@ -99,6 +102,9 @@ func discordEnglish(b *Batch) string {
 		}
 		if a.Hint != "" {
 			fmt.Fprintf(&text, "Hint: %s\n", a.Hint)
+		}
+		if a.OptionsURL != "" {
+			fmt.Fprintf(&text, "Choose an action: %s\n", a.OptionsURL)
 		}
 		if a.Restart != nil {
 			fmt.Fprintf(&text, "Restart suggestion: %s %s/%s %s\n", a.Restart.Kind, a.Restart.Namespace, a.Restart.Name, a.Restart.URL)

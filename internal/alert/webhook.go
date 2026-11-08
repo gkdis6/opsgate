@@ -63,6 +63,10 @@ func (s *webhookSender) Send(ctx context.Context, b *Batch) (retry bool, err err
 	if err != nil {
 		return false, err
 	}
+	return s.postBody(ctx, body)
+}
+
+func (s *webhookSender) postBody(ctx context.Context, body []byte) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.opts.URL, bytes.NewReader(body))
 	if err != nil {
 		return false, err

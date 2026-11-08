@@ -37,6 +37,8 @@ func (m *Manager) inboxRoutes(mux *http.ServeMux, protect *http.CrossOriginProte
 			protect.Handler(h).ServeHTTP(w, r)
 		}))
 	}
+	mux.Handle("POST /approvals/notify", securityHeaders(http.HandlerFunc(m.notify)))
+	mux.Handle("POST /approvals/dismiss", wrap(authenticated(m.dismissNotice)))
 	mux.Handle("GET /approvals", wrap(authenticated(m.inbox)))
 	mux.Handle("GET /approvals/inbox.js", wrap(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
@@ -48,6 +50,12 @@ func (m *Manager) inboxRoutes(mux *http.ServeMux, protect *http.CrossOriginProte
 		body := "An approval is waiting"
 		if m.push != nil && m.push.cfg.Language == "ko" {
 			body = "승인 요청이 있습니다"
+		}
+		if m.notices != nil {
+			body = "An alert needs a decision"
+			if m.push != nil && m.push.cfg.Language == "ko" {
+				body = "알림에 대한 조치가 필요합니다"
+			}
 		}
 		_, _ = io.WriteString(w, strings.ReplaceAll(workerScript, "NOTIFICATION_BODY", strconv.Quote(body)))
 	})))
@@ -142,15 +150,21 @@ type inboxItem struct {
 }
 
 type inboxView struct {
-	CSRF  string
-	Push  bool
-	Items []inboxItem
+	Notices []inboxNotice
+	CSRF    string
+	Push    bool
+	Items   []inboxItem
 }
 
 func (m *Manager) inbox(w http.ResponseWriter, _ *http.Request, user string) {
 	view := inboxView{CSRF: m.inboxCSRF(user), Push: m.push != nil && m.canSubscribe(user)}
 	m.mu.Lock()
 	m.sweepLocked()
+	if m.notices != nil {
+		m.notices.sweep(m.now())
+		view.Notices = slices.Clone(m.notices.users[user])
+		slices.Reverse(view.Notices)
+	}
 	for _, p := range m.approvals {
 		if p.user != user {
 			continue
@@ -186,6 +200,10 @@ var inboxPage = ui.NewTemplate(`{{define "title"}}Approval inbox{{end}}
 <button type="button" id="disable-push">Disable notifications on this device</button>
 <p class="note">On iPhone, use Add to Home Screen first, then open opsgate from the Home Screen and enable notifications.</p>
 <p id="push-status" role="status"></p>{{else}}<p class="note">Notifications are unavailable for this account or disabled on this server.</p>{{end}}
+{{if .Notices}}<h2>Alerts waiting for a decision</h2>
+{{range .Notices}}<article class="target"><h3>{{.Reason}}</h3><p>{{.Cluster}} / {{.Namespace}} / {{.Pod}}</p>
+<p>{{.OccurredAt.UTC.Format "2006-01-02 15:04:05 UTC"}}</p><a href="{{.URL}}">Choose an action</a>
+<form method="post" action="/approvals/dismiss"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button type="submit">Dismiss</button></form></article>{{end}}{{end}}
 {{range .Items}}<article class="target"><h2><a href="/approve/{{.ID}}">{{.Title}}</a></h2>
 {{if .Target}}<p>Target: {{.Target}}</p>{{end}}
 <dl><dt>Status</dt><dd>{{.Status}}</dd><dt>Requested</dt><dd>{{.Created.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd><dt>Expires</dt><dd>{{.Expires.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd>

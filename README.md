@@ -39,8 +39,10 @@ change in front of a person.
 ## How it handles an incident
 
 1. **Know first.** `opsgate watch` follows the Kubernetes API and sends alerts to
-   Discord, webhooks or email as soon as something fails. See [watch alerts](#watch-alerts).
-2. **Stabilize from anywhere.** A pod warning offers **Choose an action**:
+   Discord, webhooks or email as soon as something fails. The optional signed inbox
+   channel also sends phone Web Push for pod warnings with action choices. See [watch alerts](#watch-alerts).
+2. **Stabilize from anywhere.** Open the phone notification in your normal
+   browser's approval inbox, then **Choose an action** on the pod warning:
    sign in to see image restore, restart or controller-owned pod deletion choices
    that fit the current state. Choose one, review its fresh plan and approve to
    run it. Analyzer reports show rule choices and labeled AI suggestions too.

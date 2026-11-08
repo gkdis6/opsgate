@@ -26,7 +26,11 @@ func checkHost(cfg config.Config, next http.Handler) http.Handler {
 			loopbackListener = loopbackListener && isLoopbackHost(localHost)
 		}
 		host := authorityHostname(r.Host)
-		if host == "" || !(publicHost != "" && strings.EqualFold(r.Host, publicHost) || loopbackListener && isLoopbackHost(host)) {
+		// Signed notices are machine-to-machine and do not use browser
+		// credentials, redirects or host-derived links. Permit private service
+		// origins only for this exact enabled POST endpoint; HMAC authenticates it.
+		signedNotice := cfg.Approval.InboxNotify.SecretFile != "" && r.Method == http.MethodPost && r.URL.EscapedPath() == "/approvals/notify"
+		if host == "" || !(signedNotice || publicHost != "" && strings.EqualFold(r.Host, publicHost) || loopbackListener && isLoopbackHost(host)) {
 			http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
 			return
 		}

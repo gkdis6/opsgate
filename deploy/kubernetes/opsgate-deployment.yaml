@@ -27,6 +27,18 @@ data:
         users:
           - subject: email:operator@example.com
             scopes: [ops:read]
+    # Optional inbox notices from the separate watcher. Use the same dedicated
+    # opsgate-inbox-hmac Secret and uncomment its mount and volume below.
+    # For phone push, grant the user ops:write, configure write allowlists and
+    # enable notifications in /approvals (iPhone: Add to Home Screen first).
+    # approval:
+    #   inbox_notify:
+    #     secret_file: /etc/opsgate/inbox/key
+    #     subjects: [email:operator@example.com]
+    #   push:
+    #     enabled: true
+    #     subject: mailto:operator@example.com
+    #     state_file: /var/lib/opsgate/push.json
     providers:
       kubernetes:
         namespaces: [apps]
@@ -121,6 +133,9 @@ spec:
             - name: upstream-secret
               mountPath: /etc/opsgate/upstream
               readOnly: true
+            # - name: inbox-hmac
+            #   mountPath: /etc/opsgate/inbox
+            #   readOnly: true
             - name: state
               mountPath: /var/lib/opsgate
       volumes:
@@ -136,6 +151,10 @@ spec:
             items:
               - key: client-secret
                 path: client-secret
+        # - name: inbox-hmac
+        #   secret:
+        #     secretName: opsgate-inbox-hmac
+        #     defaultMode: 0440
         - name: state
           persistentVolumeClaim:
             claimName: opsgate-state

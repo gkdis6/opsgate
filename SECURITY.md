@@ -28,7 +28,13 @@ opsgate does not defend against a compromised host, kernel, server binary, depen
 
 HTTP exposes `/mcp` with Protected Resource Metadata. Authentication is mandatory; HTTPS is required for the public origin except loopback development. Terminate TLS at a trusted proxy, keep the backend private and forward the discovery, OAuth and approval routes described in [deployment](docs/deploy.md). Do not log bearer tokens, cookies, authorization codes, client secrets or approval URLs. The Host check replaces the SDK's localhost check: public requests must match
 `public_url`'s host, including any explicit port, or receive 421. Loopback
-listeners additionally accept loopback Host values for probes. A Host-preserving
+listeners additionally accept loopback Host values for probes. When signed inbox
+notices are configured, only the exact `POST /approvals/notify` endpoint also
+accepts other syntactically valid Hosts for private service delivery. It ignores
+browser credentials and authenticates with constant-time HMAC verification,
+signed freshness and replay checks, a 64 KiB body cap and a global rate limit.
+It stores bounded identifier-only notices and never creates approvals or executes
+actions. All browser and MCP routes retain the Host policy. A Host-preserving
 reverse proxy works with a loopback backend; wildcard listeners have no local
 exception. CORS and MCP annotations are not authorization boundaries.
 

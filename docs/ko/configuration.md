@@ -86,7 +86,12 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 | `approval.ttl` | `10m` | 대기 중인 승인/입력의 유효 기간입니다 |
 | `approval.web` | `false` | 브라우저 승인을 활성화하며 builtin 인증이 필요합니다. 모드에서는 기본으로 켭니다 |
 | `approval.require_web` | `approval.web`이 true이면 `true`, 아니면 `false` | HTTP에서 웹 승인을 필수로 합니다. 명시적 `false`는 클라이언트 내 확인을 허용하고, 명시적 `true`는 stdio 쓰기도 거부합니다 |
-| `approval.push.enabled` | `false` | MCP 웹 승인용 Web Push; `approval.web` 필요 |
+| `approval.inbox_notify.secret_file` | 비어 있음(비활성화) | watch 알림 공유 HMAC 키 파일(공백 제거 후 16–4096바이트); builtin 웹 승인과 subjects 필요 |
+| `approval.inbox_notify.subjects` | `[]` | 식별자 알림을 받을 중복 없는 설정된 builtin 사용자 1–100명; 메모리에 사용자당 최대 50개를 1시간 보관하며 푸시는 1분간 묶음 |
+| `watch.inbox.url` | 비어 있음(비활성화) | 서명된 `POST /approvals/notify`를 받을 서버 origin; HTTPS 또는 웹훅과 같은 사설/루프백 HTTP; 별도 큐와 고정 1초 묶음 |
+| `watch.inbox.secret_file` | 비어 있음 | 필수 공유 HMAC 키 파일(공백 제거 후 16–4096바이트) |
+| `watch.inbox.allow_private_http` | `false` | watch 출력과 같이 연결 시 주소를 검사하는 사설 HTTP 허용 |
+| `approval.push.enabled` | `false` | MCP 웹 승인과 설정한 승인함 알림용 Web Push; `approval.web` 필요 |
 | `approval.push.subject` | 비어 있음 | 활성화 시 필수인 연락처 `mailto:` 또는 `https:` URL |
 | `approval.push.state_file` | 모드에서는 `/var/lib/opsgate/push.json`, 그 외 비어 있음 | 구독과 VAPID 키를 0600으로 영구 저장; 활성화 시 필수이며 OAuth 상태 파일과 분리 |
 | `approval.push.allowed_hosts` | `[fcm.googleapis.com, updates.push.services.mozilla.com, web.push.apple.com, '*.notify.windows.com']` | HTTPS push 호스트; 와일드카드는 하위 도메인에만 적용; 연결 시 공개 주소 검사, 리다이렉트·프록시 사용 안 함 |
@@ -188,7 +193,7 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 
 승인은 유효 기간이 있고 한 번만 사용할 수 있으며, 사용자, 도구, 마스킹하지 않은 정규화 인자의 SHA-256(`approval_id` 제외), 계획에 연결됩니다. 사용자가 대상을 명확히 볼 수 있어야 하므로 마스킹으로 요약이 바뀌면 쓰기를 거부합니다. Kubernetes 계획에는 대상 UID를 포함하며, 실행(Apply)에는 같은 호출에서 만든 계획과 식별자/버전 사전 조건을 사용합니다. 확인 채널이 없으면 쓰기를 거부하고, stdio는 클라이언트 내 확인만 지원합니다.
 
-로그인한 `/approvals` 승인함은 자신의 유효한 요청과 보관된 결과만 표시합니다. 설치와 선택 기능인 기기 알림 설정은 [승인함과 알림](approval.md#승인함과-알림)을 참고하세요. `ops:write`가 있는 계정만 구독할 수 있습니다(사용자당 10개, 최신 구독 우선).
+로그인한 `/approvals` 승인함은 자신의 유효한 요청, 보관된 결과, 자신에게 전달된 watch 알림을 표시합니다. 설치와 선택 기능인 기기 알림 설정은 [승인함과 알림](approval.md#승인함과-알림)을 참고하세요. `ops:write`가 있는 계정만 구독할 수 있습니다(사용자당 10개, 최신 구독 우선).
 
 승인 시간 창은 선택 사항이며, 사용하려면 `approval.window`와 `approval.window_tools`가 모두 필요합니다. `approval.window`는 1m–12h 범위로 설정하세요. `0s`이면 기능을 비활성화합니다. `approval.window_tools`는 `path.Match` glob 허용 목록이며 비어 있으면 어떤 도구도 허용하지 않습니다. 예를 들어 `window: 30m`과 `window_tools: [k8s_rollout_restart]`를 설정하면 브라우저에서 **Approve + allow for 30m**를 선택하거나, 클라이언트 내 확인에서 **Also auto-approve k8s_rollout_restart for 30m** 체크박스를 선택할 수 있습니다. 체크박스 선택은 필수가 아닙니다.
 
@@ -202,11 +207,11 @@ Kubernetes, 노트 읽기 도구에는 `ops:read`가 필요합니다. Kubernetes
 
 ## Watch 알림
 
-`watch` 섹션은 별도 프로세스인 `opsgate watch`만 읽고, MCP 서버는 무시합니다. `opsgate watch`를 실행하려면 `providers.kubernetes.enabled`를 켜고 `watch.outputs`, `watch.email.host` 중 하나 이상을 설정해야 합니다.
+`watch` 섹션은 별도 프로세스인 `opsgate watch`만 읽고, MCP 서버는 무시합니다. `opsgate watch`를 실행하려면 `providers.kubernetes.enabled`를 켜고 `watch.outputs`, `watch.email.host`, `watch.inbox.url` 중 하나 이상을 설정해야 합니다.
 
 | 키 | 기본값 | 의미 |
 | --- | --- | --- |
-| `approval_url` | 없음 | opsgate 서버의 공개 https 오리진. 설정하면 재시작 제안에 승인 링크를 붙입니다 |
+| `approval_url` | 없음 | 선택지·재시작 링크용 opsgate 서버 공개 https origin. 생략하고 inbox를 설정하면 그 origin을 씁니다 |
 | `clusters` | 전체 | watch할 클러스터 이름 |
 | `problems_only` | `false` | 모든 채널에 대해 경고만 생성합니다 |
 | `batch` | `30s` | Webhook 알림을 모아 보내는 간격 (1s–10m) |

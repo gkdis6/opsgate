@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gkdis6/opsgate/internal/config"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -208,5 +209,39 @@ func TestReverseProxyOverPipe(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusMisdirectedRequest {
 		t.Fatalf("foreign Host accepted: %d", resp.StatusCode)
+	}
+}
+
+func TestSignedNoticeHostExceptionIsNarrow(t *testing.T) {
+	cfg := config.Default()
+	cfg.HTTP.PublicURL = "https://mcp.example.com"
+	cfg.HTTP.Listen = "0.0.0.0:8787"
+	for _, enabled := range []bool{false, true} {
+		cfg.Approval.InboxNotify.SecretFile = ""
+		if enabled {
+			cfg.Approval.InboxNotify.SecretFile = "/etc/opsgate/inbox/key"
+		}
+		for _, tc := range []struct {
+			method, path, host string
+			allowed            bool
+		}{
+			{"POST", "/approvals/notify", "opsgate.opsgate.svc:8787", true},
+			{"POST", "/approvals/notify", "evil.example", true}, // HMAC, never cookies, is the authority.
+			{"GET", "/approvals/notify", "opsgate.opsgate.svc:8787", false},
+			{"POST", "/approvals/notify/", "opsgate.opsgate.svc:8787", false},
+			{"POST", "/approvals/%6eotify", "opsgate.opsgate.svc:8787", false},
+			{"POST", "/approvals/dismiss", "opsgate.opsgate.svc:8787", false},
+			{"GET", "/approvals", "opsgate.opsgate.svc:8787", false},
+			{"POST", "/mcp", "opsgate.opsgate.svc:8787", false},
+			{"POST", "/approvals/notify", "evil@opsgate.svc", false},
+		} {
+			r := httptest.NewRequest(tc.method, "http://opsgate.svc"+tc.path, nil)
+			r.Host = tc.host
+			w := httptest.NewRecorder()
+			checkHost(cfg, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) })).ServeHTTP(w, r)
+			if (w.Code == 204) != (enabled && tc.allowed) {
+				t.Errorf("enabled=%v %s %s host=%s: %d", enabled, tc.method, tc.path, tc.host, w.Code)
+			}
+		}
 	}
 }

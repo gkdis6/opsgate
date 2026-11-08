@@ -163,7 +163,8 @@ remain aliases with the same catalog validation.
 ## Approval inbox and notifications
 
 Open `/approvals` in your phone or desktop's normal browser and sign in as the
-user who requests changes. The inbox shows only your live approvals, with
+user who requests changes. The inbox shows watch notices addressed to you
+(when configured below) and only your live approvals, with
 pending requests first, followed by decisions and execution results. Open a
 request to review its plan; approving re-plans and runs it once as usual. The
 inbox also works without notifications. Use it outside Telegram/Discord's
@@ -199,7 +200,8 @@ To receive Web Push notifications:
 A new MCP web approval queues a notification to the requester's devices;
 link-created requests do not notify because the person is already in the
 browser. Clicking the notification opens or focuses `/approvals`, including
-sign-in if needed. Notifications never approve anything. `language: ko` shows
+sign-in if needed. Notifications never approve anything. Without inbox notices,
+`language: ko` shows
 “승인 요청이 있습니다”; the default `en` shows “An approval is waiting”.
 
 **Privacy:** push carries no approval content, ID, target or result. The push
@@ -264,3 +266,46 @@ can edit it to another allowed workload, whose current state and permissions
 are checked independently. If neither pod nor usable hint remains, the page
 shows no actions. Unknown/repeated query fields and unsupported hint kinds are
 rejected. Cluster messages cannot become rule reasons or executable links.
+
+## Signed watch notices
+
+Set `approval.inbox_notify.secret_file` and `subjects` on the HTTP server,
+and `watch.inbox` on the separate watcher; see the [paired example](watch.md#phone-alerts-through-the-approval-inbox).
+Both are off by default. Subjects must be 1–100 unique configured builtin users;
+web approval is required. Device notification subscriptions still require
+`ops:write`, and live choices check the signed-in user's scopes, tool policy
+and target allowlists independently.
+
+`POST /approvals/notify` requires no browser session. It accepts only a valid
+HMAC-SHA256 over the raw body, compared in constant time. The body is limited
+to 64 KiB with a 5s upload deadline and 1–50 notices with bounded identifiers, warning severity and valid
+timestamps. Unknown fields, invalid targets and trailing JSON are rejected.
+`sent_at` must be less than five minutes old and at most one minute ahead.
+Replay digests stay cached until that signed freshness window expires (maximum
+1,000 entries); alternate hex case cannot bypass this check. A global limit
+of 60 requests per minute includes invalid requests. Responses never echo input.
+Keep the clocks on both processes synchronized and use a dedicated random key.
+
+Accepted notices appear at the top of `/approvals` as **Alerts waiting for a
+decision**, only for the configured subjects. Each subject keeps at most 50
+notices for one hour after the last receipt; the oldest is evicted at capacity.
+Repeats for the same cluster/namespace/pod/reason update that entry and move it
+to the top. **Dismiss** removes only that user's entry with a same-origin,
+CSRF-protected POST. Nothing is approved or executed by receiving or dismissing
+an alert. The choices link is built locally from identifiers and an optional
+workload navigation hint, whose ownership is checked against live state.
+
+When Web Push is enabled, the first accepted notice queues a payload-less push
+for each subject, with further notices coalesced for one minute. The inbox
+still records every accepted notice during that minute; there is no delayed
+trailing push. The existing best-effort push queue and device delivery limits
+apply. With inbox notices enabled, the service worker uses generic wording for
+all pushes: **An alert needs a decision** (`en`) or **알림에 대한 조치가 필요합니다**
+(`ko`), because the payload-less channel carries no event type. Clicking opens
+`/approvals`. Without inbox notices, the existing approval wording remains.
+
+Notices, replay protection and the coalescing window are memory-only and lost
+on restart. Watch delivery retries are bounded; notifications can be missed.
+Run one HTTP server replica for this in-memory inbox. A signed notice proves
+knowledge of the shared key, not the truth of the cluster failure; actions
+always require the existing plan → human approval → re-plan check → apply → audit.

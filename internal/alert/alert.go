@@ -96,12 +96,14 @@ type Options struct {
 	Sender Sender
 	// ProblemsOnly drops every alert that is not a warning.
 	ProblemsOnly bool
-	Language     string
-	URL          string
-	Secret       []byte
-	Batch        time.Duration
-	Cooldown     time.Duration
-	MaxAlerts    int
+	// ChoicesOnly admits only pod warnings with live choices navigation.
+	ChoicesOnly bool
+	Language    string
+	URL         string
+	Secret      []byte
+	Batch       time.Duration
+	Cooldown    time.Duration
+	MaxAlerts   int
 	// PrivateOnly refuses connections to addresses that are neither
 	// private nor loopback, checked after DNS resolution. Use it for
 	// plain http, where a host name could otherwise lead anywhere.
@@ -137,6 +139,9 @@ func New(opts Options) *Dispatcher {
 
 // Emit queues a without blocking.
 func (d *Dispatcher) Emit(a Alert) {
+	if d.opts.ChoicesOnly && (a.OptionsURL == "" || a.Kind != "Pod" || a.Severity != Warning) {
+		return
+	}
 	if d.opts.ProblemsOnly && a.Severity != Warning {
 		return
 	}

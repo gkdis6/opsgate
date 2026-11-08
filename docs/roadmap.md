@@ -34,7 +34,8 @@ In order. Each step still goes through security review.
    unreleased; see the [changelog](../CHANGELOG.md).
 2. **Common action gate.** An action catalog shared by alerts and MCP tools,
    execution on approval, and an approval inbox with Web Push, reachable from
-   messenger approval links. Done, unreleased; see the [changelog](../CHANGELOG.md).
+   messenger approval links, with signed watch notices and phone push for alerts.
+   Done, unreleased; see the [changelog](../CHANGELOG.md).
 3. **More choices per failure.** Current-state rule choices for image failures,
    failing rollouts, repeated crashes/OOM and stuck or unreachable controller-owned
    pods; live choices pages from watch and rule/AI buttons in analyzer reports.

@@ -7,6 +7,15 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Added
+
+- Go fuzz tests for every parser that takes outside input: action and choices links, approval routes, signed inbox notices, push endpoints, OAuth registration, authorization and token requests, signed analyzer batches, JWT scope claims and redaction. A weekly workflow fuzzes each target further; SECURITY.md lists what each must hold. / 외부 입력을 해석하는 모든 코드(조치 링크, 승인 경로, 서명된 알림, 푸시 주소, OAuth 등록·인가·토큰, 분석기 묶음, JWT scope, 비밀값 가리기)에 Go fuzz 테스트를 추가하고, 매주 더 오래 도는 워크플로를 둡니다. 대상마다 지켜야 하는 성질은 SECURITY.md에 적었습니다.
+
+### Security
+
+- Anonymous authorization requests can no longer push out a connection whose user has already signed in; when only signed-in entries remain, new requests get HTTP 429. / 익명 인가 요청이 로그인을 마친 연결을 밀어내지 못합니다. 그런 항목만 남으면 새 요청은 HTTP 429를 받습니다.
+- A quoted secret that continues past its line is masked through its closing quote (within 4 KiB and 32 lines) instead of only its first line, and later lines are still scanned so a truncated value cannot hide the next secret. / 여러 줄에 걸친 따옴표 비밀값을 첫 줄만이 아니라 닫는 따옴표까지(4 KiB, 32줄 이내) 가립니다. 이어지는 줄도 계속 검사해 잘린 값 뒤의 비밀이 드러나지 않습니다.
+
 ## [0.7.0] - 2026-11-09
 
 ### Added

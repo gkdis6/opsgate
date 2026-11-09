@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 	"unicode"
@@ -31,7 +32,20 @@ type InitOptions struct {
 	PodLogs        bool
 	// NoteVault enables read-only notes when set.
 	NoteVault string
+	// Recover lists namespace/name globs of workloads the user may restart
+	// or roll back from a phone. It grants ops:write and turns on the
+	// alert → push → choices → approval loop on both processes.
+	Recover []string
+	// Language is the notification language, en or ko.
+	Language string
 }
+
+// Phone recovery wiring shared by the server and watch files.
+const (
+	InboxKeyFile   = "/etc/opsgate/inbox/key"
+	InboxSecret    = "opsgate-inbox-hmac"
+	inClusterInbox = "http://opsgate.opsgate.svc:8787"
+)
 
 // Subject is the configured identity of the initial user.
 func (o InitOptions) Subject() string {
@@ -49,6 +63,13 @@ func (o InitOptions) Subject() string {
 func Generate(o InitOptions) ([]byte, error) {
 	if o.User == "" || strings.ContainsFunc(o.User, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
 		return nil, fmt.Errorf("user must be a single word without spaces")
+	}
+	for _, target := range o.Recover {
+		// The server checks write allowlists only when it starts.
+		ns, name, ok := strings.Cut(target, "/")
+		if _, err := path.Match(target, ""); !ok || ns == "" || name == "" || strings.Contains(name, "/") || len(target) > 512 || err != nil {
+			return nil, fmt.Errorf("recover targets must be namespace/name patterns like apps/* (got %q)", target)
+		}
 	}
 	q := strconv.Quote
 	list := func(items []string) string {
@@ -71,7 +92,7 @@ func Generate(o InitOptions) ([]byte, error) {
 	w("  builtin:")
 	w("    users:")
 	w("      - subject: %s", q(o.Subject()))
-	if o.Write {
+	if o.Write || len(o.Recover) > 0 {
 		w("        scopes: [ops:read, ops:write]")
 	} else {
 		w("        scopes: [ops:read]")
@@ -103,11 +124,35 @@ func Generate(o InitOptions) ([]byte, error) {
 	w("    namespaces: %s", list(o.Namespaces))
 	w("    deny_namespaces: %s", list(o.DenyNamespaces))
 	w("    allow_logs: %t", o.PodLogs)
-	w("    # Write tools stay off until targets are listed, e.g. rollout_restart: [\"apps/*\"]")
+	if len(o.Recover) > 0 {
+		w("    # Phone recovery: restart these workloads or restore a Deployment's last")
+		w("    # working image. Each still needs your passkey approval.")
+		w("    rollout_restart: %s", list(o.Recover))
+		w("    restore_image: %s", list(o.Recover))
+		w("    action_approval_url: %s", q(o.PublicURL))
+	} else {
+		w("    # Write tools stay off until targets are listed, e.g. rollout_restart: [\"apps/*\"]")
+	}
 	if o.NoteVault != "" {
 		w("  note:")
 		w("    enabled: true")
 		w("    vault: %s", q(o.NoteVault))
+	}
+	if len(o.Recover) > 0 {
+		lang, err := initLanguage(o.Language)
+		if err != nil {
+			return nil, err
+		}
+		w("approval:")
+		w("  # Push approvals, alerts and recovery results to your phone or PC.")
+		w("  push:")
+		w("    enabled: true")
+		w("    subject: %s", q(o.PublicURL))
+		w("    language: %s", lang)
+		w("  # Alerts from opsgate watch, signed with the %s Secret.", InboxSecret)
+		w("  inbox_notify:")
+		w("    secret_file: %s", InboxKeyFile)
+		w("    subjects: [%s]", q(o.Subject()))
 	}
 	out := []byte(b.String())
 	cfg, err := Parse(out, "generated configuration")
@@ -115,6 +160,61 @@ func Generate(o InitOptions) ([]byte, error) {
 		return nil, err
 	}
 	if err := cfg.ValidateHTTP(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func initLanguage(lang string) (string, error) {
+	switch lang {
+	case "", "en":
+		return "en", nil
+	case "ko":
+		return "ko", nil
+	}
+	return "", fmt.Errorf("language must be en or ko")
+}
+
+// GenerateWatch writes the `opsgate watch` configuration that pairs with a
+// phone-recovery server configuration: warnings go to the approval inbox and
+// push, with links to the choices page.
+func GenerateWatch(o InitOptions) ([]byte, error) {
+	if len(o.Recover) == 0 {
+		return nil, fmt.Errorf("a watch configuration needs workloads to recover")
+	}
+	q := strconv.Quote
+	list := func(items []string) string {
+		quoted := make([]string, len(items))
+		for i, item := range items {
+			quoted[i] = q(item)
+		}
+		return "[" + strings.Join(quoted, ", ") + "]"
+	}
+	var b strings.Builder
+	w := func(format string, args ...any) { fmt.Fprintf(&b, format+"\n", args...) }
+	w("# Written by `opsgate init` for `opsgate watch` (the opsgate-watch ConfigMap).")
+	w("providers:")
+	w("  kubernetes:")
+	w("    enabled: true")
+	w("    kubeconfig: \"\"   # in-cluster ServiceAccount")
+	w("    namespaces: %s", list(o.Namespaces))
+	w("    deny_namespaces: %s", list(o.DenyNamespaces))
+	w("watch:")
+	w("  # Choices links in alerts open the public server.")
+	w("  approval_url: %s", q(o.PublicURL))
+	w("  # Warnings reach the approval inbox and your phone through the in-cluster")
+	w("  # Service, signed with the %s Secret.", InboxSecret)
+	w("  inbox:")
+	w("    url: %s", inClusterInbox)
+	w("    secret_file: %s", InboxKeyFile)
+	w("    allow_private_http: true")
+	w("  problems_only: true")
+	out := []byte(b.String())
+	cfg, err := Parse(out, "generated watch configuration")
+	if err != nil {
+		return nil, err
+	}
+	if err := cfg.ValidateWatch(); err != nil {
 		return nil, err
 	}
 	return out, nil

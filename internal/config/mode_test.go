@@ -192,3 +192,48 @@ func TestRequireWebDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestGeneratePhoneRecovery(t *testing.T) {
+	o := InitOptions{PublicURL: "https://mcp.example.com", Login: LoginPasskey, User: "alice", Language: "ko",
+		Namespaces: []string{"*"}, DenyNamespaces: []string{"kube-system"}, Recover: []string{"apps/*", "shop/web"}}
+	data, err := Generate(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := Parse(data, "server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, a := c.Providers.Kubernetes, c.Approval
+	if len(c.Auth.Builtin.Users[0].Scopes) != 2 || len(k.RolloutRestart) != 2 || len(k.RestoreImage) != 2 || k.ActionApprovalURL != o.PublicURL {
+		t.Fatalf("recovery targets: %+v\n%s", k, data)
+	}
+	if !a.Web || !a.RequireWeb || !a.Push.Enabled || a.Push.Language != "ko" || a.InboxNotify.SecretFile != InboxKeyFile || a.InboxNotify.Subjects[0] != "passkey:alice" {
+		t.Fatalf("approval wiring: %+v", a)
+	}
+	watch, err := GenerateWatch(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := Parse(watch, "watch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.ValidateWatch(); err != nil {
+		t.Fatal(err)
+	}
+	if w.Watch.ApprovalURL != o.PublicURL || w.Watch.Inbox.SecretFile != a.InboxNotify.SecretFile || !w.Watch.Inbox.AllowPrivateHTTP || !w.Watch.ProblemsOnly {
+		t.Fatalf("watch wiring: %+v", w.Watch)
+	}
+	for name, bad := range map[string]InitOptions{
+		"language": func() InitOptions { b := o; b.Language = "fr"; return b }(),
+		"target":   func() InitOptions { b := o; b.Recover = []string{"no-slash"}; return b }(),
+	} {
+		if _, err := Generate(bad); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if _, err := GenerateWatch(InitOptions{PublicURL: o.PublicURL}); err == nil {
+		t.Error("watch configuration without recovery targets")
+	}
+}

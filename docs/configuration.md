@@ -33,6 +33,16 @@ checked as the HTTP server would check it before it is written. When Kubernetes
 tools are enabled, `opsgate init` defaults the namespace deny list to
 `[kube-system, kube-public, kube-node-lease, opsgate]`; `-deny-namespaces` overrides it.
 
+It also asks which workloads you may restart or roll back from your phone
+(`-recover`, comma-separated `namespace/name` globs; empty by default). Answering
+grants `ops:write`, lists them in `rollout_restart` and `restore_image`, sets
+`action_approval_url`, enables `approval.push` (`-language en` or `ko`) and
+`approval.inbox_notify` with the key file `/etc/opsgate/inbox/key`, and writes a
+matching watch configuration to `-watch-o` (default `opsgate-watch.yaml`) that
+sends warnings to the inbox through `http://opsgate.opsgate.svc:8787`. Both
+files are checked before either is written, and the command prints the
+remaining deployment steps.
+
 `opsgate config show -config <file>` prints the effective configuration,
 mode defaults included, as YAML that opsgate loads unchanged. With web approval enabled,
 this prints `require_web: true` explicitly. Running that output with

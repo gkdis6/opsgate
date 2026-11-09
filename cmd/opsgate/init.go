@@ -20,6 +20,7 @@ import (
 func (c *application) runInit(args []string) error {
 	fs := c.flags("init")
 	out := fs.String("o", "opsgate.yaml", "file to write, or - for stdout")
+	watchOut := fs.String("watch-o", "opsgate-watch.yaml", "watch configuration to write when -recover is set, or - for stdout")
 	force := fs.Bool("force", false, "overwrite an existing file")
 	yes := fs.Bool("yes", false, "use defaults for every question not answered by a flag")
 	var o config.InitOptions
@@ -33,6 +34,8 @@ func (c *application) runInit(args []string) error {
 	deny := fs.String("deny-namespaces", "", "comma-separated namespace globs to deny")
 	fs.BoolVar(&o.PodLogs, "pod-logs", true, "allow reading pod logs")
 	fs.StringVar(&o.NoteVault, "note-vault", "", "absolute path of a Markdown/Obsidian vault; empty leaves notes off")
+	recover := fs.String("recover", "", "comma-separated namespace/name globs you may restart or roll back from your phone; also writes the watch configuration")
+	fs.StringVar(&o.Language, "language", "en", "notification language: en or ko")
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -59,27 +62,70 @@ func (c *application) runInit(args []string) error {
 	ask.list(set["namespaces"], namespaces, "Namespaces to allow (comma-separated globs, * for all)", "*")
 	ask.list(set["deny-namespaces"], deny, "Namespaces to deny", "kube-system,kube-public,kube-node-lease,opsgate")
 	ask.yesNo(set["pod-logs"], &o.PodLogs, "Allow reading pod logs?", true)
+	ask.optional(set["recover"], recover, "Workloads you may restart or roll back from your phone (namespace/name globs like apps/*; empty: none)")
+	if len(split(*recover)) > 0 {
+		ask.choice(set["language"], &o.Language, "Notification language: en or ko", "en", "ko")
+	}
 	ask.optional(set["note-vault"], &o.NoteVault, "Notes vault path (empty: off)")
 	if ask.err != nil {
 		return ask.err
 	}
-	o.Namespaces, o.DenyNamespaces = split(*namespaces), split(*deny)
+	o.Namespaces, o.DenyNamespaces, o.Recover = split(*namespaces), split(*deny), split(*recover)
 
 	data, err := config.Generate(o)
 	if err != nil {
 		return usageError(err.Error())
 	}
-	if *out == "-" {
-		_, err = c.stdout.Write(data)
+	var watchData []byte
+	if len(o.Recover) > 0 {
+		if watchData, err = config.GenerateWatch(o); err != nil {
+			return usageError(err.Error())
+		}
+	}
+	// Check both destinations before writing either.
+	for _, path := range []string{*out, *watchOut} {
+		if path == *watchOut && watchData == nil {
+			continue
+		}
+		if _, err := os.Stat(path); path != "-" && err == nil && !*force {
+			return fmt.Errorf("%s exists; pass -force to overwrite", path)
+		}
+	}
+	if err := c.writeGenerated(*out, data, *force); err != nil {
+		return err
+	}
+	if watchData != nil {
+		if err := c.writeGenerated(*watchOut, watchData, *force); err != nil {
+			return err
+		}
+	}
+	if *out == "-" && (watchData == nil || *watchOut == "-") {
+		return nil
+	}
+	if watchData == nil {
+		fmt.Fprintf(c.stderr, "Next: put it in the opsgate ConfigMap of deploy/kubernetes/opsgate-deployment.yaml and apply.\n")
+		if o.Login == config.LoginPasskey {
+			fmt.Fprintf(c.stderr, "On first start the log prints a one-time link to create the passkey for %s.\n", o.Subject())
+		}
+		return nil
+	}
+	c.printRecoverySteps(o, *out, *watchOut)
+	return nil
+}
+
+// writeGenerated writes one generated file, or prints it for "-".
+func (c *application) writeGenerated(path string, data []byte, force bool) error {
+	if path == "-" {
+		_, err := c.stdout.Write(data)
 		return err
 	}
 	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
-	if *force {
+	if force {
 		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	}
-	f, err := os.OpenFile(*out, flags, 0600)
+	f, err := os.OpenFile(path, flags, 0600)
 	if errors.Is(err, os.ErrExist) {
-		return fmt.Errorf("%s exists; pass -force to overwrite", *out)
+		return fmt.Errorf("%s exists; pass -force to overwrite", path)
 	} else if err != nil {
 		return err
 	}
@@ -90,12 +136,51 @@ func (c *application) runInit(args []string) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.stderr, "wrote %s\n", *out)
-	fmt.Fprintf(c.stderr, "Next: put it in the opsgate ConfigMap of deploy/kubernetes/opsgate-deployment.yaml and apply.\n")
-	if o.Login == config.LoginPasskey {
-		fmt.Fprintf(c.stderr, "On first start the log prints a one-time link to create the passkey for %s.\n", o.Subject())
-	}
+	fmt.Fprintf(c.stderr, "wrote %s\n", path)
 	return nil
+}
+
+// printRecoverySteps lists every command between the generated files and a
+// phone that receives an alert and recovers a workload.
+func (c *application) printRecoverySteps(o config.InitOptions, server, watch string) {
+	p := func(format string, args ...any) { fmt.Fprintf(c.stderr, format+"\n", args...) }
+	namespaces := []string{}
+	for _, target := range o.Recover {
+		ns, _, _ := strings.Cut(target, "/")
+		if !slices.Contains(namespaces, ns) {
+			namespaces = append(namespaces, ns)
+		}
+	}
+	p("")
+	p("Next, from the opsgate repository (deploy/kubernetes):")
+	p("")
+	p("1. Read access for the server and watch, and write access only where you recover:")
+	p("     kubectl apply -f deploy/kubernetes/rbac-readonly.yaml")
+	for _, ns := range namespaces {
+		if strings.ContainsAny(ns, "*?[") {
+			p("     # %q is a pattern: apply rbac-operator.yaml in each matching namespace", ns)
+			continue
+		}
+		p("     kubectl -n %s apply -f deploy/kubernetes/rbac-operator.yaml", ns)
+	}
+	p("2. The key that signs alerts from watch to the server:")
+	p("     kubectl -n opsgate create secret generic %s --from-literal=key=\"$(openssl rand -hex 32)\"", config.InboxSecret)
+	p("3. Both processes, then your configuration in place of the samples:")
+	p("     kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml -f deploy/kubernetes/opsgate-watch.yaml")
+	p("     kubectl -n opsgate create configmap opsgate --from-file=opsgate.yaml=%s --dry-run=client -o yaml | kubectl apply -f -", server)
+	p("     kubectl -n opsgate create configmap opsgate-watch --from-file=opsgate.yaml=%s --dry-run=client -o yaml | kubectl apply -f -", watch)
+	p("     kubectl -n opsgate rollout restart deployment/opsgate deployment/opsgate-watch")
+	if o.Login == config.LoginPasskey {
+		p("4. Create your passkey with the one-time link the server logs:")
+		p("     kubectl -n opsgate logs deploy/opsgate | grep -m1 passkey")
+	} else {
+		p("4. Mount the OAuth client secret (opsgate-upstream) as in docs/authentication.md.")
+	}
+	p("5. On your phone, open %s/approvals, sign in and tap \"Enable notifications\".", strings.TrimRight(o.PublicURL, "/"))
+	p("   On iPhone, first use Share > Add to Home Screen and open opsgate from there.")
+	p("")
+	p("When a pod in those workloads fails, the phone gets a push; tap it, pick an")
+	p("action, approve with your passkey, and the page tells you whether it recovered.")
 }
 
 type asker struct {

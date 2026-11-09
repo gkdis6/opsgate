@@ -110,9 +110,9 @@ spec:
             - name: hmac
               mountPath: /etc/opsgate/watch
               readOnly: true
-            # - name: inbox-hmac
-            #   mountPath: /etc/opsgate/inbox
-            #   readOnly: true
+            - name: inbox-hmac
+              mountPath: /etc/opsgate/inbox
+              readOnly: true
             # - name: smtp
             #   mountPath: /etc/opsgate/smtp
             #   readOnly: true
@@ -124,11 +124,13 @@ spec:
         - name: hmac
           secret:
             secretName: opsgate-watch-hmac
+            optional: true # Only a signed webhook output reads it.
             defaultMode: 0440
-        # - name: inbox-hmac
-        #   secret:
-        #     secretName: opsgate-inbox-hmac
-        #     defaultMode: 0440
+        - name: inbox-hmac
+          secret:
+            secretName: opsgate-inbox-hmac
+            optional: true # Only inbox alerts read it (approval.inbox_notify, watch.inbox).
+            defaultMode: 0440
         # - name: smtp
         #   secret:
         #     secretName: opsgate-watch-smtp

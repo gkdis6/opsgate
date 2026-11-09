@@ -126,7 +126,7 @@ with one JSON object per line.
 
 Every step of the current [roadmap](docs/roadmap.md) shipped in v0.4.0, and the
 three gaps found while sharpening the concept (recovery check, web approval by
-default, one-step phone setup) are closed for the next release. Remaining ideas, such as a PostgreSQL provider and
+default, one-step phone setup) are closed in v0.5.0. Remaining ideas, such as a PostgreSQL provider and
 configuration reload, are listed there without commitments.
 
 

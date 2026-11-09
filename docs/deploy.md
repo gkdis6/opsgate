@@ -16,7 +16,7 @@ Install cosign and GitHub CLI from their official distributions. Select a real
 release tag and the archive for your OS and architecture:
 
 ```sh
-TAG=v0.4.0 # Replace with the release you intend to install.
+TAG=v0.5.0 # Replace with the release you intend to install.
 ARCH=amd64 # Or arm64.
 gh release download "$TAG" --repo gkdis6/opsgate \
   --pattern "opsgate_${TAG#v}_linux_${ARCH}.tar.gz" \

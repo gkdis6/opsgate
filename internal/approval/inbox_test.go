@@ -81,7 +81,8 @@ func TestInboxCSPAndInstallAssets(t *testing.T) {
 	}
 	id := pendingID(t, m, approvalRequest())
 	csp := webRequest(mux, "GET", id, "github:operator", nil, nil).Header().Get("Content-Security-Policy")
-	for _, relaxed := range []string{"script-src", "worker-src", "manifest-src", "connect-src"} {
+	// Approval pages may link the install manifest but run no script.
+	for _, relaxed := range []string{"script-src", "worker-src", "connect-src"} {
 		if strings.Contains(csp, relaxed) {
 			t.Fatal("approval page CSP relaxed", csp)
 		}
@@ -212,5 +213,70 @@ func TestNextOpensNewestWaitingApproval(t *testing.T) {
 	webRequest(mux, "POST", newer, "github:operator", map[string][]string{"csrf": {csrf}, "decision": {"reject"}}, nil)
 	if got := next("github:operator"); got != "/approve/"+older {
 		t.Fatalf("decided approval still chosen: %s", got)
+	}
+}
+
+func TestEveryPageLinksTheInstallableApp(t *testing.T) {
+	m, mux := newWebManager(t)
+	id := pendingID(t, m, approvalRequest())
+	page := webRequest(mux, "GET", id, "github:operator", nil, nil)
+	for _, want := range []string{`rel="manifest" href="/approvals/manifest.webmanifest"`, `rel="apple-touch-icon" href="/approvals/icon.png"`} {
+		if !strings.Contains(page.Body.String(), want) {
+			t.Fatalf("approval page misses %s", want)
+		}
+	}
+	if !strings.Contains(page.Header().Get("Content-Security-Policy"), "manifest-src 'self'") {
+		t.Fatal("approval page CSP blocks the manifest")
+	}
+	inbox := inboxRequest(mux, "GET", "/approvals", "github:operator", "", "", nil).Body.String()
+	if strings.Count(inbox, `rel="manifest"`) != 1 {
+		t.Fatalf("inbox install markup: %s", inbox)
+	}
+}
+
+func TestTestNotification(t *testing.T) {
+	f := newRestartFixture(t, writer())
+	p := testPush(t)
+	f.manager.push = p
+	sent := make(chan struct{}, 4)
+	p.client.Transport = pushRoundTripper(func(*http.Request) (*http.Response, error) {
+		sent <- struct{}{}
+		return pushResponse(201), nil
+	})
+	go p.work()
+	defer func() { p.cancel(); <-p.done }()
+	user := "alice"
+	csrf := f.manager.inboxCSRF(user)
+	if w := inboxRequest(f.mux, "POST", "/approvals/push/test", user, "wrong", "", nil); w.Code != http.StatusForbidden {
+		t.Fatalf("forged test: %d", w.Code)
+	}
+	w := inboxRequest(f.mux, "POST", "/approvals/push/test", user, csrf, "", nil)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"devices":0`) {
+		t.Fatalf("no devices: %d %s", w.Code, w.Body)
+	}
+	if err := p.update(user, pushSubscription{Endpoint: "https://web.push.apple.com/secret"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if w := inboxRequest(f.mux, "POST", "/approvals/push/test", user, csrf, "", nil); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("second test within 10s: %d", w.Code)
+	}
+	f.manager.mu.Lock()
+	f.manager.tests[user] = f.manager.now().Add(-time.Minute)
+	f.manager.mu.Unlock()
+	w = inboxRequest(f.mux, "POST", "/approvals/push/test", user, csrf, "", nil)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"devices":1`) {
+		t.Fatalf("one device: %d %s", w.Code, w.Body)
+	}
+	select {
+	case <-sent:
+	case <-time.After(3 * time.Second):
+		t.Fatal("test notification not sent")
+	}
+	var latest struct{ Body string }
+	if err := json.Unmarshal(inboxRequest(f.mux, "GET", "/approvals/latest", user, "", "", nil).Body.Bytes(), &latest); err != nil || !strings.Contains(latest.Body, "Test notification") {
+		t.Fatalf("latest after test: %+v %v", latest, err)
+	}
+	if inbox := inboxRequest(f.mux, "GET", "/approvals", user, "", "", nil).Body.String(); !strings.Contains(inbox, "Notifications are on for 1 device(s)") || !strings.Contains(inbox, `id="install-hint"`) {
+		t.Fatal("inbox does not count the device")
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"image/png"
 	"net/http"
 	"sync"
+	"sync/atomic"
 )
 
 //go:embed layout.html
@@ -24,12 +25,24 @@ var icon []byte
 // data keeps pages free of extra routes that proxies would have to forward.
 const ImageSource = "img-src data:"
 
+// AppSource is the CSP directive pages need to link the install manifest.
+const AppSource = "manifest-src 'self'"
+
+// app records that the server serves the approval inbox manifest, so every
+// page can be added to a phone's Home Screen as the same installable app.
+var app atomic.Bool
+
+// EnableApp makes every page link the approval inbox's install manifest and
+// icon. iPhone delivers Web Push only to apps added to the Home Screen, and
+// people often add the page they are on, such as an approval or sign-in page.
+func EnableApp() { app.Store(true) }
+
 var iconURL = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(icon))
 
 // NewTemplate adds trusted title and content definitions to the shared layout.
 // All request data must be passed to Execute, never interpolated into source.
 func NewTemplate(source string) *template.Template {
-	funcs := template.FuncMap{"icon": func() template.URL { return iconURL }}
+	funcs := template.FuncMap{"icon": func() template.URL { return iconURL }, "app": app.Load}
 	return template.Must(template.Must(template.New("layout").Funcs(funcs).Parse(layout)).Parse(source))
 }
 

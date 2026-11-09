@@ -59,6 +59,8 @@ type Manager struct {
 	verifyFor, verifyEvery time.Duration
 	stop                   chan struct{}
 	closeOnce              sync.Once
+	// tests records when each user last asked for a test notification.
+	tests map[string]time.Time
 }
 
 const splitWriteMessage = "change is too large to review in the client; split it into smaller writes"
@@ -94,7 +96,7 @@ func New(cfg config.Approval, publicURL string, browser BrowserAuth, logger *aud
 		audit: logger, requireWeb: cfg.RequireWeb, ttl: cfg.TTL, wait: cfg.Wait, publicURL: strings.TrimRight(publicURL, "/"), browser: browser,
 		approvals: make(map[string]*pending), used: make(map[string]time.Time), now: time.Now,
 		window: cfg.Window, windowTools: slices.Clone(cfg.WindowTools), grants: make(map[grantKey]time.Time),
-		verifyFor: 3 * time.Minute, verifyEvery: 10 * time.Second, stop: make(chan struct{}),
+		verifyFor: 3 * time.Minute, verifyEvery: 10 * time.Second, stop: make(chan struct{}), tests: make(map[string]time.Time),
 	}
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err == nil {

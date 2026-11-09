@@ -17,7 +17,7 @@ func adminForm(t *testing.T, f *fixture) string {
 	if resp.StatusCode != 200 {
 		t.Fatalf("admin page: %d %s", resp.StatusCode, body)
 	}
-	if resp.Header.Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'; form-action 'self'" || resp.Header.Get("Cache-Control") != "no-store" {
+	if resp.Header.Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; frame-ancestors 'none'; form-action 'self'" || resp.Header.Get("Cache-Control") != "no-store" {
 		t.Fatal("missing admin page protection")
 	}
 	if strings.Contains(string(body), "<script>") || !strings.Contains(string(body), "&lt;script&gt;") {

@@ -617,7 +617,7 @@ func TestBrowserPagesEscaping(t *testing.T) {
 					}
 				}
 			}
-			if w.Header().Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'" || w.Header().Get("Cache-Control") != "no-store" {
+			if w.Header().Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; frame-ancestors 'none'" || w.Header().Get("Cache-Control") != "no-store" {
 				t.Fatal("security headers changed")
 			}
 		})

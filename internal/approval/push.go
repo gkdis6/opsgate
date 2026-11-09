@@ -238,11 +238,15 @@ func (p *pushSender) work() {
 		case <-p.ctx.Done():
 			return
 		case job := <-p.jobs:
-			for _, sub := range p.subscriptions(job.user) {
+			subs, accepted := p.subscriptions(job.user), 0
+			for _, sub := range subs {
 				if p.ctx.Err() != nil {
 					return
 				}
 				gone, err := p.send(p.ctx, sub.Endpoint, job.expires)
+				if !gone && err == nil {
+					accepted++
+				}
 				if gone {
 					if err := p.update(job.user, sub, true); err != nil {
 						log.Print("cannot remove expired push subscription")
@@ -253,6 +257,8 @@ func (p *pushSender) work() {
 					log.Print("approval push delivery failed")
 				}
 			}
+			// Counts only: what the push service accepted, not what a device showed.
+			log.Printf("approval push accepted for %d of %d devices", accepted, len(subs))
 		}
 	}
 }

@@ -196,7 +196,13 @@ To receive Web Push notifications:
    Desktop and other supported browsers can also install the inbox.
 3. Click **Enable notifications on this device** and allow notifications. On a
    computer, **Open on your phone** shows a QR code that opens the inbox on the
-   phone; approval and choices pages offer the same. The
+   phone; approval and choices pages offer the same. **Send a test notification**
+   pushes to every device of your account, the inbox shows how many devices have
+   notifications on, and the server log records how many devices the push
+   service accepted (counts only). On iPhone and iPad, notifications reach only
+   apps added to the Home Screen; the inbox says so when opened in a Safari tab.
+   Every opsgate page links the install manifest, so adding any of them, such
+   as an approval or sign-in page, installs the same app, which opens the inbox. The
    account must have `ops:write`. Up to 10 devices per user are kept; adding or
    renewing a subscription makes it newest and evicts the oldest if necessary.
    Use **Disable notifications on this device** to remove that device.

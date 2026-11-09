@@ -323,7 +323,8 @@ kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 
 1. On first start, opsgate logs a one-time setup link (valid 24 hours) for each
    user without a passkey. Open it and press **Create passkey**. Later links:
-   `kubectl -n opsgate exec deploy/opsgate -- /opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`.
+   `kubectl -n opsgate exec -it deploy/opsgate -- /opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`,
+   which also draws a QR code to scan with your phone.
 2. Put a TLS ingress or reverse proxy in front that preserves the `Host` header. The public
    host must match `public_url`; other hosts get 421.
 3. Connect a client to `https://mcp.example.com/mcp`, for example

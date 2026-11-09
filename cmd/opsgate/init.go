@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gkdis6/opsgate/internal/config"
+	"github.com/gkdis6/opsgate/internal/qrcode"
 	"golang.org/x/term"
 )
 
@@ -171,13 +172,17 @@ func (c *application) printRecoverySteps(o config.InitOptions, server, watch str
 	p("     kubectl -n opsgate create configmap opsgate-watch --from-file=opsgate.yaml=%s --dry-run=client -o yaml | kubectl apply -f -", watch)
 	p("     kubectl -n opsgate rollout restart deployment/opsgate deployment/opsgate-watch")
 	if o.Login == config.LoginPasskey {
-		p("4. Create your passkey with the one-time link the server logs:")
+		p("4. Create your passkey with the one-time link the server logs, or get a new")
+		p("   link with a QR code to scan with your phone:")
 		p("     kubectl -n opsgate logs deploy/opsgate | grep -m1 passkey")
+		p("     kubectl -n opsgate exec -it deploy/opsgate -- /opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject %s -qr", o.Subject())
 	} else {
 		p("4. Mount the OAuth client secret (opsgate-upstream) as in docs/authentication.md.")
 	}
-	p("5. On your phone, open %s/approvals, sign in and tap \"Enable notifications\".", strings.TrimRight(o.PublicURL, "/"))
+	inbox := strings.TrimRight(o.PublicURL, "/") + "/approvals"
+	p("5. On your phone, open %s, sign in and tap \"Enable notifications\".", inbox)
 	p("   On iPhone, first use Share > Add to Home Screen and open opsgate from there.")
+	c.printQR(inbox, false)
 	p("")
 	p("When a pod in those workloads fails, the phone gets a push; tap it, pick an")
 	p("action, approve with your passkey, and the page tells you whether it recovered.")
@@ -287,4 +292,18 @@ func (c *application) runConfigShow(args []string) error {
 	}
 	_, err = c.stdout.Write(data)
 	return err
+}
+
+// printQR draws link as a QR code on stderr so a phone camera can open it.
+// It draws only on a terminal unless forced, keeping logs and pipes clean.
+func (c *application) printQR(link string, force bool) {
+	f, ok := c.stderr.(*os.File)
+	if !force && (!ok || !term.IsTerminal(int(f.Fd()))) {
+		return
+	}
+	code, err := qrcode.Terminal(link)
+	if err != nil {
+		return
+	}
+	fmt.Fprint(c.stderr, "\n"+code)
 }

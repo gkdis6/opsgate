@@ -194,7 +194,9 @@ To receive Web Push notifications:
 2. Open `/approvals` on each device in a normal browser and sign in. On iPhone,
    choose **Add to Home Screen** first, then open opsgate from the Home Screen.
    Desktop and other supported browsers can also install the inbox.
-3. Click **Enable notifications on this device** and allow notifications. The
+3. Click **Enable notifications on this device** and allow notifications. On a
+   computer, **Open on your phone** shows a QR code that opens the inbox on the
+   phone; approval and choices pages offer the same. The
    account must have `ops:write`. Up to 10 devices per user are kept; adding or
    renewing a subscription makes it newest and evicts the oldest if necessary.
    Use **Disable notifications on this device** to remove that device.

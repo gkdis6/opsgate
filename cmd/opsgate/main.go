@@ -308,6 +308,7 @@ func (c *application) runPasskeyInvite(args []string) error {
 	path := fs.String("config", "", "path to opsgate.yaml (required)")
 	subject := fs.String("subject", "", "configured user, e.g. passkey:alice (required)")
 	ttl := fs.Duration("ttl", 24*time.Hour, "how long the link stays valid (max 168h)")
+	qr := fs.Bool("qr", false, "also draw the link as a QR code on stderr to open it on a phone (default on a terminal)")
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -328,8 +329,11 @@ func (c *application) runPasskeyInvite(args []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(c.stdout, link)
-	return err
+	if _, err = fmt.Fprintln(c.stdout, link); err != nil {
+		return err
+	}
+	c.printQR(link, *qr)
+	return nil
 }
 
 // undoURL links an undo to this server's approval page. Only catalog actions

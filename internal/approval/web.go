@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"math"
 	"net/http"
 	"strings"
@@ -131,6 +132,9 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 		Expires: fmt.Sprintf("Expires in %d min (%s UTC)", int(math.Ceil(p.expires.Sub(m.now()).Minutes())), p.expires.UTC().Format("15:04")),
 		CSRF:    p.csrf, FullReview: p.fullReviewRequired,
 	}
+	if p.decision == "" {
+		view.QR = m.phoneQR("/approve/" + p.id)
+	}
 	if m.windowEligible(p.tool, p.noWindow) {
 		view.Window = windowLabel(m.window)
 	}
@@ -228,6 +232,8 @@ type approvalView struct {
 	// page until the observation ends.
 	Recovery, RecoveryState string
 	Checking                bool
+	// QR opens this approval on a phone while it waits for a decision.
+	QR template.HTML
 	// FullReview opens the arguments because the summary omits content.
 	FullReview bool
 	Target     string
@@ -289,4 +295,5 @@ var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
 <button class="primary" type="submit" name="decision" value="approve">Approve</button>
 {{if .Window}}<button class="primary outline" type="submit" name="decision" value="approve_window">Approve + allow for {{.Window}}</button>{{end}}
 </div>{{if .Window}}<p class="note">The window allows {{.Tool}}{{if .Target}} on {{.Target}}{{end}} with any valid arguments for your user for the next {{.Window}}.</p>{{end}}</form>
+` + phoneBlock + `
 {{end}}{{end}}`)

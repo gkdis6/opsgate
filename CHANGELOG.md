@@ -7,6 +7,8 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-09
+
 ### Added
 
 - QR codes to open pages on a phone: approval, inbox and choices pages show **Open on your phone / 폰에서 열기** with a QR code of the page on the public origin, `opsgate passkey invite` draws the invite as a QR code on a terminal (or with `-qr`), and `opsgate init -recover` ends with a QR code of the inbox. The QR links hold no secret except the passkey invite. / 폰에서 페이지를 여는 QR 코드를 추가합니다. 승인 페이지, 승인함, 조치 선택 페이지에 공개 주소의 해당 페이지를 여는 **폰에서 열기** QR이 나오고, `opsgate passkey invite`는 터미널에서(또는 `-qr`로) 초대 링크를 QR로 그리며, `opsgate init -recover`는 승인함 QR로 끝납니다. 패스키 초대를 빼면 QR 링크에는 비밀이 없습니다.

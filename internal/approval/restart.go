@@ -117,7 +117,8 @@ func (m *Manager) directRequest(w http.ResponseWriter, r *http.Request, subject,
 // runDirect applies an approved write. The person leaving the page must not
 // cancel a write they approved, so only the tool's own deadline applies.
 func (m *Manager) runDirect(ctx context.Context, p *pending, run func(context.Context) (string, error)) string {
-	result, err := run(context.WithoutCancel(ctx))
+	var check tool.Check
+	result, err := run(tool.WithCheckSink(context.WithoutCancel(ctx), func(c tool.Check) { check = c }))
 	if err != nil {
 		result = notApplied + redact.String(err.Error())
 	}
@@ -127,6 +128,9 @@ func (m *Manager) runDirect(ctx context.Context, p *pending, run func(context.Co
 	p.finished = true
 	p.run = nil
 	p.retainUntil = m.now().Add(10 * time.Minute)
+	if err == nil {
+		m.startRecoveryLocked(p, check)
+	}
 	if p.done != nil {
 		close(p.done)
 	}

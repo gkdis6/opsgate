@@ -81,6 +81,11 @@ func (m *Manager) EnablePush(cfg config.ApprovalPush) error {
 
 // Close stops push delivery, including any in-flight HTTP request.
 func (m *Manager) Close() {
+	m.closeOnce.Do(func() {
+		if m.stop != nil {
+			close(m.stop)
+		}
+	})
 	if m.push != nil {
 		m.push.cancel()
 		<-m.push.done

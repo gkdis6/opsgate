@@ -61,6 +61,9 @@ type Plan struct {
 	FullReviewRequired bool
 	// Undo reverses this write once applied; results offer it as a link.
 	Undo *Undo `json:"-"`
+	// Check observes the target after a web-approved apply, so the approval
+	// page can report whether the service recovered. Nil means no check.
+	Check Check `json:"-"`
 	// Data belongs to this invocation and is never shown or serialized.
 	Data any `json:"-"`
 }
@@ -361,5 +364,6 @@ func runApproved[In WriteInput](ctx context.Context, env *Env, name, scope strin
 	if err != nil {
 		return "", errors.New(text)
 	}
+	reportCheck(ctx, plan)
 	return text, nil
 }

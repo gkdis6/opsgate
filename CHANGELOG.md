@@ -7,6 +7,10 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Added
+
+- Recovery check after web-approved Kubernetes actions: opsgate watches the workload for up to 3 minutes and reports Recovered, Not recovered yet (with counts and a reason such as `CrashLoopBackOff`) or unknown on the approval page, in the inbox, in `approval_status` and in the audit log, and pushes a notification that names only the result. Payload-less push notifications now fetch their text from the signed-in `/approvals/latest`. / 웹에서 승인한 Kubernetes 조치 뒤에 복구 확인을 추가합니다. opsgate가 최대 3분간 워크로드를 지켜보고 복구됨, 아직 복구되지 않음(개수와 `CrashLoopBackOff` 같은 사유 포함), 확인 불가를 승인 페이지, 승인함, `approval_status`, 감사 로그에 표시하며, 결과만 담은 푸시 알림을 보냅니다. 내용 없는 푸시 알림은 로그인된 `/approvals/latest`에서 문구를 가져옵니다.
+
 ### Changed
 
 - Builtin auth now defaults to web approval (`approval.web: true`, hence web-only `require_web: true`) without a `mode`, so a compromised client cannot approve its own writes by default. Set `approval.web: false` or `approval.require_web: false` to keep in-client elicitation. / `mode` 없이 builtin 인증을 써도 웹 승인(`approval.web: true`, 따라서 웹 전용 `require_web: true`)이 기본이 되어, 침해된 클라이언트가 기본 설정에서 자기 쓰기를 스스로 승인할 수 없습니다. 클라이언트 내 확인을 유지하려면 `approval.web: false` 또는 `approval.require_web: false`를 설정하세요.

@@ -120,6 +120,7 @@ func newDirect[In WriteInput](env *Env, spec WriteSpec, scope string, maxArgs, m
 			if err != nil {
 				return "", err
 			}
+			reportCheck(ctx, plan)
 			return text, nil
 		},
 	}

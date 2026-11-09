@@ -28,7 +28,9 @@ func (p *provider) planDeletePod(ctx context.Context, c tool.Caller, in deletePo
 		effect = fmt.Sprintf("controller owner %q/%q", owner.Kind, owner.Name)
 	}
 	summary := fmt.Sprintf("Delete pod %s/%s (UID %q; %s)", in.Namespace, in.Name, pod.UID, effect)
-	return identityPlan(pod.UID, pod.ResourceVersion, summary, false)
+	plan, err := identityPlan(pod.UID, pod.ResourceVersion, summary, false)
+	plan.Check = p.podReplacementCheck(in.Namespace, in.Name, pod.UID, owner)
+	return plan, err
 }
 
 func (p *provider) applyDeletePod(ctx context.Context, c tool.Caller, in deletePodInput, plan tool.Plan) (string, error) {

@@ -1,9 +1,17 @@
 'use strict';
 self.addEventListener('push', event => {
-  event.waitUntil(self.registration.showNotification('opsgate', {
-    body: NOTIFICATION_BODY,
-    tag: 'opsgate-approval'
-  }));
+  event.waitUntil((async () => {
+    // The push carries no content; ask the server what it is about.
+    let body = NOTIFICATION_BODY;
+    try {
+      const response = await fetch('/approvals/latest', {credentials: 'same-origin', cache: 'no-store', redirect: 'error'});
+      if (response.ok) {
+        const latest = await response.json();
+        if (typeof latest.body === 'string' && latest.body) body = latest.body;
+      }
+    } catch (_) {}
+    return self.registration.showNotification('opsgate', {body, tag: 'opsgate-approval'});
+  })());
 });
 self.addEventListener('notificationclick', event => {
   event.notification.close();

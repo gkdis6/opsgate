@@ -6,6 +6,11 @@ There are no promised dates for future work.
 
 ## Direction
 
+**AI proposes. Your passkey runs it.** Every change to the server becomes one
+approval card with the exact plan, its source and whether it can be undone;
+only a passkey approval runs it, and the card ends by saying whether the
+service recovered.
+
 People who run servers alone find out about outages late, and even when they
 know the fix they often cannot reach the server. opsgate should alert them
 first, offer the actions that fit the failure, and let them approve one with a
@@ -27,8 +32,20 @@ The work below follows these principles:
 
 ## Next
 
-Nothing is scheduled yet. The six steps that followed from the direction above
-shipped in v0.4.0; see the [changelog](../CHANGELOG.md).
+The six steps that followed from the direction above shipped in v0.4.0.
+Sharpening the direction into the approval card exposed three gaps, now closed
+and unreleased (see the [changelog](../CHANGELOG.md)):
+
+1. **"Applied" is not "recovered".** After a web-approved Kubernetes action the
+   card now watches the workload and reports Recovered or Not recovered yet,
+   with a push. See [recovery check](approval.md#recovery-check).
+2. **In-client approval contradicts "only a passkey runs it".** Builtin auth now
+   defaults to web approval even without a `mode`.
+3. **A long first setup loses solo operators.** `opsgate init -recover` writes
+   both configurations and prints every remaining command.
+
+Next candidates, without commitment: the same recovery check for host provider
+actions (systemd units and Docker containers).
 
 ## Done
 

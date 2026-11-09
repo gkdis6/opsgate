@@ -4,14 +4,29 @@
 
 [한국어](README.ko.md)
 
-**Know when your server breaks, and fix it from wherever you are, without handing AI a shell.**
+**AI proposes. Your passkey runs it.**
 
-opsgate is an open-source operations gate, written in Go, for people who run
-servers on their own. It watches Kubernetes, alerts you when something fails,
-and lets you approve a fix with a passkey from your phone or computer. Once the
-service is back, AI clients such as Claude, ChatGPT, Claude Code and Cursor
-investigate the cause through opsgate's MCP server: a fixed set of tools with
-explicit policy, human-approved changes and an audit log.
+opsgate is an open-source gate, written in Go, for people who run servers on
+their own and want to hand them to AI without handing over a shell. Every change
+to your server, whether an alert rule or an AI client such as Claude, ChatGPT,
+Claude Code or Cursor suggests it, becomes one **approval card**: the exact
+plan, who suggested it and whether it can be undone. Approve the card with a
+passkey on your phone or computer, and the server runs exactly that plan, then
+tells you whether the service recovered. Nothing else can make a change.
+
+Three promises:
+
+1. **Only what you approved runs, exactly as approved.** The server plans again
+   before it runs and stops if anything changed.
+2. **Nothing that deletes your data becomes a card.** Restart, scale, image
+   restore and replacing a pod its controller recreates are the whole catalog.
+3. **From alert to fix in a few taps:** the notification, an action, Approve.
+
+The same card approves everyday AI changes, such as writing a note, so passkey
+approval is already a habit when an outage comes.
+
+opsgate is not a shell or a general agent, not a monitoring dashboard, not
+on-call paging for a team, and it never repairs anything without a person.
 
 > **Status:** early release; notes, the host provider, watch, the approval inbox
 > and the analyzer are experimental. Changes require user authorization, allowed targets and human approval. Read restrictions
@@ -108,7 +123,9 @@ with one JSON object per line.
 
 ## Where it is heading
 
-Every step of the current [roadmap](docs/roadmap.md) shipped in v0.4.0. Remaining ideas, such as a PostgreSQL provider and
+Every step of the current [roadmap](docs/roadmap.md) shipped in v0.4.0, and the
+three gaps found while sharpening the concept (recovery check, web approval by
+default, one-step phone setup) are closed for the next release. Remaining ideas, such as a PostgreSQL provider and
 configuration reload, are listed there without commitments.
 
 

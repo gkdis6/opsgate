@@ -1,0 +1,55 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.gkdis6/opsgate",
+  "title": "opsgate",
+  "description": "Kubernetes MCP server where AI proposes changes and you approve each with a passkey on your phone.",
+  "websiteUrl": "https://gkdis6.github.io/opsgate/",
+  "repository": {
+    "url": "https://github.com/gkdis6/opsgate",
+    "source": "github"
+  },
+  "version": "0.4.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/gkdis6/opsgate:v0.4.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-v",
+          "value": "{config_file}:/etc/opsgate/opsgate.yaml:ro",
+          "description": "Mount your opsgate.yaml (write it with `opsgate init`)",
+          "isRequired": true,
+          "variables": {
+            "config_file": {
+              "description": "Absolute path of your opsgate.yaml",
+              "isRequired": true
+            }
+          }
+        },
+        {
+          "type": "named",
+          "name": "-v",
+          "value": "{kubeconfig}:/home/nonroot/.kube/config:ro",
+          "description": "Mount the kubeconfig the configuration uses (kubeconfig: /home/nonroot/.kube/config)",
+          "variables": {
+            "kubeconfig": {
+              "description": "Absolute path of a kubeconfig with the access you want opsgate to have"
+            }
+          }
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "named",
+          "name": "-config",
+          "value": "/etc/opsgate/opsgate.yaml",
+          "description": "Configuration file inside the container"
+        }
+      ]
+    }
+  ]
+}

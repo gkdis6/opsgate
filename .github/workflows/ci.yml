@@ -33,6 +33,13 @@ jobs:
       - name: Check module tidiness
         if: matrix.go == '1.26.x'
         run: go mod tidy -diff
+      - name: Build the documentation site
+        if: matrix.go == '1.26.x'
+        working-directory: scripts/site
+        run: |
+          go mod tidy -diff
+          go vet .
+          go run . -root ../.. -out "$RUNNER_TEMP/site"
       - name: Check GoReleaser configuration
         if: matrix.go == '1.26.x'
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0

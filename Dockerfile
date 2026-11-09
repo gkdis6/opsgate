@@ -22,6 +22,7 @@ COPY --chmod=0555 ${TARGETPLATFORM}/opsgate /opsgate
 COPY --chmod=0555 ${TARGETPLATFORM}/opsgate-analyzer /opsgate-analyzer
 COPY dist/third_party/ /licenses/
 USER nonroot
+LABEL io.modelcontextprotocol.server.name="io.github.gkdis6/opsgate"
 ENTRYPOINT ["/opsgate"]
 
 # The default target builds from source for local use.

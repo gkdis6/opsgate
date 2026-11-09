@@ -63,3 +63,25 @@ jobs:
           subject-path: |
             dist/release/*.tar.gz
             dist/release/checksums.txt
+      # List the release in the official MCP Registry (and the directories that
+      # mirror it). Prereleases stay out. The image label proves ownership.
+      - name: Publish to the MCP Registry
+        if: ${{ !contains(github.ref_name, '-') }}
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          archive=mcp-publisher_linux_amd64.tar.gz
+          curl --fail --location --silent --show-error --output "$RUNNER_TEMP/$archive" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.8/$archive"
+          curl --fail --location --silent --show-error --output "$RUNNER_TEMP/$archive.sigstore.json" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.8/$archive.sigstore.json"
+          cosign verify-blob --bundle "$RUNNER_TEMP/$archive.sigstore.json" \
+            --certificate-identity https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/v1.8.8 \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com "$RUNNER_TEMP/$archive"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" mcp-publisher
+          jq --arg v "${TAG#v}" --arg image "ghcr.io/gkdis6/opsgate:${TAG}" \
+            '.version = $v | .packages[0].identifier = $image' server.json > "$RUNNER_TEMP/server.json"
+          cd "$RUNNER_TEMP"
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

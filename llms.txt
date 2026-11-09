@@ -1,0 +1,34 @@
+# opsgate
+
+> opsgate is a self-hosted, open-source (Apache-2.0) MCP server for Kubernetes with human-in-the-loop approval, written in Go. AI proposes, your passkey runs it: every change an alert rule or an AI client (Claude, ChatGPT, Claude Code, Cursor) suggests becomes one approval card with the exact plan, its source and whether it can be undone. The person approves it with a passkey on a phone or computer; the server plans again, runs exactly that plan once and reports whether the service recovered.
+
+Key facts:
+
+- Built for people who run servers on their own and want to hand them to AI without giving it a shell, kubectl or Secrets.
+- Write actions come only from a fixed catalog: rollout restart, scale, restore a Deployment's last working image, and delete a pod its controller recreates. Nothing that deletes data is in the catalog. Each target must be allowlisted.
+- Approval happens on a web page after passkey (WebAuthn), GitHub or OIDC sign-in, outside the AI client; this is the default with builtin auth. The AI cannot approve its own change.
+- `opsgate watch` sends Kubernetes alerts to Discord, webhooks, email and the approval inbox, with Web Push to a phone and current-state choices such as restarting or restoring the last working image.
+- After an approved Kubernetes action, opsgate watches the workload and reports Recovered or Not recovered yet (for example with `CrashLoopBackOff`). Scale and image restore offer Undo.
+- Read tools for pods, logs, events and workloads are redacted, size-limited and audited (JSONL). Optional providers: Markdown notes (Obsidian-compatible) as runbooks, and systemd/Docker hosts.
+- Works with claude.ai and ChatGPT connectors (builtin OAuth 2.1), Claude Code, Cursor and other MCP clients over HTTP or stdio. Single Go binary and container image `ghcr.io/gkdis6/opsgate`, signed with cosign.
+- `opsgate init -recover "apps/*"` writes the server and watch configuration for phone recovery in one step.
+
+## Docs
+
+- [README](https://github.com/gkdis6/opsgate/blob/main/README.md): concept, incident flow, comparison with other Kubernetes MCP servers, FAQ and quick starts
+- [Approval](https://github.com/gkdis6/opsgate/blob/main/docs/approval.md): approval cards, web approval, inbox and push, recovery check, undo, choices per failure
+- [Watch alerts](https://github.com/gkdis6/opsgate/blob/main/docs/watch.md): alert outputs, groups and phone alerts through the inbox
+- [Tools](https://github.com/gkdis6/opsgate/blob/main/docs/tools.md): every MCP tool with its limits
+- [Configuration](https://github.com/gkdis6/opsgate/blob/main/docs/configuration.md): all settings, modes and `opsgate init`
+- [Authentication](https://github.com/gkdis6/opsgate/blob/main/docs/authentication.md): passkeys, OAuth 2.1, GitHub/OIDC, external JWT
+- [Deployment](https://github.com/gkdis6/opsgate/blob/main/docs/deploy.md): Kubernetes manifests, RBAC, release verification
+- [Security policy](https://github.com/gkdis6/opsgate/blob/main/SECURITY.md): threat model and known limitations
+
+## Optional
+
+- [Analyzer](https://github.com/gkdis6/opsgate/blob/main/docs/analyzer.md): optional read-only alert investigation that suggests actions
+- [Host provider](https://github.com/gkdis6/opsgate/blob/main/docs/host.md): systemd units and Docker containers without Kubernetes
+- [Notes](https://github.com/gkdis6/opsgate/blob/main/docs/notes.md): runbooks and incident memory in Markdown
+- [Roadmap](https://github.com/gkdis6/opsgate/blob/main/docs/roadmap.md)
+- [Changelog](https://github.com/gkdis6/opsgate/blob/main/CHANGELOG.md)
+- [한국어 README](https://github.com/gkdis6/opsgate/blob/main/README.ko.md)

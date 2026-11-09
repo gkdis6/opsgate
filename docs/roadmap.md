@@ -49,9 +49,11 @@ actions (systemd units and Docker containers).
 
 ## Done
 
-The features below are implemented through v0.5.0. They have not yet been
+The features below are implemented through v0.6.0. They have not yet been
 security-reviewed by third parties.
 
+- QR codes that open approval, inbox and choices pages and passkey invites on a
+  phone.
 - Recovery check after web-approved Kubernetes actions, with a push that names
   only the result.
 - Web approval by default with builtin auth, with or without a `mode`.

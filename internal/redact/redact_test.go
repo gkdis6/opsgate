@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestString(t *testing.T) {
@@ -260,17 +261,45 @@ func TestQuotedAssignments(t *testing.T) {
 			}
 		})
 	}
-	// A later quote cannot be told apart from other text, so only the first
-	// line of a multi-line value is masked.
-	for in, want := range map[string]string{
-		"password=\"hunter2\nmore\r\nsecret\" next=ok": "password=\"" + Mask + "\nmore\r\nsecret\" next=ok",
-		"password='hunter2\nmore' next=ok":             "password='" + Mask + "\nmore' next=ok",
-		"password=\"hunter2\nother=\"visible\"":        "password=\"" + Mask + "\nother=\"visible\"",
+	// A value open at its line end continues to its closing quote. A later
+	// quote may belong to other text; masking it too errs on the safe side.
+	for _, tc := range []struct{ in, str, fragment string }{
+		{"password=\"hunter2\nmore\r\nsecret\" next=ok", "password=\"" + Mask + "\" next=ok", "password=\"" + Mask + "\n" + Mask + "\r\n" + Mask + "\" next=ok"},
+		{"password='hunter2\nmore' next=ok", "password='" + Mask + "' next=ok", "password='" + Mask + "\n" + Mask + "' next=ok"},
+		{"password=\"hunter2\nother=\"visible\"", "password=\"" + Mask + "\"visible\"", "password=\"" + Mask + "\n" + Mask + "\"visible\""},
+		{"password=\"a\\\"b\nc\\\\\" next=ok", "password=\"" + Mask + "\" next=ok", "password=\"" + Mask + "\n" + Mask + "\" next=ok"},
+		{"TOKEN=\"abc\n\nxyz\"", "TOKEN=\"" + Mask + "\"", "TOKEN=\"" + Mask + "\n\n" + Mask + "\""},
 	} {
-		checkString(t, in, want)
-		if got := Fragment(in, Ranges(in), 0, len(in)); got != want {
-			t.Errorf("multiline Fragment = %q, want %q", got, want)
+		checkString(t, tc.in, tc.str)
+		if got := Fragment(tc.in, Ranges(tc.in), 0, len(tc.in)); got != tc.fragment {
+			t.Errorf("multiline Fragment = %q, want %q", got, tc.fragment)
 		}
+	}
+	// Past the bounds only the first line is masked, as for a value that never closes.
+	for _, gap := range []string{strings.Repeat("\n", maxQuotedLines+1), "\n" + strings.Repeat("x", maxQuotedBytes)} {
+		in := "password=\"hunter2" + gap + "\" next=ok"
+		checkString(t, in, "password=\""+Mask+gap+"\" next=ok")
+	}
+}
+
+// Many values left open must not each rescan the rest of the input.
+func TestOpenQuotedValuesLinear(t *testing.T) {
+	in := strings.Repeat("password=\"x\n", 200000)
+	done := make(chan []Range, 1)
+	go func() { done <- Ranges(in) }()
+	select {
+	case ranges := <-done:
+		if len(ranges) != 200000 {
+			t.Fatalf("ranges=%d", len(ranges))
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("open quoted values took too long")
+	}
+	// A truncated value must not hide the next secret behind its quote.
+	checkString(t, "password=\"abc\npassword=\"def\"", "password=\""+Mask+"\""+Mask+"\"")
+	closed := strings.Repeat("password=\"x\ny\" ", 100000)
+	if got := String(closed); strings.Contains(got, "x") || strings.Contains(got, "y") {
+		t.Fatalf("closed values visible: %.80q", got)
 	}
 }
 

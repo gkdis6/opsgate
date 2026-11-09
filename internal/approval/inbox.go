@@ -41,6 +41,7 @@ func (m *Manager) inboxRoutes(mux *http.ServeMux, protect *http.CrossOriginProte
 	mux.Handle("POST /approvals/dismiss", wrap(authenticated(m.dismissNotice)))
 	mux.Handle("GET /approvals", wrap(authenticated(m.inbox)))
 	mux.Handle("GET /approvals/next", wrap(authenticated(m.next)))
+	mux.Handle("GET /approvals/latest", wrap(authenticated(m.latest)))
 	mux.Handle("GET /approvals/inbox.js", wrap(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		_, _ = io.WriteString(w, inboxScript)
@@ -146,6 +147,7 @@ func (m *Manager) subscription(w http.ResponseWriter, r *http.Request, user stri
 
 type inboxItem struct {
 	ID, Title, Target, Source, Status, Result, Undo string
+	Recovery                                        string
 	Created, Expires                                time.Time
 	Pending                                         bool
 }
@@ -174,6 +176,7 @@ func (m *Manager) inbox(w http.ResponseWriter, _ *http.Request, user string) {
 		view.Items = append(view.Items, inboxItem{
 			ID: p.id, Title: p.title, Target: p.target, Source: sourceLabel(p.source),
 			Status: approvalStatus(p), Result: result, Undo: undo, Created: p.created, Expires: p.expires, Pending: p.decision == "",
+			Recovery: recoveryText(p.recovery),
 		})
 	}
 	m.mu.Unlock()
@@ -208,32 +211,71 @@ var inboxPage = ui.NewTemplate(`{{define "title"}}Approval inbox{{end}}
 <form method="post" action="/approvals/dismiss"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button type="submit">Dismiss</button></form></article>{{end}}{{end}}
 {{range .Items}}<article class="target"><h2><a href="/approve/{{.ID}}">{{.Title}}</a></h2>
 {{if .Target}}<p>Target: {{.Target}}</p>{{end}}
-<dl><dt>Status</dt><dd>{{.Status}}</dd><dt>Requested</dt><dd>{{.Created.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd><dt>Expires</dt><dd>{{.Expires.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd>
+<dl><dt>Status</dt><dd>{{.Status}}</dd>{{if .Recovery}}<dt>Recovery</dt><dd>{{.Recovery}}</dd>{{end}}<dt>Requested</dt><dd>{{.Created.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd><dt>Expires</dt><dd>{{.Expires.UTC.Format "2006-01-02 15:04:05 UTC"}}</dd>
 {{if .Source}}<dt>Suggested by</dt><dd>{{.Source}}</dd>{{end}}</dl>
 {{if .Result}}<pre>{{.Result}}</pre>{{end}}
 {{if .Undo}}<p><a href="{{.Undo}}">Undo</a></p>{{end}}</article>{{else}}<p>No live approvals.</p>{{end}}
 {{end}}`)
 
 // next sends a person who tapped a notification straight to what is waiting:
-// their newest undecided approval or alert notice, else the inbox. The push
-// itself carries no content, so the server decides after sign-in.
+// their newest undecided approval, alert notice or finished recovery check,
+// else the inbox. The push itself carries no content, so the server decides
+// after sign-in.
 func (m *Manager) next(w http.ResponseWriter, r *http.Request, user string) {
+	target, _ := m.newest(user)
+	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+// latest tells the service worker what the newest item is, so a payload-less
+// push can still say whether an approval waits or an action recovered. It
+// names only the kind of item, never its target, because notifications show
+// on lock screens.
+func (m *Manager) latest(w http.ResponseWriter, _ *http.Request, user string) {
+	_, kind := m.newest(user)
+	ko := m.push != nil && m.push.cfg.Language == "ko"
+	body := map[string][2]string{
+		"approval":         {"An approval is waiting", "승인 요청이 있습니다"},
+		"notice":           {"An alert needs a decision", "알림에 대한 조치가 필요합니다"},
+		recoveryRecovered:  {"The action worked: the service recovered", "조치 결과: 복구됐습니다"},
+		recoveryFailing:    {"The action was applied but the service has not recovered", "조치 결과: 아직 복구되지 않았습니다"},
+		recoveryUnverified: {"The action was applied; recovery could not be checked", "조치 결과: 복구 여부를 확인하지 못했습니다"},
+	}[kind]
+	text := body[0]
+	if ko {
+		text = body[1]
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(struct {
+		Body string `json:"body,omitempty"`
+	}{text})
+}
+
+// newest returns the page for the user's newest waiting item and its kind.
+func (m *Manager) newest(user string) (target, kind string) {
 	target, newest := "/approvals", time.Time{}
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.sweepLocked()
 	for _, p := range m.approvals {
-		if p.user == user && p.decision == "" && p.created.After(newest) {
-			target, newest = "/approve/"+p.id, p.created
+		if p.user != user {
+			continue
+		}
+		if p.decision == "" && p.created.After(newest) {
+			target, kind, newest = "/approve/"+p.id, "approval", p.created
+		}
+		// A finished recovery check is what its notification was about.
+		if p.recovery.state != "" && p.recovery.state != recoveryChecking && p.recovery.at.After(newest) {
+			target, kind, newest = "/approve/"+p.id, p.recovery.state, p.recovery.at
 		}
 	}
 	if m.notices != nil {
 		m.notices.sweep(m.now())
 		for _, n := range m.notices.users[user] {
 			if n.Updated.After(newest) {
-				target, newest = n.URL, n.Updated
+				target, kind, newest = n.URL, "notice", n.Updated
 			}
 		}
 	}
-	m.mu.Unlock()
-	http.Redirect(w, r, target, http.StatusSeeOther)
+	return target, kind
 }

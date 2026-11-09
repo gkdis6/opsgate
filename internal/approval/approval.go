@@ -54,6 +54,11 @@ type Manager struct {
 	direct      func(name string) *tool.Direct
 	options     func(context.Context, tool.Caller, string, string, string, string) (action.Options, error)
 	hostOptions func(context.Context, tool.Caller, string, string) (action.Options, error)
+	// verifyFor bounds how long an applied action is observed for recovery;
+	// verifyEvery is the polling interval. stop ends observation on Close.
+	verifyFor, verifyEvery time.Duration
+	stop                   chan struct{}
+	closeOnce              sync.Once
 }
 
 const splitWriteMessage = "change is too large to review in the client; split it into smaller writes"
@@ -78,6 +83,8 @@ type pending struct {
 	// run applies a write once approved, outside the manager lock.
 	run    func(context.Context) (string, error)
 	result string
+	// recovery reports whether the target serves again after the apply.
+	recovery recovery
 }
 
 // New returns a Manager. browser may be nil, which disables web approval.
@@ -87,6 +94,7 @@ func New(cfg config.Approval, publicURL string, browser BrowserAuth, logger *aud
 		audit: logger, requireWeb: cfg.RequireWeb, ttl: cfg.TTL, wait: cfg.Wait, publicURL: strings.TrimRight(publicURL, "/"), browser: browser,
 		approvals: make(map[string]*pending), used: make(map[string]time.Time), now: time.Now,
 		window: cfg.Window, windowTools: slices.Clone(cfg.WindowTools), grants: make(map[grantKey]time.Time),
+		verifyFor: 3 * time.Minute, verifyEvery: 10 * time.Second, stop: make(chan struct{}),
 	}
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err == nil {

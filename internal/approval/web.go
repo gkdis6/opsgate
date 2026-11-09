@@ -152,6 +152,7 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 	view.Direct = p.run != nil || p.finished
 	view.Result = p.result
 	m.mu.Unlock()
+
 	if grantEvent != nil {
 		m.audit.Record(*grantEvent)
 	}
@@ -167,6 +168,14 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 		view.Status, view.PageTitle = "Not applied / 적용 안 됨", "Not applied"
 	case view.Direct && view.Result != "" && p.decision == "approved" && p.window == 0:
 		view.Status, view.PageTitle = "Applied / 적용됨", "Applied"
+		m.mu.Lock()
+		rec := p.recovery
+		m.mu.Unlock()
+		if heading := recoveryHeading(rec.state); heading != "" {
+			view.Status, view.PageTitle = heading, heading
+			view.Recovery, view.RecoveryState = rec.detail, rec.state
+			view.Checking = rec.state == recoveryChecking
+		}
 	}
 	var args bytes.Buffer
 	_ = json.Indent(&args, argsJSON, "", "  ")
@@ -215,6 +224,10 @@ type approvalView struct {
 	Result string
 	// Undo is a local catalog link that reverses the applied write.
 	Undo string
+	// Recovery describes the target after the apply; Checking reloads the
+	// page until the observation ends.
+	Recovery, RecoveryState string
+	Checking                bool
 	// FullReview opens the arguments because the summary omits content.
 	FullReview bool
 	Target     string
@@ -251,6 +264,7 @@ func planLines(summary string) []planLine {
 }
 
 var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
+{{define "head"}}{{if .Checking}}<meta http-equiv="refresh" content="10">{{end}}{{end}}
 {{define "content"}}
 <p><a href="/approvals">Approval inbox</a></p>
 {{if .Status}}<h1 class="status">{{.Status}}</h1><p>Tool: <strong>{{.Tool}}</strong></p>
@@ -260,6 +274,9 @@ var approvalPage = ui.NewTemplate(`{{define "title"}}{{.PageTitle}}{{end}}
 {{if .NoWindow}}<p class="note">This target requires approval for every call.</p>{{end}}
 <div class="target plan" aria-label="Target and plan">{{range .Lines}}<span class="plan-line {{.Class}}">{{if .Text}}{{.Text}}{{else}} {{end}}</span>{{end}}</div>
 {{if .Status}}
+{{if .Recovery}}<p class="target"><strong>{{.Recovery}}</strong></p>{{end}}
+{{if .Checking}}<p class="note">opsgate watches the target for up to a few minutes and notifies you when it knows. This page reloads itself.</p>{{end}}
+{{if eq .RecoveryState "not_recovered"}}<p class="note">The change was applied but the target is not serving yet. Undo it, or open the alert again to choose another action.</p>{{end}}
 {{if .Result}}<p>{{.Result}}</p>{{end}}
 {{if .Undo}}<p><a class="button secondary" href="{{.Undo}}">Undo</a> <span class="note">Opens a new plan to approve; nothing changes until you approve it.</span></p>{{end}}
 {{if .MCP}}

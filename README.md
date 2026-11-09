@@ -45,8 +45,10 @@ change in front of a person.
 2. **Stabilize from anywhere.** Tap the notification or the alert's **Choose an
    action** link. After a passkey sign-in you see the actions that fit the
    current state, such as restoring the last working image or restarting the
-   workload. Pick one, review its fresh plan and approve: it runs right away. If
-   it can be reversed, an **Undo** button appears. A phone browser is enough.
+   workload. Pick one, review its fresh plan and approve: it runs right away.
+   opsgate then watches the workload and tells you whether it **recovered**, not
+   only that the change was applied. If it can be reversed, an **Undo** button
+   appears. A phone browser is enough.
 3. **Then find the cause.** With the service back, ask your AI client to
    investigate through opsgate's read tools, or let the optional
    [analyzer](docs/analyzer.md) make a first pass.

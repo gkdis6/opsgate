@@ -45,6 +45,7 @@ func (p *provider) planScale(ctx context.Context, _ tool.Caller, in scaleInput) 
 	if err == nil && scale.Spec.Replicas != in.Replicas {
 		plan.Undo = &tool.Undo{Tool: "k8s_scale", Args: map[string]any{"cluster": p.cfg.Name, "kind": in.Kind, "namespace": in.Namespace, "name": in.Name, "replicas": scale.Spec.Replicas}}
 	}
+	plan.Check = p.workloadCheck(in.Kind, in.Namespace, in.Name)
 	return plan, err
 }
 

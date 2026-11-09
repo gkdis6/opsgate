@@ -40,6 +40,8 @@ type restartFixture struct {
 	planned atomic.Int32
 	summary atomic.Value
 	last    atomic.Value
+	// check, when set, becomes the plan's recovery check.
+	check atomic.Value
 }
 
 func newRestartFixture(t *testing.T, browser BrowserAuth) *restartFixture {
@@ -55,7 +57,11 @@ func newRestartFixture(t *testing.T, browser BrowserAuth) *restartFixture {
 				if in.Namespace == "denied" {
 					return tool.Plan{}, tool.Denied("resource is not allowed")
 				}
-				return tool.Plan{Summary: f.summary.Load().(string), Target: "cluster " + in.Cluster}, nil
+				plan := tool.Plan{Summary: f.summary.Load().(string), Target: "cluster " + in.Cluster}
+				if check, ok := f.check.Load().(tool.Check); ok {
+					plan.Check = check
+				}
+				return plan, nil
 			},
 			Apply: func(_ context.Context, _ tool.Caller, in linkRestartInput, _ tool.Plan) (string, error) {
 				f.applied.Add(1)

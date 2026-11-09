@@ -123,7 +123,7 @@ The default raw write argument limit is 16 KiB; some content-bearing tools raise
 
 ## Audit and operational boundaries
 
-Tool events use `pending`, `denied`, `ok` or `error`. Browser decisions add `approved` or `rejected` events. Grant creation adds `window_granted`. The `approval` field identifies `elicitation`, `web` or `window` where applicable. Plans and display arguments are masked; full successful results are not stored as audit text.
+Tool events use `pending`, `denied`, `ok` or `error`. Browser decisions add `approved` or `rejected` events, and a [recovery check](#recovery-check) adds `recovered`, `not_recovered` or `unverified`. Grant creation adds `window_granted`. The `approval` field identifies `elicitation`, `web` or `window` where applicable. Plans and display arguments are masked; full successful results are not stored as audit text.
 
 Approval confirms a requested action, not arbitrary future actions by the same client. Windows intentionally broaden that promise to a tool on the approved target for their lifetime. OS permissions, Kubernetes RBAC, provider allowlists, scopes and tool restrictions remain necessary.
 
@@ -231,6 +231,33 @@ a trusted browser push service. A persisted endpoint outside the configured
 policy causes startup to fail; remove its subscription before narrowing the
 allowlist. Invalid or unreadable state also fails startup rather than replacing
 the signing key silently.
+
+## Recovery check
+
+"Applied" means the Kubernetes API accepted the change, not that the service
+works again. After a web-approved `k8s_rollout_restart`, `k8s_restore_image`,
+`k8s_scale` or `k8s_delete_pod` (of a pod a controller owns), opsgate watches the
+workload and reports whether it recovered:
+
+| Result | Meaning |
+| --- | --- |
+| Recovered / 복구됨 | The rollout finished and every replica is available, seen twice in a row 10 seconds apart. For a deleted pod, the old pod is gone first. |
+| Not recovered yet / 아직 복구되지 않음 | The Deployment exceeded its progress deadline, or the workload was still not available after 3 minutes. The detail shows counts and the first container reason, such as `CrashLoopBackOff`. |
+| Applied, recovery unknown / 적용됨, 복구 여부 모름 | opsgate could not read the workload during the check. |
+
+The condition is the one `kubectl rollout status` waits for: the controller has
+seen the change, every replica is updated, no old replica remains and every
+updated replica is available. Readiness does not prove application health; a
+failing readiness probe is what makes the check fail.
+
+While the check runs the approval page shows "Applied, checking recovery" and
+reloads itself. When it ends, the result appears on the page, in the inbox and
+in `approval_status` (`recovery`, `recovery_detail`), the audit log records a
+`recovered`, `not_recovered` or `unverified` event, and, with push enabled, a
+notification says which one it was. The notification names only the result,
+never the workload, because it can show on a lock screen; tapping it opens the
+approval page. Writes approved in the client or through an approval window are
+not checked, and the check does not survive a server restart.
 
 ## Undo
 

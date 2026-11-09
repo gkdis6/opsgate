@@ -58,7 +58,9 @@ func (p *provider) planRollout(ctx context.Context, _ tool.Caller, in rolloutInp
 	templateMeta, _ := template["metadata"].(map[string]any)
 	annotations, _ := templateMeta["annotations"].(map[string]any)
 	summary := fmt.Sprintf("Rollout restart %s %s/%s (UID %q; replicas %d, ready %d, images %v)", in.Kind, in.Namespace, in.Name, metadata.GetUID(), desiredCount, ready, images)
-	return identityPlan(metadata.GetUID(), metadata.GetResourceVersion(), summary, annotations != nil)
+	plan, err := identityPlan(metadata.GetUID(), metadata.GetResourceVersion(), summary, annotations != nil)
+	plan.Check = p.workloadCheck(in.Kind, in.Namespace, in.Name)
+	return plan, err
 }
 
 func (p *provider) applyRollout(ctx context.Context, _ tool.Caller, in rolloutInput, plan tool.Plan) (string, error) {

@@ -20,7 +20,7 @@ func (m *Manager) RegisterStatus(s *mcp.Server, env *tool.Env) {
 		return
 	}
 	tool.Add(s, env, tool.Spec{Name: "approval_status", Title: "Approval status", ReadOnly: true,
-		Description: "Read your web approval's status and execution result using approval_id."},
+		Description: "Read your web approval's status, execution result and, for Kubernetes actions, whether the target recovered afterwards (recovery: checking, recovered, not_recovered, unverified) using approval_id."},
 		func(_ context.Context, c tool.Caller, in statusInput) (string, error) {
 			m.mu.Lock()
 			defer m.mu.Unlock()
@@ -32,12 +32,14 @@ func (m *Manager) RegisterStatus(s *mcp.Server, env *tool.Env) {
 			status := approvalStatus(p)
 			text, _, undo := m.splitUndo(p.result)
 			result, err := json.Marshal(struct {
-				Tool    string `json:"tool"`
-				Target  string `json:"target"`
-				Status  string `json:"status"`
-				Result  string `json:"result,omitempty"`
-				UndoURL string `json:"undo_url,omitempty"`
-			}{p.tool, p.target, status, text, undo})
+				Tool     string `json:"tool"`
+				Target   string `json:"target"`
+				Status   string `json:"status"`
+				Result   string `json:"result,omitempty"`
+				UndoURL  string `json:"undo_url,omitempty"`
+				Recovery string `json:"recovery,omitempty"`
+				Detail   string `json:"recovery_detail,omitempty"`
+			}{p.tool, p.target, status, text, undo, p.recovery.state, p.recovery.detail})
 			return string(result), err
 		})
 }

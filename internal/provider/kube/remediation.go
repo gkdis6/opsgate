@@ -537,7 +537,7 @@ func (p *provider) planRestoreImage(ctx context.Context, _ tool.Caller, in resto
 		}
 		// Undoing a revert is an ordinary restore, which needs a ready source.
 		summary := fmt.Sprintf("Return container image of deployment %s/%s (UID %q), container %q: %q -> %q. Source: non-deleting ReplicaSet %q (UID %q) in this Deployment's history. This image is NOT verified healthy: no ready Pod may be running it. Only this container image changes; configuration is not rolled back.", in.Namespace, in.Name, d.UID, in.Container, in.ExpectedImage, in.Image, source.Name, source.UID)
-		return tool.Plan{Summary: summary, NoWindow: true, Undo: undo, Data: restoreSnapshot{Summary: summary, UID: d.UID, Version: d.ResourceVersion, Index: index, SourceUID: source.UID}}, nil
+		return tool.Plan{Summary: summary, NoWindow: true, Undo: undo, Check: p.workloadCheck("deployment", in.Namespace, in.Name), Data: restoreSnapshot{Summary: summary, UID: d.UID, Version: d.ResourceVersion, Index: index, SourceUID: source.UID}}, nil
 	}
 	source, image, err := p.healthyImage(ctx, d, in.Container, in.ExpectedImage, in.Image)
 	if err != nil {
@@ -545,7 +545,7 @@ func (p *provider) planRestoreImage(ctx context.Context, _ tool.Caller, in resto
 	}
 	undo.Args["revert"] = true
 	summary := fmt.Sprintf("Restore container image of deployment %s/%s (UID %q), container %q: %q -> %q. Source: non-deleting ReplicaSet %q (UID %q) has a ready owned Pod with this container ready and running the reported image. Readiness does not guarantee application health or immutable tags. Only this container image changes; configuration is not rolled back.", in.Namespace, in.Name, d.UID, in.Container, in.ExpectedImage, image, source.Name, source.UID)
-	return tool.Plan{Summary: summary, NoWindow: true, Undo: undo, Data: restoreSnapshot{Summary: summary, UID: d.UID, Version: d.ResourceVersion, Index: index, SourceUID: source.UID}}, nil
+	return tool.Plan{Summary: summary, NoWindow: true, Undo: undo, Check: p.workloadCheck("deployment", in.Namespace, in.Name), Data: restoreSnapshot{Summary: summary, UID: d.UID, Version: d.ResourceVersion, Index: index, SourceUID: source.UID}}, nil
 }
 
 // historyImage finds a non-deleting ReplicaSet owned by d whose pod template

@@ -67,6 +67,10 @@ dockers_v2:
       org.opencontainers.image.source: https://github.com/gkdis6/opsgate
       org.opencontainers.image.version: '{{ .Version }}'
       org.opencontainers.image.revision: '{{ .FullCommit }}'
+      # The MCP Registry checks this to verify that server.json owns the image.
+      io.modelcontextprotocol.server.name: io.github.gkdis6/opsgate
+    annotations:
+      io.modelcontextprotocol.server.name: io.github.gkdis6/opsgate
 docker_signs:
   - cmd: cosign
     artifacts: all

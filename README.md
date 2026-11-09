@@ -2,12 +2,13 @@
 
 # opsgate
 
-[한국어](README.ko.md)
+[한국어](README.ko.md) · [Website](https://gkdis6.github.io/opsgate/)
 
 **AI proposes. Your passkey runs it.**
 
-opsgate is an open-source gate, written in Go, for people who run servers on
-their own and want to hand them to AI without handing over a shell. Every change
+opsgate is a self-hosted, open-source MCP server for Kubernetes with
+human-in-the-loop approval, written in Go, for people who run servers on their
+own and want to hand them to AI without handing over a shell or kubectl. Every change
 to your server, whether an alert rule or an AI client such as Claude, ChatGPT,
 Claude Code or Cursor suggests it, becomes one **approval card**: the exact
 plan, who suggested it and whether it can be undone. Approve the card with a
@@ -458,6 +459,60 @@ Opening the link needs sign-in and shows a fresh plan. Nothing changes until a
 person approves, and the plan is checked again before the patch. Only that
 container's image changes; configuration is not rolled back. The result offers
 an Undo link back to the previous image.
+
+
+
+## How it compares
+
+| If you want | Typical choice | What opsgate does differently |
+| --- | --- | --- |
+| An AI client with broad Kubernetes access | General Kubernetes MCP servers such as [kubernetes-mcp-server](https://github.com/containers/kubernetes-mcp-server) or [mcp-server-kubernetes](https://github.com/Flux159/mcp-server-kubernetes) | Only a fixed catalog of reversible actions, each planned, approved with a passkey outside the AI client and checked again before it runs |
+| Approval of AI-proposed changes | Approval-gated MCP servers such as [Kubernetes MCP Guard](https://github.com/mirusser/Kubernetes-MCP-Guard) | The same gate also serves alerts: a failing pod pushes a notification to your phone with choices for the current state, and the card reports whether the service recovered |
+| Alerts with action buttons | Alerting tools that post actions to a chat, such as [Robusta](https://github.com/robusta-dev/robusta) | Actions are approved with a passkey in any browser instead of a chat button, and the same server is an MCP server for root-cause analysis afterwards |
+| Shell access from a phone | An SSH app | No commands to type: pick an action, read the plan, approve |
+
+opsgate fits one person or a small team running their own cluster or server. It
+is not a replacement for team on-call tools, dashboards or general automation.
+
+
+
+## Frequently asked questions
+
+**Can I let Claude or ChatGPT restart my Kubernetes deployment safely?**
+Yes, within limits you set. Connect opsgate as a connector or MCP server, list
+the workloads in `rollout_restart`, and every restart the AI requests becomes an
+approval card that runs only after you approve it with your passkey.
+
+**Can the AI approve its own change?**
+Not by default. With builtin sign-in, approval happens on a web page after a passkey (or
+GitHub/OIDC) sign-in, never inside the AI client. The server recomputes the plan
+before it runs and refuses if it no longer matches what you approved.
+
+**Does opsgate give the AI a shell, kubectl or Secrets?**
+No. There is no shell tool, no arbitrary kubectl and no Kubernetes Secrets tool.
+Results are redacted and size-limited, and every call is audited.
+
+**How do I approve from my phone?**
+Open `/approvals` on your phone, enable notifications (on iPhone, add it to the
+Home Screen first), and tap a notification when it arrives.
+`opsgate init -recover` sets this up; see the
+[phone recovery quick start](#quick-start-recover-from-your-phone).
+
+**What happens if the fix does not work?**
+After the action runs, opsgate watches the workload and reports Recovered or
+Not recovered yet, with the reason, such as `CrashLoopBackOff`. Image restores
+and scaling offer an Undo button.
+
+**Do I need Kubernetes?**
+Kubernetes is the main target. An optional host provider covers systemd units
+and Docker containers on a single server; see [host provider](docs/host.md).
+
+**Which AI clients work?**
+Any MCP client: claude.ai and ChatGPT connectors over HTTP with OAuth, and
+Claude Code, Cursor or other clients over HTTP or stdio.
+
+**What does it cost?**
+Nothing. opsgate is Apache-2.0 licensed and runs on your own infrastructure.
 
 
 

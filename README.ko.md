@@ -2,12 +2,13 @@
 
 # opsgate
 
-[English](README.md)
+[English](README.md) · [웹사이트](https://gkdis6.github.io/opsgate/ko/)
 
 **AI가 제안하고, 패스키가 실행합니다.**
 
-opsgate는 혼자 서버를 운영하면서 서버를 AI에게 맡기되 셸은 내주고 싶지 않은 사람을 위해
-Go로 작성한 오픈 소스 관문입니다. 알림 규칙이 제안하든, Claude, ChatGPT, Claude Code,
+opsgate는 사람 승인(human-in-the-loop)을 거치는 Kubernetes용 셀프 호스팅 오픈 소스
+MCP 서버입니다. 혼자 서버를 운영하면서 서버를 AI에게 맡기되 셸이나 kubectl은 내주고 싶지
+않은 사람을 위해 Go로 작성했습니다. 알림 규칙이 제안하든, Claude, ChatGPT, Claude Code,
 Cursor 같은 AI 클라이언트가 제안하든, 서버에 대한 모든 변경은 **승인 카드** 한 장이
 됩니다. 카드에는 정확한 실행 계획, 누가 제안했는지, 되돌릴 수 있는지가 담깁니다. 폰이나
 컴퓨터에서 패스키로 카드를 승인하면 서버가 그 계획을 그대로 실행하고, 서비스가
@@ -435,6 +436,59 @@ Kubernetes 클러스터에 `restore_image`(`namespace/deployment` 허용 목록)
 링크를 열려면 로그인해야 하고, 그때 새로 계산한 계획이 표시됩니다. 사람이 승인하기 전에는
 아무것도 바뀌지 않으며, 패치 직전에 계획을 다시 확인합니다. 해당 컨테이너의 이미지만 바뀌고
 설정은 되돌리지 않습니다. 결과에는 이전 이미지로 돌아가는 되돌리기 링크가 붙습니다.
+
+
+
+## 다른 도구와의 차이
+
+| 원하는 것 | 흔한 선택 | opsgate가 다른 점 |
+| --- | --- | --- |
+| AI 클라이언트에 Kubernetes를 폭넓게 맡기기 | [kubernetes-mcp-server](https://github.com/containers/kubernetes-mcp-server), [mcp-server-kubernetes](https://github.com/Flux159/mcp-server-kubernetes) 같은 범용 Kubernetes MCP 서버 | 되돌릴 수 있는 조치만 정해진 카탈로그로 제공하고, 조치마다 계획을 세워 AI 클라이언트 밖에서 패스키로 승인받으며, 실행 직전에 다시 확인합니다 |
+| AI가 제안한 변경을 승인하기 | [Kubernetes MCP Guard](https://github.com/mirusser/Kubernetes-MCP-Guard) 같은 승인 기반 MCP 서버 | 같은 관문이 알림에도 쓰입니다. 파드가 실패하면 현재 상태에 맞는 선택지와 함께 폰으로 푸시가 오고, 카드는 서비스가 복구됐는지까지 알려 줍니다 |
+| 조치 버튼이 달린 알림 | [Robusta](https://github.com/robusta-dev/robusta)처럼 채팅에 조치를 올리는 알림 도구 | 채팅 버튼 대신 어느 브라우저에서나 패스키로 승인하고, 같은 서버가 이후 원인 분석용 MCP 서버가 됩니다 |
+| 폰에서 셸 접속 | SSH 앱 | 입력할 명령이 없습니다. 조치를 고르고, 계획을 읽고, 승인합니다 |
+
+opsgate는 혼자 또는 작은 팀이 직접 운영하는 클러스터나 서버에 맞습니다. 팀용 온콜 도구,
+대시보드, 범용 자동화를 대신하지는 않습니다.
+
+
+
+## 자주 묻는 질문
+
+**Claude나 ChatGPT에게 Kubernetes 배포 재시작을 안전하게 맡길 수 있나요?**
+정해 둔 범위 안에서는 가능합니다. opsgate를 커넥터나 MCP 서버로 연결하고 대상 워크로드를
+`rollout_restart`에 넣으면, AI가 요청한 재시작은 모두 승인 카드가 되고 패스키로 승인한
+뒤에만 실행됩니다.
+
+**AI가 스스로 승인할 수 있나요?**
+기본 설정에서는 없습니다. builtin 로그인에서는 AI 클라이언트 안이 아니라, 패스키(또는 GitHub/OIDC)로
+로그인한 웹 페이지에서 승인합니다. 서버는 실행 직전에 계획을 다시 계산하고, 승인한 내용과
+다르면 실행하지 않습니다.
+
+**AI에게 셸, kubectl, Secret을 주나요?**
+아닙니다. 셸 도구도, 임의 kubectl도, Kubernetes Secret 조회 도구도 없습니다. 결과는
+마스킹하고 길이를 제한하며, 모든 호출을 감사 로그에 남깁니다.
+
+**폰에서 어떻게 승인하나요?**
+폰에서 `/approvals`를 열어 알림을 켜고(iPhone은 먼저 홈 화면에 추가), 알림이 오면
+누르세요. `opsgate init -recover`가 이 설정을 해 줍니다.
+[폰으로 복구하기](#빠른-시작-폰으로-복구하기)를 참고하세요.
+
+**조치가 효과가 없으면요?**
+조치를 실행한 뒤 opsgate가 워크로드를 지켜보고 `CrashLoopBackOff` 같은 사유와 함께
+복구됨 또는 아직 복구되지 않음을 알립니다. 이미지 복구와 파드 수 조정에는 되돌리기 버튼이
+있습니다.
+
+**Kubernetes가 꼭 필요한가요?**
+주 대상은 Kubernetes입니다. 선택 기능인 호스트 provider가 서버 한 대의 systemd 유닛과
+Docker 컨테이너를 다룹니다. [호스트 provider](docs/ko/host.md)를 참고하세요.
+
+**어떤 AI 클라이언트에서 쓰나요?**
+MCP 클라이언트라면 모두 됩니다. claude.ai와 ChatGPT 커넥터는 OAuth를 쓰는 HTTP로,
+Claude Code, Cursor 같은 클라이언트는 HTTP나 stdio로 연결합니다.
+
+**비용이 드나요?**
+없습니다. opsgate는 Apache-2.0 라이선스이며 직접 운영하는 인프라에서 돌아갑니다.
 
 
 

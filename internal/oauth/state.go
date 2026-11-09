@@ -300,7 +300,10 @@ func (s *Server) revokeFamily(family string) bool {
 
 // Caller holds mu. Pending browser approvals use a separate, smaller pool so
 // DCR clients cannot crowd out logins needed to approve existing operations.
-// Login entries expire in sweep; live entries are never evicted.
+// Login entries expire in sweep; live entries are never evicted. Connection
+// entries whose user has already signed in are never evicted either: only an
+// allowed user can create them, so anonymous traffic can push out at most
+// authorizations that have not finished sign-in yet.
 func (s *Server) makePendingRoom(in *pendingAuth) bool {
 	login := in.Kind == "login"
 	limit := maxPending
@@ -315,6 +318,12 @@ func (s *Server) makePendingRoom(in *pendingAuth) bool {
 				continue
 			}
 			count++
+			if p.signedIn() {
+				if !login && p.ClientID == in.ClientID {
+					clientCount++
+				}
+				continue
+			}
 			if oldest == "" || p.Expires.Before(s.pending[oldest].Expires) {
 				oldest = key
 			}
@@ -325,17 +334,25 @@ func (s *Server) makePendingRoom(in *pendingAuth) bool {
 				}
 			}
 		}
-		if clientCount >= maxClientPending {
+		switch {
+		case clientCount >= maxClientPending && clientOldest != "":
 			delete(s.pending, clientOldest)
-		} else if count >= limit {
-			if login {
-				return false
-			}
+		case clientCount >= maxClientPending:
+			return false
+		case count >= limit && (login || oldest == ""):
+			return false
+		case count >= limit:
 			delete(s.pending, oldest)
-		} else {
+		default:
 			return true
 		}
 	}
+}
+
+// signedIn reports a transaction past upstream or passkey sign-in, including
+// one whose upstream exchange is still running.
+func (p *pendingAuth) signedIn() bool {
+	return p.Subject != "" || p.PasskeySubject != "" || p.InFlight
 }
 
 func (s *Server) protectedClients() map[string]bool {

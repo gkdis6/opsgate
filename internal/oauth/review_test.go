@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -386,4 +387,63 @@ func TestOIDCImmutableSubjectToken(t *testing.T) {
 	f.s.cfg.Users = f.s.cfg.Users[:1]
 	f.s.mu.Unlock()
 	f.verify(t, tokens["access_token"].(string), false)
+}
+
+// A flood of anonymous authorization requests, for the same client or for
+// others, must not push out a connection whose user has already signed in.
+func TestSignedInAuthorizationSurvivesFlood(t *testing.T) {
+	f := newFixture(t, false, true, true, "Alice")
+	csrf := f.consent(t)
+	query := f.authQuery()
+	for i := range maxPending + maxClientPending {
+		w := httptest.NewRecorder()
+		v := url.Values{}
+		for k, values := range query {
+			v[k] = values
+		}
+		v.Set("state", fmt.Sprint("flood-", i))
+		f.s.authorizeResponse(v)(w, httptest.NewRequest("GET", "/oauth/authorize", nil))
+		if w.Code != http.StatusSeeOther {
+			t.Fatalf("flood request %d: %d", i, w.Code)
+		}
+	}
+	f.s.mu.Lock()
+	for k := range f.s.pending {
+		if f.s.pending[k].Subject == "" {
+			f.s.pending[k].ClientID = "other"
+		}
+	}
+	for i := range maxPending {
+		f.s.pending[fmt.Sprint("anonymous-", i)] = &pendingAuth{Kind: "authorize", ClientID: fmt.Sprint("c", i), Expires: f.s.now().Add(time.Minute)}
+	}
+	f.s.mu.Unlock()
+	w := httptest.NewRecorder()
+	f.s.authorizeResponse(query)(w, httptest.NewRequest("GET", "/oauth/authorize", nil))
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("authorize after flood: %d", w.Code)
+	}
+	r := f.request(t, "POST", "/oauth/consent", url.Values{"csrf_token": {csrf}, "decision": {"approve"}}.Encode(), false)
+	u, _ := url.Parse(r.Header.Get("Location"))
+	if r.StatusCode != http.StatusSeeOther || u.Query().Get("code") == "" {
+		t.Fatalf("signed-in authorization was evicted: %d %s", r.StatusCode, r.Header.Get("Location"))
+	}
+}
+
+// Signed-in entries count toward the per-client cap but cannot be evicted, so
+// a client full of them refuses new requests instead.
+func TestSignedInAuthorizationsFillClient(t *testing.T) {
+	f := newFixture(t, false, true, true, "Alice")
+	f.s.mu.Lock()
+	for i := range maxClientPending {
+		f.s.pending[fmt.Sprint("signed-", i)] = &pendingAuth{Kind: "authorize", ClientID: f.id, Subject: "github:alice", Expires: f.s.now().Add(time.Minute)}
+	}
+	f.s.mu.Unlock()
+	w := httptest.NewRecorder()
+	f.s.authorizeResponse(f.authQuery())(w, httptest.NewRequest("GET", "/oauth/authorize", nil))
+	f.s.mu.Lock()
+	count := len(f.s.pending)
+	f.s.mu.Unlock()
+	if w.Code != http.StatusTooManyRequests || count != maxClientPending {
+		t.Fatalf("status=%d pending=%d", w.Code, count)
+	}
 }

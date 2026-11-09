@@ -31,7 +31,9 @@ type Range struct {
 
 // Ranges returns sorted, non-overlapping sensitive ranges in s.
 // Incomplete private-key PEM blocks extend to the source boundary.
-// Quoted assignments left open on their line extend to the line boundary.
+// A quoted assignment left open on its line extends to its closing quote when
+// that quote follows within maxQuotedBytes and maxQuotedLines; otherwise it
+// extends to the end of its first line.
 func Ranges(s string) []Range {
 	var ranges []Range
 	if strings.Contains(s, "PRIVATE KEY-----") {
@@ -156,6 +158,7 @@ func render(s string, ranges []Range, start, end int, preserveLines bool) string
 func assignmentRanges(s string) []Range {
 	var ranges []Range
 	pos, authorityEnd := 0, 0
+	var quotes quoteScanner
 	hasFlags := strings.Contains(s, "--")
 	separators := ":="
 	if hasFlags {
@@ -231,7 +234,11 @@ func assignmentRanges(s string) []Range {
 			continue
 		}
 		value := assignmentValue.FindString(s[pos:])
-		complete := value != ""
+		complete, multiline := value != "", false
+		if !complete {
+			value, complete = quotes.multiline(s, pos)
+			multiline = complete
+		}
 		if !complete {
 			value = quotedTail(s[pos:])
 		}
@@ -252,13 +259,79 @@ func assignmentRanges(s string) []Range {
 			}
 		}
 		ranges = append(ranges, Range{valueStart, valueEnd})
-		pos += len(value)
+		// The closing quote of a multi-line value may really open a later
+		// value, so keep scanning its later lines for further assignments.
+		if line := strings.IndexAny(value, "\r\n"); multiline && line > 0 {
+			pos += line
+		} else {
+			pos += len(value)
+		}
 	}
 	return ranges
 }
 
+const (
+	maxQuotedBytes = 4 << 10
+	maxQuotedLines = 32
+)
+
+// quoteScanner finds closing quotes for values that continue past their first
+// line. It caches the next unescaped quote of each kind so a long run of open
+// values costs linear time instead of one bounded scan each.
+type quoteScanner struct {
+	from, at [2]int
+	valid    [2]bool
+}
+
+// multiline returns s[pos:] through the closing quote of the quoted value that
+// starts at pos, when it closes within the byte and line bounds.
+func (q *quoteScanner) multiline(s string, pos int) (string, bool) {
+	if pos >= len(s) || s[pos] != '"' && s[pos] != '\'' {
+		return "", false
+	}
+	kind := 0
+	if s[pos] == '\'' {
+		kind = 1
+	}
+	end := q.next(s, kind, pos+1)
+	if end < 0 || end-pos > maxQuotedBytes || strings.Count(s[pos:end], "\n") > maxQuotedLines {
+		return "", false
+	}
+	return s[pos : end+1], true
+}
+
+// next returns the first quote of the given kind at or after from that is not
+// escaped by an odd run of backslashes, or -1.
+func (q *quoteScanner) next(s string, kind, from int) int {
+	if q.valid[kind] && q.from[kind] <= from && (q.at[kind] < 0 || from <= q.at[kind]) {
+		return q.at[kind]
+	}
+	quote := byte('"')
+	if kind == 1 {
+		quote = '\''
+	}
+	found := -1
+	for i := from; i < len(s); {
+		j := strings.IndexByte(s[i:], quote)
+		if j < 0 {
+			break
+		}
+		j += i
+		slashes := 0
+		for k := j - 1; k >= from && s[k] == '\\'; k-- {
+			slashes++
+		}
+		if slashes%2 == 0 {
+			found = j
+			break
+		}
+		i = j + 1
+	}
+	q.from[kind], q.at[kind], q.valid[kind] = from, found, true
+	return found
+}
+
 // quotedTail returns a quoted value left open on its line, through that line.
-// A later quote may belong to other text, so it never closes this value.
 func quotedTail(s string) string {
 	if len(s) == 0 || s[0] != '"' && s[0] != '\'' {
 		return ""

@@ -88,7 +88,7 @@ spec:
       containers:
         - name: opsgate
           # Replace with a verified release tag AND its immutable manifest digest.
-          image: ghcr.io/gkdis6/opsgate:v0.6.0
+          image: ghcr.io/gkdis6/opsgate:v0.7.0
           imagePullPolicy: Always
           args: [-transport, http, -config, /etc/opsgate/opsgate.yaml]
           ports:

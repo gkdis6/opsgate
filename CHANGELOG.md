@@ -7,6 +7,8 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-09
+
 ### Added
 
 - **Send a test notification / 테스트 알림 보내기** in the approval inbox (`POST /approvals/push/test`, CSRF-protected, once per 10 seconds), a count of devices with notifications on, and a log line with how many devices the push service accepted. / 승인함에 **테스트 알림 보내기**(`POST /approvals/push/test`, CSRF 보호, 10초에 한 번)와 알림을 켠 기기 수를 추가하고, 푸시 서비스가 받아들인 기기 수를 로그에 남깁니다.

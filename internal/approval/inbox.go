@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
+	"html/template"
 	"io"
 	"mime"
 	"net/http"
@@ -153,6 +154,8 @@ type inboxItem struct {
 }
 
 type inboxView struct {
+	// QR opens the inbox on a phone, where notifications are enabled.
+	QR      template.HTML
 	Notices []inboxNotice
 	CSRF    string
 	Push    bool
@@ -160,7 +163,7 @@ type inboxView struct {
 }
 
 func (m *Manager) inbox(w http.ResponseWriter, _ *http.Request, user string) {
-	view := inboxView{CSRF: m.inboxCSRF(user), Push: m.push != nil && m.canSubscribe(user)}
+	view := inboxView{CSRF: m.inboxCSRF(user), Push: m.push != nil && m.canSubscribe(user), QR: m.phoneQR("/approvals")}
 	m.mu.Lock()
 	m.sweepLocked()
 	if m.notices != nil {
@@ -205,6 +208,7 @@ var inboxPage = ui.NewTemplate(`{{define "title"}}Approval inbox{{end}}
 <button type="button" id="disable-push">Disable notifications on this device</button>
 <p class="note">On iPhone, use Add to Home Screen first, then open opsgate from the Home Screen and enable notifications.</p>
 <p id="push-status" role="status"></p>{{else}}<p class="note">Notifications are unavailable for this account or disabled on this server.</p>{{end}}
+` + phoneBlock + `
 {{if .Notices}}<h2>Alerts waiting for a decision</h2>
 {{range .Notices}}<article class="target"><h3>{{.Reason}}</h3><p>{{if .HostKind}}host {{.HostKind}} / {{.Pod}}{{else}}{{.Cluster}} / {{.Namespace}} / {{.Pod}}{{end}}</p>
 <p>{{.OccurredAt.UTC.Format "2006-01-02 15:04:05 UTC"}}</p><a href="{{.URL}}">Choose an action</a>

@@ -120,3 +120,25 @@ func TestNoCheckKeepsAppliedStatus(t *testing.T) {
 		t.Fatalf("page: %s", w.Body)
 	}
 }
+
+func TestOpenOnPhoneQR(t *testing.T) {
+	f := newRestartFixture(t, writer())
+	path, csrf := f.open(t, "alice")
+	page := f.do("GET", path, "alice", nil).Body.String()
+	if !strings.Contains(page, "Open on your phone / 폰에서 열기") || !strings.Contains(page, "<svg ") {
+		t.Fatalf("pending approval has no QR: %s", page)
+	}
+	inbox := f.do("GET", "/approvals", "alice", nil).Body.String()
+	if !strings.Contains(inbox, "<svg ") {
+		t.Fatalf("inbox has no QR: %s", inbox)
+	}
+	done := f.do("POST", path, "alice", url.Values{"csrf": {csrf}, "decision": {"approve"}}).Body.String()
+	if strings.Contains(done, "<svg ") {
+		t.Fatal("decided approval still offers a QR")
+	}
+	// A plain-http origin cannot be opened from a phone.
+	f.manager.publicURL = "http://127.0.0.1:8787"
+	if strings.Contains(f.do("GET", "/approvals", "alice", nil).Body.String(), "<svg ") {
+		t.Fatal("QR for a loopback origin")
+	}
+}

@@ -68,6 +68,11 @@ To add a passkey, run this as the server's OS account:
 opsgate passkey invite -config opsgate.yaml -subject passkey:alice -ttl 24h
 ```
 
+The link goes to stdout. On a terminal the command also draws it as a QR code
+on stderr, so you can register the passkey on your phone by scanning the screen;
+`-qr` draws it without a terminal too (for example `kubectl exec` without `-t`).
+Anyone who sees the code can use the invite, so treat the screen like the link.
+
 The command requires `state_file` and writes hashed invite files into `passkey-invites` beside it. The user must be configured and the active provider must be `passkey`. Invites are one-time, default to 24 hours, and can last at most seven days. Registered passkeys are saved in the state file when persistence is configured.
 
 ### GitHub

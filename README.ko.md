@@ -312,7 +312,8 @@ kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 
 1. 처음 시작하면 패스키가 없는 사용자마다 일회용 등록 링크(24시간 유효)가 로그에
    남습니다. 링크를 열고 **Create passkey**를 누르세요. 링크를 새로 만들려면
-   `kubectl -n opsgate exec deploy/opsgate -- /opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`를 실행하세요.
+   `kubectl -n opsgate exec -it deploy/opsgate -- /opsgate passkey invite -config /etc/opsgate/opsgate.yaml -subject passkey:alice`를 실행하세요.
+   폰으로 스캔할 수 있는 QR 코드도 함께 그립니다.
 2. 앞단에 `Host` 헤더를 그대로 전달하는 TLS ingress나 리버스 프록시를 두세요. 공개 호스트는
    `public_url`과 같아야 하며, 다른 호스트로 온 요청은 421로 거부됩니다.
 3. 클라이언트를 `https://mcp.example.com/mcp`에 연결하세요. 예:

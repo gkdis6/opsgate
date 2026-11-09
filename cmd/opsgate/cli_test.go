@@ -267,3 +267,19 @@ func TestInitPhoneRecoveryWritesBothFiles(t *testing.T) {
 		t.Fatal("server file written although the watch file exists")
 	}
 }
+
+func TestPasskeyInviteQR(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "opsgate.yaml")
+	data := fmt.Sprintf("mode: kubernetes\nhttp:\n  public_url: https://ops.example\nauth:\n  builtin:\n    state_file: %q\n    users:\n      - subject: passkey:alice\n        scopes: [ops:read]\n", filepath.Join(dir, "state.json"))
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, out, errout, _ := testApp()
+	if code := c.execute([]string{"passkey", "invite", "-config", path, "-subject", "passkey:alice", "-qr"}); code != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, errout)
+	}
+	if !strings.HasPrefix(out.String(), "https://ops.example/") || !strings.Contains(errout.String(), "\x1b[30;47m") {
+		t.Fatalf("stdout=%q stderr has no QR: %q", out, errout.String()[:min(80, errout.Len())])
+	}
+}

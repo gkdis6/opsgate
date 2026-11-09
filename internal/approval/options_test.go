@@ -64,6 +64,9 @@ func TestChoicesPageAndTrust(t *testing.T) {
 				if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Source / 출처: rule") || !strings.Contains(w.Body.String(), "/approve/action/") || strings.Contains(w.Body.String(), "<script>") {
 					t.Fatalf("%d %s", w.Code, w.Body)
 				}
+				if !strings.Contains(w.Body.String(), "Open on your phone") || !strings.Contains(w.Body.String(), "<svg ") {
+					t.Fatalf("choices page has no QR: %s", w.Body)
+				}
 				if scenario == "gone" && !strings.Contains(w.Body.String(), "pod is gone") {
 					t.Fatal(w.Body)
 				}

@@ -3,6 +3,7 @@ package approval
 import (
 	"context"
 	"encoding/json"
+	"html/template"
 	"net/http"
 	"net/url"
 
@@ -76,7 +77,7 @@ func (m *Manager) optionsRequest(w http.ResponseWriter, r *http.Request, subject
 		choices = append(choices, choice)
 	}
 	options.Actions = choices
-	ui.Render(w, http.StatusOK, optionsPage, options)
+	m.renderOptions(w, r, options)
 }
 
 var optionsPage = ui.NewTemplate(`{{define "title"}}Choose an action / 조치 선택{{end}}
@@ -85,7 +86,17 @@ var optionsPage = ui.NewTemplate(`{{define "title"}}Choose an action / 조치 �
 <p>Current state is checked each time. Choose an action, then review and approve its plan.<br>현재 상태를 다시 확인합니다. 조치를 선택한 뒤 계획을 검토하고 승인하세요.</p>
 {{if .PodGone}}<p>The pod is gone. Any choices below are for the verified current workload.<br>파드가 사라졌습니다. 아래 선택지는 확인된 현재 워크로드에 대한 것입니다.</p>{{end}}
 {{range .Actions}}<div class="target"><a class="button primary" href="{{.URL}}">{{.Label}} / {{.LabelKO}}</a><p>{{.Reason}}<br>{{.ReasonKO}}</p><p>Source / 출처: rule</p></div>{{else}}<p>No applicable actions / 적용 가능한 조치가 없습니다.</p>{{end}}
-{{if .Hint}}<p>{{.Hint}}</p>{{end}}{{end}}`)
+{{if .Hint}}<p>{{.Hint}}</p>{{end}}
+` + phoneBlock + `{{end}}`)
+
+// renderOptions shows the choices with a QR code that opens the same page on
+// a phone, for alerts read on a computer.
+func (m *Manager) renderOptions(w http.ResponseWriter, r *http.Request, options action.Options) {
+	ui.Render(w, http.StatusOK, optionsPage, struct {
+		action.Options
+		QR template.HTML
+	}{options, m.phoneQR(r.URL.RequestURI())})
+}
 
 // SetHostOptions connects the browser to the host provider's rule engine.
 func (m *Manager) SetHostOptions(evaluate func(context.Context, tool.Caller, string, string) (action.Options, error)) {
@@ -145,5 +156,5 @@ func (m *Manager) hostOptionsRequest(w http.ResponseWriter, r *http.Request, sub
 		choices = append(choices, choice)
 	}
 	options.Actions = choices
-	ui.Render(w, http.StatusOK, optionsPage, options)
+	m.renderOptions(w, r, options)
 }

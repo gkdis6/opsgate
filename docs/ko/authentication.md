@@ -68,6 +68,11 @@ opsgate -config opsgate.yaml -transport http
 opsgate passkey invite -config opsgate.yaml -subject passkey:alice -ttl 24h
 ```
 
+링크는 표준 출력으로 나옵니다. 터미널에서 실행하면 같은 링크를 표준 오류에 QR 코드로도
+그리므로, 화면을 폰으로 스캔해 폰에서 패스키를 등록할 수 있습니다. `-qr`을 주면 터미널이
+아닐 때도(예: `-t` 없는 `kubectl exec`) QR을 그립니다. 코드를 본 사람은 누구나 초대를 쓸 수
+있으니 화면도 링크처럼 다루세요.
+
 이 명령에는 `state_file`이 필요하며, 상태 파일과 같은 디렉터리의 `passkey-invites`에 해시 처리한 초대 파일을 씁니다. 사용자가 설정에 등록되어 있고 활성 provider가 `passkey`여야 합니다. 초대는 일회용이며, 유효 기간은 기본 24시간, 최대 7일입니다. 상태를 저장하도록 설정하면 등록한 패스키도 상태 파일에 저장해 재시작 후에도 유지합니다.
 
 ### GitHub

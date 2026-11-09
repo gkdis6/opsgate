@@ -2,7 +2,7 @@
 
 [한국어](docs/ko/security.md)
 
-opsgate is a released 0.6.x project implementing remote HTTP, authentication and human-approved writes. The optional note provider is experimental. It has not yet been security-reviewed by third parties. Review the implementation you deploy.
+opsgate is a released 0.7.x project implementing remote HTTP, authentication and human-approved writes. The optional note provider is experimental. It has not yet been security-reviewed by third parties. Review the implementation you deploy.
 
 ## Threat model
 

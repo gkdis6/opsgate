@@ -33,8 +33,8 @@ The work below follows these principles:
 ## Next
 
 The six steps that followed from the direction above shipped in v0.4.0.
-Sharpening the direction into the approval card exposed three gaps, now closed
-and unreleased (see the [changelog](../CHANGELOG.md)):
+Sharpening the direction into the approval card exposed three gaps, closed in
+v0.5.0 (see the [changelog](../CHANGELOG.md)):
 
 1. **"Applied" is not "recovered".** After a web-approved Kubernetes action the
    card now watches the workload and reports Recovered or Not recovered yet,
@@ -49,9 +49,14 @@ actions (systemd units and Docker containers).
 
 ## Done
 
-The features below are implemented through v0.4.0. They have not yet been
+The features below are implemented through v0.5.0. They have not yet been
 security-reviewed by third parties.
 
+- Recovery check after web-approved Kubernetes actions, with a push that names
+  only the result.
+- Web approval by default with builtin auth, with or without a `mode`.
+- `opsgate init -recover` for phone recovery in one step.
+- Official MCP Registry listing, documentation site and `llms.txt`.
 - Approving runs the action: the server rechecks the plan and runs it once, as
   the original caller. Chat calls wait up to `approval.wait`; `approval_status`
   reads the result later.

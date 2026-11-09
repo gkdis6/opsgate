@@ -16,7 +16,7 @@ note provider는 선택 사항이고 아직 실험 단계입니다.
 실제로 존재하는 릴리스 태그를 지정하고, 운영체제와 아키텍처에 맞는 아카이브를 선택하세요.
 
 ```sh
-TAG=v0.4.0 # Replace with the release you intend to install.
+TAG=v0.5.0 # Replace with the release you intend to install.
 ARCH=amd64 # Or arm64.
 gh release download "$TAG" --repo gkdis6/opsgate \
   --pattern "opsgate_${TAG#v}_linux_${ARCH}.tar.gz" \

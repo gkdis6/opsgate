@@ -7,6 +7,8 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-09
+
 ### Added
 
 - Listing in the official MCP Registry as `io.github.gkdis6/opsgate` (`server.json`, published by the release workflow; the image carries the `io.modelcontextprotocol.server.name` label), a documentation site at https://gkdis6.github.io/opsgate/ with a sitemap, and `llms.txt`. The README gains a comparison with other Kubernetes MCP servers and an FAQ. / 공식 MCP Registry에 `io.github.gkdis6/opsgate`로 등록합니다(`server.json`, 릴리스 워크플로가 게시, 이미지에 `io.modelcontextprotocol.server.name` 라벨). 사이트맵이 있는 문서 사이트 https://gkdis6.github.io/opsgate/ 와 `llms.txt`를 추가하고, README에 다른 Kubernetes MCP 서버와의 비교와 FAQ를 넣습니다.

@@ -7,6 +7,15 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Added
+
+- **Send a test notification / 테스트 알림 보내기** in the approval inbox (`POST /approvals/push/test`, CSRF-protected, once per 10 seconds), a count of devices with notifications on, and a log line with how many devices the push service accepted. / 승인함에 **테스트 알림 보내기**(`POST /approvals/push/test`, CSRF 보호, 10초에 한 번)와 알림을 켠 기기 수를 추가하고, 푸시 서비스가 받아들인 기기 수를 로그에 남깁니다.
+- On iPhone and iPad, the inbox opened in a Safari tab explains that notifications need **Add to Home Screen**. / iPhone과 iPad의 Safari 탭에서 승인함을 열면 알림을 받으려면 **홈 화면에 추가**가 필요하다고 안내합니다.
+
+### Changed
+
+- Every opsgate page (approval, choices, sign-in, admin) links the install manifest and icon, so adding any page to the Home Screen installs the same app; their CSP allows `manifest-src 'self'`. / 승인, 조치 선택, 로그인, 관리 페이지 모두 설치 정보와 아이콘을 연결해 어느 페이지에서 홈 화면에 추가해도 같은 앱이 설치되며, CSP에 `manifest-src 'self'`를 허용합니다.
+
 ## [0.6.0] - 2026-11-09
 
 ### Added

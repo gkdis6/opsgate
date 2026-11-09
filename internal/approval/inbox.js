@@ -10,6 +10,29 @@
     if (status) status.textContent = 'Cannot register notifications on this device.';
   });
   if (!enable || !disable) return;
+  // iPhone and iPad deliver Web Push only to apps added to the Home Screen.
+  const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const installed = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  const hint = document.getElementById('install-hint');
+  if (apple && !installed && hint) hint.hidden = false;
+  const test = document.getElementById('test-push');
+  if (test) test.addEventListener('click', async () => {
+    test.disabled = true;
+    try {
+      const response = await fetch('/approvals/push/test', {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'X-CSRF-Token': document.getElementById('push-csrf').value}
+      });
+      if (response.status === 429) { status.textContent = 'Wait a few seconds before sending another test.'; return; }
+      if (!response.ok || response.redirected) throw new Error('test failed');
+      const {devices} = await response.json();
+      status.textContent = devices
+        ? 'Sent to ' + devices + ' device(s). If nothing arrives within a minute, disable and enable notifications again on this device. / ' + devices + '대에 보냈습니다. 1분 안에 오지 않으면 이 기기에서 알림을 껐다가 다시 켜세요.'
+        : 'No device has notifications on. Enable them first. / 알림을 켠 기기가 없습니다. 먼저 알림을 켜세요.';
+    } catch (_) {
+      status.textContent = 'Cannot send a test notification. Reopen the inbox after signing in.';
+    } finally { test.disabled = false; }
+  });
   if (!registration || !('PushManager' in window) || !('Notification' in window)) {
     enable.disabled = disable.disabled = true;
     status.textContent = 'Notifications are unavailable. On iPhone, add opsgate to the Home Screen first.';

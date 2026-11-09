@@ -17,7 +17,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	}))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		htmlHeaders(w)
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; "+ui.ImageSource+"; frame-ancestors 'none'; form-action 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; "+ui.ImageSource+"; "+ui.AppSource+"; frame-ancestors 'none'; form-action 'self'")
 		protect.Handler(s.RequireUser(s.clientsPage)).ServeHTTP(w, r)
 	})
 	mux.Handle("GET /admin/clients", handler)

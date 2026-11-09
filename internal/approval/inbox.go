@@ -63,6 +63,7 @@ func (m *Manager) inboxRoutes(mux *http.ServeMux, protect *http.CrossOriginProte
 		_, _ = io.WriteString(w, strings.ReplaceAll(workerScript, "NOTIFICATION_BODY", strconv.Quote(body)))
 	})))
 	mux.Handle("GET /approvals/icon.png", securityHeaders(http.HandlerFunc(ui.Icon)))
+	ui.EnableApp()
 	mux.Handle("GET /approvals/manifest.webmanifest", wrap(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/manifest+json")
 		_, _ = io.WriteString(w, `{"id":"/approvals","name":"opsgate","short_name":"opsgate","start_url":"/approvals","scope":"/","display":"standalone","icons":[{"src":"/approvals/icon.png","sizes":"512x512","type":"image/png","purpose":"any"}]}`)
@@ -76,6 +77,7 @@ func (m *Manager) inboxRoutes(mux *http.ServeMux, protect *http.CrossOriginProte
 			Key string `json:"key"`
 		}{m.push.publicKey})
 	})))
+	mux.Handle("POST /approvals/push/test", wrap(authenticated(m.testPush)))
 	for _, operation := range []string{"subscribe", "unsubscribe"} {
 		mux.Handle("POST /approvals/push/"+operation, wrap(authenticated(m.subscription)))
 	}
@@ -154,6 +156,8 @@ type inboxItem struct {
 }
 
 type inboxView struct {
+	// Devices counts this user's devices with notifications enabled.
+	Devices int
 	// QR opens the inbox on a phone, where notifications are enabled.
 	QR      template.HTML
 	Notices []inboxNotice
@@ -164,6 +168,9 @@ type inboxView struct {
 
 func (m *Manager) inbox(w http.ResponseWriter, _ *http.Request, user string) {
 	view := inboxView{CSRF: m.inboxCSRF(user), Push: m.push != nil && m.canSubscribe(user), QR: m.phoneQR("/approvals")}
+	if view.Push {
+		view.Devices = len(m.push.subscriptions(user))
+	}
 	m.mu.Lock()
 	m.sweepLocked()
 	if m.notices != nil {
@@ -199,14 +206,17 @@ func (m *Manager) inbox(w http.ResponseWriter, _ *http.Request, user string) {
 }
 
 var inboxPage = ui.NewTemplate(`{{define "title"}}Approval inbox{{end}}
-{{define "head"}}<link rel="manifest" href="/approvals/manifest.webmanifest"><link rel="apple-touch-icon" href="/approvals/icon.png">{{end}}
 {{define "scripts"}}<script src="/approvals/inbox.js" defer></script>{{end}}
 {{define "content"}}
 <h1>Approval inbox</h1><p>Review a request to approve and run its action.</p>
-{{if .Push}}<input type="hidden" id="push-csrf" name="csrf" value="{{.CSRF}}">
+{{if .Push}}<div id="install-hint" class="target" hidden><h2>Add opsgate to the Home Screen / 홈 화면에 추가하세요</h2>
+<p>iPhone delivers notifications only to apps on the Home Screen. Tap Share, then <strong>Add to Home Screen</strong>, open opsgate from the Home Screen and enable notifications there.<br>
+iPhone은 홈 화면에 추가한 앱에만 알림을 보냅니다. 공유 버튼에서 <strong>홈 화면에 추가</strong>를 누르고, 홈 화면의 opsgate를 열어 그곳에서 알림을 켜세요.</p></div>
+<input type="hidden" id="push-csrf" name="csrf" value="{{.CSRF}}">
 <button type="button" id="enable-push">Enable notifications on this device</button>
 <button type="button" id="disable-push">Disable notifications on this device</button>
-<p class="note">On iPhone, use Add to Home Screen first, then open opsgate from the Home Screen and enable notifications.</p>
+<button type="button" id="test-push">Send a test notification / 테스트 알림 보내기</button>
+<p class="note">{{if .Devices}}Notifications are on for {{.Devices}} device(s) on this account. / 이 계정에서 알림을 켠 기기: {{.Devices}}대{{else}}No device has notifications on yet. / 아직 알림을 켠 기기가 없습니다.{{end}}</p>
 <p id="push-status" role="status"></p>{{else}}<p class="note">Notifications are unavailable for this account or disabled on this server.</p>{{end}}
 ` + phoneBlock + `
 {{if .Notices}}<h2>Alerts waiting for a decision</h2>
@@ -240,6 +250,7 @@ func (m *Manager) latest(w http.ResponseWriter, _ *http.Request, user string) {
 	body := map[string][2]string{
 		"approval":         {"An approval is waiting", "승인 요청이 있습니다"},
 		"notice":           {"An alert needs a decision", "알림에 대한 조치가 필요합니다"},
+		"test":             {"Test notification: notifications work on this device", "테스트 알림: 이 기기에서 알림이 동작합니다"},
 		recoveryRecovered:  {"The action worked: the service recovered", "조치 결과: 복구됐습니다"},
 		recoveryFailing:    {"The action was applied but the service has not recovered", "조치 결과: 아직 복구되지 않았습니다"},
 		recoveryUnverified: {"The action was applied; recovery could not be checked", "조치 결과: 복구 여부를 확인하지 못했습니다"},
@@ -281,5 +292,42 @@ func (m *Manager) newest(user string) (target, kind string) {
 			}
 		}
 	}
+	if at, ok := m.tests[user]; ok && m.now().Sub(at) < testPushFor && at.After(newest) {
+		target, kind = "/approvals", "test"
+	}
 	return target, kind
+}
+
+// testPushFor is how long a test notification stays the newest item, so the
+// service worker words it as a test when the push arrives.
+const testPushFor = 5 * time.Minute
+
+// testPush sends a notification to every device of the signed-in user so
+// they can tell whether notifications reach this device at all.
+func (m *Manager) testPush(w http.ResponseWriter, r *http.Request, user string) {
+	if !m.pushAccess(w, user) {
+		return
+	}
+	csrf := m.inboxCSRF(user)
+	if csrf == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(csrf)) != 1 {
+		http.Error(w, "The notification request could not be verified", http.StatusForbidden)
+		return
+	}
+	m.mu.Lock()
+	if at, ok := m.tests[user]; ok && m.now().Sub(at) < 10*time.Second {
+		m.mu.Unlock()
+		http.Error(w, "Wait a few seconds before sending another test", http.StatusTooManyRequests)
+		return
+	}
+	m.tests[user] = m.now()
+	m.mu.Unlock()
+	devices := len(m.push.subscriptions(user))
+	if devices > 0 {
+		m.push.enqueue(user, m.now().Add(testPushFor))
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(struct {
+		Devices int `json:"devices"`
+	}{devices})
 }

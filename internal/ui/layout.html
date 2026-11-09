@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{template "title" .}} · opsgate</title>
 <link rel="icon" type="image/png" href="{{icon}}">
+{{if app}}<link rel="manifest" href="/approvals/manifest.webmanifest"><link rel="apple-touch-icon" href="/approvals/icon.png"><meta name="apple-mobile-web-app-title" content="opsgate">{{end}}
 <style>
 :root{color-scheme:light dark;--bg:#f2f5f8;--card:#fff;--fg:#172334;--muted:#536479;--line:#cbd5df;--accent:#185ac0;--on-accent:#fff;--target:#f4f7fb;--danger:#b42332;--added:#e1f4e7;--removed:#ffe5e7}
 @media(prefers-color-scheme:dark){:root{--bg:#10161e;--card:#19222e;--fg:#edf2f8;--muted:#a9b8ca;--line:#425167;--accent:#a1c7ff;--on-accent:#10213b;--target:#121c29;--danger:#ffabb3;--added:#183e2c;--removed:#49232d}}

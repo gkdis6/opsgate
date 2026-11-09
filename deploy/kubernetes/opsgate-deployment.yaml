@@ -27,8 +27,8 @@ data:
         users:
           - subject: email:operator@example.com
             scopes: [ops:read]
-    # Optional inbox notices from the separate watcher. Use the same dedicated
-    # opsgate-inbox-hmac Secret and uncomment its mount and volume below.
+    # Optional inbox notices from the separate watcher, signed with the
+    # opsgate-inbox-hmac Secret mounted below. `opsgate init -recover` writes this.
     # For phone push, grant the user ops:write, configure write allowlists and
     # enable notifications in /approvals (iPhone: Add to Home Screen first).
     # approval:
@@ -133,9 +133,9 @@ spec:
             - name: upstream-secret
               mountPath: /etc/opsgate/upstream
               readOnly: true
-            # - name: inbox-hmac
-            #   mountPath: /etc/opsgate/inbox
-            #   readOnly: true
+            - name: inbox-hmac
+              mountPath: /etc/opsgate/inbox
+              readOnly: true
             - name: state
               mountPath: /var/lib/opsgate
       volumes:
@@ -151,10 +151,11 @@ spec:
             items:
               - key: client-secret
                 path: client-secret
-        # - name: inbox-hmac
-        #   secret:
-        #     secretName: opsgate-inbox-hmac
-        #     defaultMode: 0440
+        - name: inbox-hmac
+          secret:
+            secretName: opsgate-inbox-hmac
+            optional: true # Only inbox alerts read it (approval.inbox_notify, watch.inbox).
+            defaultMode: 0440
         - name: state
           persistentVolumeClaim:
             claimName: opsgate-state

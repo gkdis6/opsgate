@@ -320,6 +320,26 @@ commands and flags.
 
 
 
+## Quick start: recover from your phone
+
+One `opsgate init` sets up the whole loop: an alert reaches your phone, you pick
+an action, approve it with your passkey and see whether the service recovered.
+Name the workloads you want to restart or roll back from your phone:
+
+```sh
+opsgate init -recover "apps/*" -language en
+```
+
+Besides `opsgate.yaml` it writes `opsgate-watch.yaml` for the watcher, grants
+your user `ops:write`, lists those workloads for restart and image restore,
+turns on Web Push and connects the watcher to your approval inbox with a signed
+key. It then prints the remaining commands in order: RBAC for those namespaces,
+one Secret for the key, the two manifests and your two configuration files, the
+passkey link, and enabling notifications on your phone. Applying a manifest
+again replaces its ConfigMap with the sample, so load your files after it.
+
+
+
 ## Watch alerts
 
 Run `opsgate watch` alongside the MCP server to receive Kubernetes problem and

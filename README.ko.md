@@ -308,6 +308,25 @@ kubectl apply -f deploy/kubernetes/opsgate-deployment.yaml
 
 
 
+## 빠른 시작: 폰으로 복구하기
+
+`opsgate init` 한 번으로 전체 흐름을 설정합니다. 알림이 폰에 오고, 조치를 고르고, 패스키로
+승인하면 서비스가 복구됐는지까지 확인합니다. 폰에서 재시작하거나 이전 이미지로 되돌릴
+워크로드를 지정하세요.
+
+```sh
+opsgate init -recover "apps/*" -language ko
+```
+
+`opsgate.yaml`과 함께 watch용 `opsgate-watch.yaml`을 만듭니다. 사용자에게 `ops:write`를
+주고, 지정한 워크로드를 재시작과 이미지 복구 허용 목록에 넣고, Web Push를 켜고, 서명 키로
+watch를 승인함에 연결합니다. 이어서 남은 명령을 순서대로 출력합니다. 해당 namespace의 RBAC,
+키를 담을 Secret 하나, 매니페스트 두 개와 설정 파일 두 개, 패스키 링크, 폰에서 알림 켜기입니다.
+매니페스트를 다시 적용하면 ConfigMap이 예제로 바뀌므로, 설정 파일은 매니페스트 다음에
+넣으세요.
+
+
+
 ## Watch 알림
 
 MCP 서버와 함께 `opsgate watch`를 실행하면 Kubernetes의 문제와 변경 알림을

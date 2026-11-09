@@ -237,3 +237,33 @@ func TestOperationalErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestInitPhoneRecoveryWritesBothFiles(t *testing.T) {
+	dir := t.TempDir()
+	server, watch := filepath.Join(dir, "opsgate.yaml"), filepath.Join(dir, "opsgate-watch.yaml")
+	args := []string{"init", "-yes", "-public-url", "https://example.com", "-login", "passkey", "-user", "alice",
+		"-recover", "apps/*,shop/web", "-o", server, "-watch-o", watch}
+	c, _, errout, _ := testApp()
+	if code := c.execute(args); code != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, errout)
+	}
+	for _, want := range []string{"kubectl -n apps apply -f deploy/kubernetes/rbac-operator.yaml", "kubectl -n shop apply", "opsgate-inbox-hmac", "https://example.com/approvals"} {
+		if !strings.Contains(errout.String(), want) {
+			t.Fatalf("next steps miss %q: %s", want, errout)
+		}
+	}
+	if data, err := os.ReadFile(watch); err != nil || !strings.Contains(string(data), "inbox:") {
+		t.Fatalf("watch file: %v %s", err, data)
+	}
+	// An existing watch file stops the run before the server file is touched.
+	if err := os.Remove(server); err != nil {
+		t.Fatal(err)
+	}
+	c, _, errout, _ = testApp()
+	if code := c.execute(args); code == 0 || !strings.Contains(errout.String(), "exists") {
+		t.Fatalf("overwrote: exit=%d %s", code, errout)
+	}
+	if _, err := os.Stat(server); !os.IsNotExist(err) {
+		t.Fatal("server file written although the watch file exists")
+	}
+}

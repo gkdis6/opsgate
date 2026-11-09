@@ -202,14 +202,22 @@ To receive Web Push notifications:
 A new MCP web approval queues a notification to the requester's devices;
 link-created requests do not notify because the person is already in the
 browser. Clicking the notification opens `/approvals/next`, which after sign-in
-redirects to the newest undecided approval or alert notice, or to the inbox when
-nothing is waiting. Notifications never approve anything. Without inbox notices,
-`language: ko` shows
-“승인 요청이 있습니다”; the default `en` shows “An approval is waiting”.
+redirects to the newest undecided approval, alert notice or finished
+[recovery check](#recovery-check), or to the inbox when nothing is waiting.
+Notifications never approve anything.
+
+The notification text names only the kind of the newest item: an approval is
+waiting, an alert needs a decision, or an action recovered, did not recover or
+could not be checked (`language: ko` shows the Korean wording). On receiving a
+push the service worker reads that kind from the signed-in `GET /approvals/latest`;
+when it cannot, for example because the session expired, it falls back to
+“An approval is waiting” or, with inbox notices, “An alert needs a decision”.
 
 **Privacy:** push carries no approval content, ID, target or result. The push
 service sees an empty request with VAPID contact information and timing; the
-service worker generates a generic “opsgate” notification locally. Device
+service worker builds the notification locally from `/approvals/latest`, which
+returns only the kind of item, never its target, because notifications can show
+on a lock screen. Device
 subscription URLs are capabilities and are never written to logs or audit.
 Subscriptions and the server-generated VAPID key pair persist atomically in a
 0600 state file; preserve it across restarts. Deleting it requires devices to
@@ -359,10 +367,9 @@ When Web Push is enabled, the first accepted notice queues a payload-less push
 for each subject, with further notices coalesced for one minute. The inbox
 still records every accepted notice during that minute; there is no delayed
 trailing push. The existing best-effort push queue and device delivery limits
-apply. With inbox notices enabled, the service worker uses generic wording for
-all pushes: **An alert needs a decision** (`en`) or **알림에 대한 조치가 필요합니다**
-(`ko`), because the payload-less channel carries no event type. Clicking opens
-`/approvals/next`. Without inbox notices, the existing approval wording remains.
+apply. The notification says **An alert needs a decision** (`en`) or
+**알림에 대한 조치가 필요합니다** (`ko`) when the alert is the newest item, and
+clicking it opens `/approvals/next`.
 
 Notices, replay protection and the coalescing window are memory-only and lost
 on restart. Watch delivery retries are bounded; notifications can be missed.

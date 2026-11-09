@@ -32,6 +32,14 @@
 Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스 거부 목록은
 `[kube-system, kube-public, kube-node-lease, opsgate]`이며, `-deny-namespaces`로 바꿀 수 있습니다.
 
+폰에서 재시작하거나 이전 이미지로 되돌릴 워크로드도 묻습니다(`-recover`, 쉼표로 구분한
+`namespace/name` 패턴, 기본값은 없음). 답하면 `ops:write`를 주고, 그 워크로드를
+`rollout_restart`와 `restore_image`에 넣고, `action_approval_url`을 정하고,
+`approval.push`(`-language en` 또는 `ko`)와 키 파일 `/etc/opsgate/inbox/key`를 쓰는
+`approval.inbox_notify`를 켭니다. 짝이 맞는 watch 설정도 `-watch-o`(기본값
+`opsgate-watch.yaml`)에 씁니다. 이 설정은 `http://opsgate.opsgate.svc:8787`로 경고를
+승인함에 보냅니다. 두 파일을 모두 검증한 뒤에 쓰며, 남은 배포 단계를 출력합니다.
+
 `opsgate config show -config <파일>`은 모드 기본값까지 포함한 최종 설정을 opsgate가
 그대로 읽을 수 있는 YAML로 출력합니다.
 

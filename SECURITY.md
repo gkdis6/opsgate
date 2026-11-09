@@ -49,7 +49,7 @@ Builtin OAuth addresses these threats:
 - Login CSRF: upstream login state is tied to the browser; consent and browser approval use CSRF protection. OIDC also validates identity tokens.
 - Credential disclosure from state storage: opaque access/refresh tokens and client secrets are stored as hashes, not raw credentials. Secret comparisons use constant-time checks. Protect state files and backups regardless; state persistence errors fail closed.
 
-OAuth responses are sent after releasing the shared state lock. OAuth GET routes reject bodies and POST body reads have a 10-second deadline. Pending authorizations evict oldest entries at 20 per client or 1000 overall; browser approval and admin logins use a separate pool of 256, with a burst of 20 and one new admission every 3 seconds over a 10-minute transaction lifetime, and only expired login entries are removed. A flood can delay new sign-ins until the shared limiter recovers (HTTP 429 with `Retry-After`), while existing sign-ins remain valid until expiry; apply a rate limit at the reverse proxy. HTTP access logs mask `/approve/<id>` as `/approve/*` and omit query strings.
+OAuth responses are sent after releasing the shared state lock. OAuth GET routes reject bodies and POST body reads have a 10-second deadline. Pending authorizations evict the oldest entry that has not finished sign-in at 20 per client or 1000 overall; entries whose user has signed in are never evicted, and when only those remain new requests get HTTP 429; browser approval and admin logins use a separate pool of 256, with a burst of 20 and one new admission every 3 seconds over a 10-minute transaction lifetime, and only expired login entries are removed. A flood can delay new sign-ins until the shared limiter recovers (HTTP 429 with `Retry-After`), while existing sign-ins remain valid until expiry; apply a rate limit at the reverse proxy. HTTP access logs mask `/approve/<id>` as `/approve/*` and omit query strings.
 
 Passkey login (upstream `passkey`) needs no external identity provider. Registration requires a one-time invite: a random 256-bit token whose SHA-256 is stored in a `0600` file next to the state file, valid for its TTL (24h by default, at most 7 days), bound to one configured subject and deleted on use. At first start opsgate writes such invites to its log for users without a passkey, so anyone who can read the service log can enroll as those users until they do: restrict log access, or issue invites with `opsgate passkey invite` instead. Credentials require user verification and a resident key; the relying party ID is the `public_url` host and the only accepted origin is `public_url`. Each login challenge is single-use and bound to the browser's pending authorization cookie; a signature counter that fails to advance is treated as a cloned authenticator and rejected. Losing a passkey means issuing a new invite; removing a user from `users` immediately blocks sign-in. Passkey pages are the only pages that run script: the same-origin `/passkey.js` under `script-src 'self'`, with no inline script.
 
@@ -63,10 +63,29 @@ Raw write JSON defaults to 16 KiB; note create/append/replace allow 528 KiB (256
 
 `approval.require_web` defaults to `true` when `approval.web` is enabled, including by a mode with builtin auth. Explicit `approval.require_web: false` opts in to elicitation: a compromised client can approve its own writes, and the server cannot establish that a real person clicked a client-controlled prompt. External/static auth and `approval.web: false` keep `require_web` false by default because no web channel is available. HTTP startup warns when elicitation is allowed. When the file omits `require_web`, `-transport stdio` allows elicitation even with a mode, since the user starts the process locally and there is no web channel. Explicit `true` still denies stdio writes. `config show` prints the HTTP default explicitly; its `require_web: true` must be removed or set to `false` to allow stdio writes. Prompt injection can still cause the model to *request* writes. Humans must read the summary and target before approving. Approval does not make an operation safe or guarantee the target's state remains unchanged; OS privileges, RBAC and narrow allowlists remain essential. Audit records include plans, approval methods, pending outcomes, web decisions (with only an approval ID prefix) and denied multi round-trip verifications, but audit delivery is not a prerequisite for execution.
 
+## Security testing
+
+Go fuzz tests cover every parser that takes input from outside the server.
+Their seeds run with the ordinary tests on every push, and a weekly workflow
+fuzzes each target further and keeps any failing input.
+
+| Input | Fuzz target | What must hold |
+| --- | --- | --- |
+| Action links and choices links | `FuzzParse`, `FuzzOptionsURL` (`internal/action`) | A link that parses only carries catalog fields that pass validation and rebuilds to the same tool, arguments and source; choices links stay within their path |
+| Approval routes and forms | `FuzzApprovalRoutes` (`internal/approval`) | No malformed path or form causes a server error |
+| Signed inbox notices | `FuzzNoticeSignature`, `FuzzNoticeFields` | Nothing is accepted without the key; a signed notice stores only identifiers and links to choices pages |
+| Push subscriptions | `FuzzPushEndpoint` | Only HTTPS endpoints on the allowed push services pass |
+| OAuth registration, authorization and token requests | `FuzzRegister`, `FuzzAuthorize`, `FuzzToken`, `FuzzValidRedirect` (`internal/oauth`) | Registered clients only have valid redirects, grants and hashed secrets; sign-in starts only for a registered client, redirect and S256 challenge; no form obtains a token without a code or refresh token from this server |
+| Signed watch batches for the analyzer | `FuzzReceive` (`internal/analyzer`) | Another key is rejected; the queue stays within its byte budget and holds only checked alerts |
+| External JWT scope claims | `FuzzTokenScopes` (`internal/authn`) | Only known scopes, each once |
+| Redaction | `FuzzRanges`, `FuzzValue` (`internal/redact`) | Ranges are ordered and in bounds; pages keep their line breaks and never show a masked part; known secrets stay masked whatever text surrounds them |
+
+The server has not had a third-party security review.
+
 ## Known limitations
 
-- Anonymous authorization traffic can evict pending connection authorizations and force affected clients to restart sign-in.
-- For multiline quoted secret assignments, masking covers only the first line.
+- A flood of anonymous authorization requests can push out connection attempts that have not finished sign-in yet, so those users must start again. Connections whose user has signed in are kept.
+- A quoted secret value left open at its line end is masked through its closing quote when that quote follows within 4 KiB and 32 lines; past that, only its first line is masked. Text between the opening and closing quote is masked even if the quote belongs to other text.
 - Dependency scanners may report GO-2026-5932 for the pinned `x/crypto` module, although opsgate does not import or call its affected OpenPGP packages.
 - Task log and diff reads fail when the complete source exceeds 20 MiB.
 - Without an existing approval window, stdio refuses note writes whose preview needs more than about 8 KiB of review.

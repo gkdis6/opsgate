@@ -111,7 +111,7 @@ func start(t *testing.T, args ...string) *process {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.cmd.Stdout = io.Discard
+	p.cmd.Stdout = p.cmd.Stderr
 	if err := p.cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +334,8 @@ var (
 func TestApprovedRestartOnARealCluster(t *testing.T) {
 	kubeconfig, namespace := cluster(t)
 	port := freePort(t)
-	origin := "http://127.0.0.1:" + port
+	// A passkey relying party must be a domain, not an IP address.
+	origin := "http://localhost:" + port
 	dir := t.TempDir()
 	audit := filepath.Join(dir, "audit.jsonl")
 	config := filepath.Join(dir, "opsgate.yaml")
@@ -402,7 +403,7 @@ providers:
 
 	// A target outside the allowlist never becomes an approval.
 	denied := "/approve/action/k8s_rollout_restart?" + url.Values{"cluster": {"default"}, "kind": {"deployment"}, "namespace": {"kube-system"}, "name": {"coredns"}}.Encode()
-	if code, text, _ := user.signIn(t, passkey, denied, "127.0.0.1"); code != http.StatusForbidden || !strings.Contains(text, "Action unavailable") {
+	if code, text, _ := user.signIn(t, passkey, denied, "localhost"); code != http.StatusForbidden || !strings.Contains(text, "Action unavailable") {
 		t.Fatalf("restart outside the allowlist: %d %s", code, text)
 	}
 
@@ -429,7 +430,7 @@ providers:
 	server.stop()
 	server = start(t, "-config", config, "-transport", "http")
 	waitFor(t, "the server to listen again", 30*time.Second, healthy)
-	code, page, _ = user.signIn(t, passkey, approval, "127.0.0.1")
+	code, page, _ = user.signIn(t, passkey, approval, "localhost")
 	fresh := csrfField.FindStringSubmatch(page)
 	if code != http.StatusOK || fresh == nil || staleCSRF == nil || fresh[1] == staleCSRF[1] {
 		t.Fatalf("approval card after restart: %d %s", code, page)

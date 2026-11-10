@@ -29,8 +29,9 @@ approval is already a habit when an outage comes.
 opsgate is not a shell or a general agent, not a monitoring dashboard, not
 on-call paging for a team, and it never repairs anything without a person.
 
-> **Status:** early release; notes, the host provider, watch, the approval inbox
-> and the analyzer are experimental. Changes require user authorization, allowed targets and human approval. Read restrictions
+> **Status:** not 1.0 yet. The core loop (alerts, approval cards, passkey approval,
+> recovery check) is kept compatible as described in [stability](docs/stability.md);
+> notes, the host provider and the analyzer are experimental. Changes require user authorization, allowed targets and human approval. Read restrictions
 > and output redaction reduce sensitive data exposure. Third-party security review
 > is pending; the [security policy](SECURITY.md) explains the protections and
 > remaining limitations.
@@ -549,6 +550,7 @@ Full details: [SECURITY.md](SECURITY.md).
 | [Deployment](docs/deploy.md) | Release verification, Kubernetes, reverse proxy |
 | [Watch alerts](docs/watch.md) | Kubernetes alerts to Discord, custom JSON webhooks, email and the approval inbox through a separate `opsgate watch` process; namespace groups |
 | [Automatic investigation](docs/analyzer.md) | Optional model worker, read-only MCP authentication and investigation limits |
+| [Stability](docs/stability.md) | What stays compatible, what is experimental and how changes are announced |
 | [Roadmap](docs/roadmap.md) | What is done and what may come |
 
 

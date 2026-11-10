@@ -89,7 +89,7 @@ security-reviewed by third parties.
 - Optional approval windows, in memory and bound to user, tool and target; off by default.
 - Experimental note provider: bounded Markdown folder (Obsidian-compatible) reads/search/links/tags and approved create/append/replace/trash operations.
 - A deployment mode (`mode: kubernetes`) that fills in defaults, `opsgate init` to write a short configuration and `opsgate config show` to print the effective one.
-- Experimental `opsgate watch`: a separate process that watches pods, workloads, nodes and ConfigMap keys and posts batched, deduplicated, optionally HMAC-signed alerts to a webhook.
+- `opsgate watch`: a separate process that watches pods, workloads, nodes and ConfigMap keys and posts batched, deduplicated, optionally HMAC-signed alerts to a webhook.
 - Experimental `opsgate-analyzer`: signed watch alerts, bounded read-only MCP investigations with a selected OpenAI-compatible API, Claude Code CLI or Codex CLI backend, Discord reports and optional signed webhook forwarding, Korean/English reports and action proposals that are never executed.
 - Allowlisted, human-approved `k8s_restore_image` restores a Deployment container image from a currently ready owned ReplicaSet; read-only `k8s_remediation_options` provides approval links for verified restoration candidates.
 - Independent watch outputs for Discord and custom JSON webhooks, with body templates, headers, credential files and HTTP 429 retries; SMTP email delivery with verified TLS, separate batching and retries.

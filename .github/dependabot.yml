@@ -8,6 +8,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # init, analyze and upload-sarif must run the same version; separate
+      # updates fail CodeQL with a configuration version mismatch.
+      codeql:
+        patterns:
+          - "github/codeql-action/*"
   - package-ecosystem: docker
     directory: /
     schedule:

@@ -30,7 +30,8 @@ Claude, ChatGPT, Claude Code, Cursor 같은 AI나 알림 규칙이 서버를 바
 opsgate가 하지 않는 일도 분명히 해 둡니다. 셸이나 범용 에이전트가 아니고, 모니터링
 대시보드나 팀 온콜 도구도 아닙니다. 사람이 승인하지 않으면 아무것도 고치지 않습니다.
 
-> **현재 상태:** 아직 1.0 전입니다. 노트, 호스트, watch, 승인함, analyzer는 실험 기능입니다.
+> **현재 상태:** 아직 1.0 전입니다. 핵심 흐름(알림, 승인 카드, 패스키 승인, 복구 확인)은
+> [안정성 문서](docs/ko/stability.md)에 적은 대로 호환성을 유지합니다. 노트, 호스트, analyzer는 실험 기능입니다.
 > 외부 보안 검토는 받지 않았습니다. 무엇을 막고 무엇을 못 막는지는
 > [보안 정책](docs/ko/security.md)에 정리해 두었습니다.
 
@@ -504,6 +505,7 @@ Cursor는 HTTP나 stdio로 연결합니다.
 | [배포](docs/ko/deploy.md) | 릴리스 검증, Kubernetes, 리버스 프록시 |
 | [Watch 알림](docs/ko/watch.md) | `opsgate watch`로 Discord, 웹훅, 이메일, 승인함에 알림 보내기, namespace 그룹 |
 | [자동 분석](docs/ko/analyzer.md) | 선택 기능인 모델 기반 조사, 조회 전용 MCP 인증과 조사 한도 |
+| [안정성](docs/ko/stability.md) | 유지하는 부분, 실험 기능, 바꿀 때 알리는 방법 |
 | [로드맵](docs/ko/roadmap.md) | 지금까지 한 것과 앞으로의 계획 |
 
 

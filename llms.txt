@@ -29,6 +29,7 @@ Key facts:
 - [Analyzer](https://github.com/gkdis6/opsgate/blob/main/docs/analyzer.md): optional read-only alert investigation that suggests actions
 - [Host provider](https://github.com/gkdis6/opsgate/blob/main/docs/host.md): systemd units and Docker containers without Kubernetes
 - [Notes](https://github.com/gkdis6/opsgate/blob/main/docs/notes.md): runbooks and incident memory in Markdown
+- [Stability](https://github.com/gkdis6/opsgate/blob/main/docs/stability.md): what stays compatible, what is experimental, how changes are announced
 - [Roadmap](https://github.com/gkdis6/opsgate/blob/main/docs/roadmap.md)
 - [Changelog](https://github.com/gkdis6/opsgate/blob/main/CHANGELOG.md)
 - [한국어 README](https://github.com/gkdis6/opsgate/blob/main/README.ko.md)

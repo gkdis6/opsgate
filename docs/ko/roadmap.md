@@ -82,7 +82,7 @@
 - 선택 기능인 승인 시간 창은 특정 사용자, 도구, 대상에만 유효하고, 상태는 메모리에만 저장합니다. 기본적으로는 꺼져 있습니다.
 - 실험적 note provider는 범위가 제한된 Markdown 폴더(Obsidian 호환)에서 읽기·검색·링크·태그 조회를 지원합니다. 노트 작성, 내용 추가, 내용 수정, 휴지통으로 이동은 승인을 받아 실행합니다.
 - 배포 모드(`mode: kubernetes`)가 기본값을 채우고, `opsgate init`이 짧은 설정 파일을 만들며, `opsgate config show`가 최종 설정을 보여 줍니다.
-- 실험적 `opsgate watch`는 별도 프로세스로 파드, 워크로드, 노드, ConfigMap 키를 watch하고, 알림을 묶고 중복을 줄여 webhook으로 보냅니다. 필요하면 HMAC으로 서명합니다.
+- `opsgate watch`는 별도 프로세스로 파드, 워크로드, 노드, ConfigMap 키를 watch하고, 알림을 묶고 중복을 줄여 webhook으로 보냅니다. 필요하면 HMAC으로 서명합니다.
 - 실험적 `opsgate-analyzer`는 서명된 watch 알림을 받아 제한된 읽기 전용 MCP 조사를 수행합니다. OpenAI 호환 API, Claude Code CLI, Codex CLI 중 하나를 선택하며, Discord 보고서와 선택 사항인 서명 webhook 전달, 한국어/영어 보고서와 실행하지 않는 작업 제안을 지원합니다.
 - `k8s_restore_image`는 허용 목록과 사람의 승인을 거쳐 Deployment 컨테이너 이미지를 현재 준비된 소유 ReplicaSet의 이미지로 복원합니다. 읽기 전용 `k8s_remediation_options`는 검증한 복원 후보의 승인 링크를 제공합니다.
 - watch는 독립된 Discord 및 사용자 지정 JSON webhook 출력, 본문 템플릿, 헤더, 자격 증명 파일, HTTP 429 재시도를 지원합니다. SMTP 이메일 출력은 검증된 TLS, 별도 배치와 재시도를 사용합니다.

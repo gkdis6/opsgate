@@ -9,6 +9,8 @@ GitHub releases carry generated release notes.
 
 ### Added
 
+- [Stability and compatibility](docs/stability.md): which configuration, tools, routes and formats are kept compatible, which parts are experimental (analyzer, notes, host), and how removals and changed defaults are announced. `opsgate watch`, the approval inbox and push are part of the covered core loop and no longer labelled experimental. / [안정성과 호환성](docs/ko/stability.md) 문서를 추가합니다. 어떤 설정, 도구, 경로, 형식을 유지하는지, 무엇이 실험 기능인지(analyzer, 노트, 호스트), 삭제와 기본값 변경을 어떻게 알리는지 적었습니다. `opsgate watch`, 승인함, 푸시는 유지하는 핵심 흐름에 속하며 실험 기능 표시를 뗍니다.
+
 - `approval.state_file` (default `/var/lib/opsgate/approvals.json` with a mode): undecided approvals opened from links, inbox notices and the link-signing key survive a server restart. A restored approval gets a new CSRF token and is planned again when approved; a decided one is never restored. / `approval.state_file`(모드 기본값 `/var/lib/opsgate/approvals.json`)을 추가합니다. 링크로 연 미결 승인, 승인함 알림, 링크 서명 키가 서버 재시작 뒤에도 남습니다. 복원된 승인은 CSRF 토큰을 새로 받고 승인할 때 계획을 다시 세우며, 이미 결정된 승인은 복원하지 않습니다.
 
 - Go fuzz tests for every parser that takes outside input: action and choices links, approval routes, signed inbox notices, push endpoints, OAuth registration, authorization and token requests, signed analyzer batches, JWT scope claims and redaction. A weekly workflow fuzzes each target further; SECURITY.md lists what each must hold. / 외부 입력을 해석하는 모든 코드(조치 링크, 승인 경로, 서명된 알림, 푸시 주소, OAuth 등록·인가·토큰, 분석기 묶음, JWT scope, 비밀값 가리기)에 Go fuzz 테스트를 추가하고, 매주 더 오래 도는 워크플로를 둡니다. 대상마다 지켜야 하는 성질은 SECURITY.md에 적었습니다.

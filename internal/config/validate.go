@@ -44,6 +44,14 @@ func (c Config) Validate() error {
 			return fmt.Errorf("approval.push.state_file must differ from auth.builtin.state_file")
 		}
 	}
+	if c.Approval.StateFile != "" {
+		stateFile, _ := filepath.Abs(c.Approval.StateFile)
+		for name, other := range map[string]string{"auth.builtin.state_file": c.Auth.Builtin.StateFile, "approval.push.state_file": c.Approval.Push.StateFile} {
+			if abs, _ := filepath.Abs(other); other != "" && abs == stateFile {
+				return fmt.Errorf("approval.state_file must differ from %s", name)
+			}
+		}
+	}
 	if c.Approval.Wait < 0 || c.Approval.Wait > 55*time.Second {
 		return fmt.Errorf("approval.wait must be between 0 and 55s")
 	}

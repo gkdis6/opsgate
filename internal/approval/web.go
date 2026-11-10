@@ -124,6 +124,8 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 				close(p.done)
 			}
 		}
+		// A decided approval is no longer stored; it must not run again.
+		_ = m.saveLocked()
 		decisionEvent = &audit.Event{Time: m.now(), User: redact.String(p.user), Transport: p.transport,
 			Tool: p.tool, Source: p.source, Outcome: p.decision, Approval: "web", Args: map[string]any{"approval_id_prefix": p.id[:8]}}
 	}

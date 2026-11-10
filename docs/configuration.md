@@ -17,6 +17,7 @@ and the transport defaults to stdio.
 | `auth.mode` | `builtin` |
 | `auth.builtin.upstream.provider` | `passkey` |
 | `auth.builtin.state_file` | `/var/lib/opsgate/oauth.json` |
+| `approval.state_file` | `/var/lib/opsgate/approvals.json` |
 | `approval.web` | `true` while `auth.mode` is builtin |
 | `server.audit_log` | `""` (stderr, for the cluster's log collection) |
 | `providers.kubernetes.enabled` | `true`, with the pod's ServiceAccount (`kubeconfig: ""`) |
@@ -104,6 +105,7 @@ this prints `require_web: true` explicitly. Running that output with
 | `watch.inbox.allow_private_http` | `false` | Permit private HTTP with dial-time address checks, as for watch outputs |
 | `approval.push.enabled` | `false` | Web Push for MCP web approvals and configured inbox notices; requires `approval.web` |
 | `approval.push.subject` | empty | Required contact `mailto:` or `https:` URL when enabled |
+| `approval.state_file` | `/var/lib/opsgate/approvals.json` with a mode, otherwise empty | 0600 file that keeps undecided approvals opened from links, inbox notices and the link-signing key across restarts; empty keeps them in memory. A write failure is logged and does not block approvals; a file the process cannot read leaves the state in memory with a warning; a readable file in another format stops startup |
 | `approval.push.state_file` | `/var/lib/opsgate/push.json` with a mode, otherwise empty | Durable 0600 subscriptions and VAPID keys; required when enabled, separate from OAuth state |
 | `approval.push.allowed_hosts` | `[fcm.googleapis.com, updates.push.services.mozilla.com, web.push.apple.com, '*.notify.windows.com']` | HTTPS push hosts; wildcard matches subdomains only; dial-time public addresses, no redirects or proxies |
 | `approval.push.language` | `en` | Generic notification language: `en` or `ko`; push carries no content |

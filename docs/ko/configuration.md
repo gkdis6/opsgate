@@ -17,6 +17,7 @@
 | `auth.mode` | `builtin` |
 | `auth.builtin.upstream.provider` | `passkey` |
 | `auth.builtin.state_file` | `/var/lib/opsgate/oauth.json` |
+| `approval.state_file` | `/var/lib/opsgate/approvals.json` |
 | `approval.web` | `auth.mode`가 builtin이면 `true` |
 | `server.audit_log` | `""` (stderr. 클러스터 로그 수집용) |
 | `providers.kubernetes.enabled` | `true`. 파드의 ServiceAccount를 씁니다(`kubeconfig: ""`) |
@@ -101,6 +102,7 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 | `watch.inbox.allow_private_http` | `false` | watch 출력과 같이 연결 시 주소를 검사하는 사설 HTTP 허용 |
 | `approval.push.enabled` | `false` | MCP 웹 승인과 설정한 승인함 알림용 Web Push; `approval.web` 필요 |
 | `approval.push.subject` | 비어 있음 | 활성화 시 필수인 연락처 `mailto:` 또는 `https:` URL |
+| `approval.state_file` | 모드에서는 `/var/lib/opsgate/approvals.json`, 그 외 비어 있음 | 링크로 연 미결 승인, 승인함 알림, 링크 서명 키를 재시작 뒤에도 남기는 0600 파일입니다. 비우면 메모리에만 둡니다. 쓰기에 실패하면 로그만 남기고 승인은 계속됩니다. 읽을 권한이 없으면 경고를 남기고 메모리로 동작합니다. 읽히지만 형식이 다른 파일이면 시작하지 않습니다 |
 | `approval.push.state_file` | 모드에서는 `/var/lib/opsgate/push.json`, 그 외 비어 있음 | 구독과 VAPID 키를 0600으로 영구 저장; 활성화 시 필수이며 OAuth 상태 파일과 분리 |
 | `approval.push.allowed_hosts` | `[fcm.googleapis.com, updates.push.services.mozilla.com, web.push.apple.com, '*.notify.windows.com']` | HTTPS push 호스트; 와일드카드는 하위 도메인에만 적용; 연결 시 공개 주소 검사, 리다이렉트·프록시 사용 안 함 |
 | `approval.push.language` | `en` | 일반 알림 언어 `en` 또는 `ko`; push에 내용 없음 |

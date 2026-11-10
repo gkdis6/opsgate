@@ -117,7 +117,7 @@ approval:
 | Outcome retention | Until at least the original expiry; executions remain readable for at least 10 minutes after finishing. Rejections remain until original expiry |
 | Nonce capacity | 1,000 live consumed nonces; live entries are not evicted to accept another continuation |
 | Window capacity | 100 live user/tool/target combinations |
-| Persistence | Pending records, windows, consumed nonces and elicitation signing key are memory-only; restart discards all of them |
+| Persistence | With `approval.state_file`, undecided approvals opened from links, inbox notices and the link-signing key survive a restart; a restored approval gets a new CSRF token and is planned again when approved. Approvals requested by an MCP client, windows, consumed nonces, recovery checks and the elicitation signing key are memory-only |
 
 The default raw write argument limit is 16 KiB; some content-bearing tools raise it. Summary limits scale with each tool's argument limit. See [Tools](tools.md) for limits.
 
@@ -148,7 +148,8 @@ metadata, never a tool argument; it defaults to `rule`. The English approval
 page shows the catalog label and either “Suggested by: rule” or “Suggested by:
 AI — review carefully”. The server signs every link it issues over the tool, all
 arguments and the source (`sig`). A link without a valid signature, such as one
-written by hand, edited, or issued before the server restarted, still opens an
+written by hand, edited, or issued before a restart without
+`approval.state_file`, still opens an
 approval, but the card says “Suggested by: a link this server did not sign —
 review carefully” and the audit source is `link`. The key lives
 in one server process, so links issued by another process (`opsgate watch`, or
@@ -235,7 +236,8 @@ on a lock screen. Device
 subscription URLs are capabilities and are never written to logs or audit.
 Subscriptions and the server-generated VAPID key pair persist atomically in a
 0600 state file; preserve it across restarts. Deleting it requires devices to
-unsubscribe and enable notifications again. Approval records remain memory-only.
+unsubscribe and enable notifications again. Approval records use the separate
+`approval.state_file`.
 
 Delivery is best effort: one worker drains a bounded 100-request queue, with
 short timeouts and no retries; a full queue drops the notification and logs a

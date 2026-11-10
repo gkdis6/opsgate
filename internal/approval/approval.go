@@ -59,6 +59,10 @@ type Manager struct {
 	verifyFor, verifyEvery time.Duration
 	stop                   chan struct{}
 	closeOnce              sync.Once
+	// stateFile, when set, stores link approvals, notices and linkKey.
+	stateFile   string
+	linkKey     []byte
+	stateWarned bool
 	// tests records when each user last asked for a test notification.
 	tests map[string]time.Time
 }
@@ -72,14 +76,17 @@ type pending struct {
 	noWindow                                        bool
 	fullReviewRequired                              bool
 	args                                            []byte
-	hash                                            [sha256.Size]byte
-	created                                         time.Time
-	expires                                         time.Time
-	decision                                        string
-	mcp                                             bool
-	done                                            chan struct{}
-	finished                                        bool
-	failed                                          bool
+	// raw holds a link's own arguments so the approval can be stored and
+	// planned again after a restart; nil for MCP requests.
+	raw      []byte
+	hash     [sha256.Size]byte
+	created  time.Time
+	expires  time.Time
+	decision string
+	mcp      bool
+	done     chan struct{}
+	finished bool
+	failed   bool
 	// unknown: the apply ended without a definite answer.
 	unknown     bool
 	retainUntil time.Time

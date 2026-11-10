@@ -87,7 +87,7 @@ second automated opinion, not an independent human review.
 
 ## Known limitations
 
-- Approvals, approval windows, inbox notices and recovery checks live in memory and are lost when the server restarts, as is the link-signing key.
+- Approvals requested by an MCP client, approval windows and recovery checks live in memory and are lost when the server restarts. Approvals opened from links, inbox notices and the link-signing key survive only with `approval.state_file`; protect that file like the other state files.
 - The built-in OIDC and external JWT issuers are fetched from operator-configured URLs without the private-address filter that push and webhook delivery use.
 
 - A flood of anonymous authorization requests can push out connection attempts that have not finished sign-in yet, so those users must start again. Connections whose user has signed in are kept.

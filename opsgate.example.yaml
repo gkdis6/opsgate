@@ -60,6 +60,7 @@ auth:
   #   tools: [] # Optional tool-name globs; identity is static:local-client.
 approval:
   ttl: 10m # Pending approval/input lifetime.
+  state_file: "" # Optional private path, e.g. /var/lib/opsgate/approvals.json; keeps link approvals, notices and the link key across restarts.
   web: false # Requires builtin auth; stdio supports elicitation only.
   require_web: false # Requires web; uses browser approval and denies stdio writes.
   window: 0s # Off; opt-in duration must be 1m..12h.

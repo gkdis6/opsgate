@@ -182,6 +182,9 @@ type StaticToken struct {
 
 // Approval configures human confirmation of write tools.
 type Approval struct {
+	// StateFile keeps approvals opened from links, inbox notices and the
+	// link-signing key across restarts (mode 0600). Empty keeps them in memory.
+	StateFile   string       `yaml:"state_file,omitempty"`
 	InboxNotify InboxNotify  `yaml:"inbox_notify,omitempty"`
 	Push        ApprovalPush `yaml:"push"`
 	// Wait bounds how long an MCP call waits for web approval and execution.

@@ -100,7 +100,12 @@ func (f *restartFixture) do(method, target, user string, form url.Values) *httpt
 // open follows the link to the approval page and returns its path and token.
 func (f *restartFixture) open(t *testing.T, user string) (path, csrf string) {
 	t.Helper()
-	w := f.do("GET", RestartURL("", "main", "deployment", "apps", "web"), user, nil)
+	return f.openTarget(t, user, "web")
+}
+
+func (f *restartFixture) openTarget(t *testing.T, user, name string) (path, csrf string) {
+	t.Helper()
+	w := f.do("GET", RestartURL("", "main", "deployment", "apps", name), user, nil)
 	if w.Code != http.StatusSeeOther || !linkID.MatchString(w.Header().Get("Location")) {
 		t.Fatalf("open: %d %q %s", w.Code, w.Header().Get("Location"), w.Body)
 	}

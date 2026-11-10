@@ -179,6 +179,7 @@ func (m *Manager) notify(w http.ResponseWriter, r *http.Request) {
 			m.push.enqueue(user, now.Add(time.Hour))
 		}
 	}
+	_ = m.saveLocked()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -192,6 +193,7 @@ func (m *Manager) dismissNotice(w http.ResponseWriter, r *http.Request, user str
 	if m.notices != nil && m.notices.users[user] != nil {
 		m.notices.sweep(m.now())
 		m.notices.users[user] = slices.DeleteFunc(m.notices.users[user], func(n inboxNotice) bool { return n.ID == r.PostForm.Get("id") })
+		_ = m.saveLocked()
 	}
 	m.mu.Unlock()
 	http.Redirect(w, r, "/approvals", http.StatusSeeOther)

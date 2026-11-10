@@ -131,9 +131,10 @@ func (m *Manager) directRequest(w http.ResponseWriter, r *http.Request, subject,
 	}
 	m.approvals[id] = &pending{
 		id: id, csrf: csrf, user: subject, transport: caller.Transport, tool: name, title: label(name), source: source, summary: summary,
-		target: plan.Target, noWindow: true, args: display, created: m.now(), expires: m.now().Add(m.ttl),
-		run: func(ctx context.Context) (string, error) { return d.Run(ctx, caller, raw, summary) },
+		target: plan.Target, noWindow: true, args: display, raw: raw, created: m.now(), expires: m.now().Add(m.ttl),
+		run: m.linkRun(name, subject, source, raw, summary),
 	}
+	_ = m.saveLocked()
 	m.mu.Unlock()
 	m.audit.Record(audit.Event{Time: m.now(), User: redact.String(subject), Transport: caller.Transport, Tool: name, Outcome: "pending",
 		Approval: "web", Source: source, Plan: summary, Args: map[string]any{"approval_id_prefix": id[:8]}})

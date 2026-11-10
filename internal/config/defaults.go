@@ -73,6 +73,7 @@ func DefaultFor(mode string) (Config, error) {
 	c.Auth.Mode = AuthBuiltin
 	c.Auth.Builtin.StateFile = "/var/lib/opsgate/oauth.json"
 	c.Approval.Push.StateFile = "/var/lib/opsgate/push.json"
+	c.Approval.StateFile = "/var/lib/opsgate/approvals.json"
 	c.Auth.Builtin.Upstream.Provider = "passkey"
 	return c, nil
 }

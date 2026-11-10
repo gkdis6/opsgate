@@ -2,6 +2,7 @@ package action
 
 import (
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -160,5 +161,58 @@ func TestHostLinks(t *testing.T) {
 		if _, err := HostOptionsURL("", tc[0], tc[1]); err == nil {
 			t.Fatalf("accepted %v", tc)
 		}
+	}
+}
+
+// With a key, only a link this process built keeps its source. Editing the
+// source or any argument, or dropping the signature, leaves an unsigned link.
+func TestSignedSource(t *testing.T) {
+	SetKey([]byte("0123456789abcdef0123456789abcdef"))
+	t.Cleanup(func() { SetKey(nil) })
+	args := map[string]any{"cluster": "main", "kind": "deployment", "namespace": "apps", "name": "web", "replicas": int32(2)}
+	parse := func(link string) (map[string]any, string) {
+		t.Helper()
+		u, err := url.Parse(link)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, got, source, err := Parse(u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got, source
+	}
+	for _, source := range []string{"rule", "ai"} {
+		link, err := URL("https://ops.example", "k8s_scale", args, source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, s := parse(link); s != source || !reflect.DeepEqual(got, args) {
+			t.Fatalf("signed %s link: %q %v", source, s, got)
+		}
+		other := "rule"
+		if source == "rule" {
+			other = "ai"
+		}
+		for name, edited := range map[string]string{
+			"relabelled":    strings.Replace(link, "source="+source, "source="+other, 1),
+			"other target":  strings.Replace(link, "name=web", "name=db", 1),
+			"other count":   strings.Replace(link, "replicas=2", "replicas=0", 1),
+			"no signature":  link[:strings.Index(link, "&sig=")] + link[strings.Index(link, "&source="):],
+			"bad signature": strings.Replace(link, "sig=", "sig=x", 1),
+		} {
+			if edited == link {
+				t.Fatalf("%s: link not edited: %s", name, link)
+			}
+			if _, s := parse(edited); s != Unsigned {
+				t.Fatalf("%s: source %q for %s", name, s, edited)
+			}
+		}
+	}
+	// Another tool with the same arguments does not share the signature.
+	restart := map[string]any{"cluster": "main", "kind": "deployment", "namespace": "apps", "name": "web"}
+	link, _ := URL("https://ops.example", "k8s_rollout_restart", restart, "rule")
+	if _, s := parse(strings.Replace(strings.Replace(link, "k8s_rollout_restart", "k8s_scale", 1), "&sig=", "&replicas=0&sig=", 1)); s != Unsigned {
+		t.Fatalf("cross-tool source %q", s)
 	}
 }

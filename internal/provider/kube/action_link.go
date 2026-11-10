@@ -12,7 +12,7 @@ import (
 type actionLinkInput struct {
 	Tool      string         `json:"tool" jsonschema:"Catalog action tool name"`
 	Arguments map[string]any `json:"arguments" jsonschema:"Exact action arguments; no approval_id or source"`
-	Source    string         `json:"source,omitempty" jsonschema:"ai (default) or rule"`
+	Source    string         `json:"source,omitempty" jsonschema:"Optional; only ai is accepted. Rule links come from k8s_remediation_options."`
 }
 
 // registerActionLink uses the existing per-cluster approval origin. It exposes
@@ -45,9 +45,14 @@ func (r *registry) registerActionLink(s *mcp.Server, env *tool.Env) {
 		if d == nil {
 			return "", tool.Denied("link action is disabled")
 		}
+		// A link requested through MCP is a client's suggestion. Rule links
+		// come only from the server's own choices.
 		source, err := action.Source(in.Source, "ai")
 		if err != nil {
 			return "", err
+		}
+		if source != "ai" {
+			return "", tool.Denied("action_link only issues source=ai links; rule links come from k8s_remediation_options")
 		}
 		cluster, _ := in.Arguments["cluster"].(string)
 		p, err := r.resolve(cluster)

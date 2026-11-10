@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gkdis6/opsgate/internal/action"
 	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/tool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -135,5 +136,42 @@ func TestGenericScaleUsesIntegerArguments(t *testing.T) {
 	result := f.do("POST", opened.Header().Get("Location"), "alice", url.Values{"csrf": {csrf[1]}, "decision": {"approve"}})
 	if result.Code != 200 || f.applied.Load() != 1 {
 		t.Fatal(result.Body.String())
+	}
+}
+
+// With a link key, a hand-made or relabelled link still opens an approval,
+// but the card and the audit log no longer repeat the source it claims.
+func TestUnsignedLinkSource(t *testing.T) {
+	action.SetKey([]byte("0123456789abcdef0123456789abcdef"))
+	t.Cleanup(func() { action.SetKey(nil) })
+	signed, err := action.URL("", "k8s_rollout_restart", map[string]any{"cluster": "main", "kind": "deployment", "namespace": "apps", "name": "web"}, "ai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for link, want := range map[string][2]string{
+		signed:                          {"AI — review carefully", "ai"},
+		genericRestart + "&source=rule": {"a link this server did not sign", action.Unsigned},
+		strings.Replace(signed, "source=ai", "source=rule", 1): {"a link this server did not sign", action.Unsigned},
+	} {
+		f := newRestartFixture(t, writer())
+		path := filepath.Join(t.TempDir(), "audit.jsonl")
+		logger, err := audit.Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer logger.Close()
+		f.manager.audit = logger
+		opened := f.do("GET", link, "alice", nil)
+		if opened.Code != http.StatusSeeOther {
+			t.Fatalf("open %s: %d %s", link, opened.Code, opened.Body)
+		}
+		page := f.do("GET", opened.Header().Get("Location"), "alice", nil)
+		if !strings.Contains(page.Body.String(), "Suggested by: "+want[0]) {
+			t.Fatalf("%s: %s", link, page.Body)
+		}
+		data, _ := os.ReadFile(path)
+		if !strings.Contains(string(data), `"source":"`+want[1]+`"`) {
+			t.Fatalf("%s audit: %s", link, data)
+		}
 	}
 }

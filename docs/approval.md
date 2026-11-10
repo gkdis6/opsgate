@@ -146,10 +146,16 @@ Unknown or repeated fields, `approval_id`, invalid sources and masked/secret
 values are refused before an approval is created. `source` is display/audit
 metadata, never a tool argument; it defaults to `rule`. The English approval
 page shows the catalog label and either “Suggested by: rule” or “Suggested by:
-AI — review carefully”. Source is a suggestion marker, not authenticated proof
-of authorship. Pending, decision and execution audit events record `source`.
+AI — review carefully”. The server signs every link it issues over the tool, all
+arguments and the source (`sig`). A link without a valid signature, such as one
+written by hand, edited, or issued before the server restarted, still opens an
+approval, but the card says “Suggested by: a link this server did not sign —
+review carefully” and the audit source is `link`. The key lives
+in one server process, so links issued by another process (`opsgate watch`, or
+the analyzer's own reader server) are unsigned on this server too; the choices
+page they lead to issues signed ones. Pending, decision and execution audit events record `source`.
 
-The read-only `action_link` tool defaults to `source=ai`, validates the current
+The read-only `action_link` tool only issues `source=ai` links, validates the current
 target with Plan and returns a URL, label and summary. It needs `ops:read` and
 the caller's tool policy, but cannot apply or grant an approval. Opening any
 link still requires browser sign-in and the approver's own `ops:write`, tool

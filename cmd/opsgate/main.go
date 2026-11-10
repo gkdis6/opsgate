@@ -120,6 +120,14 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 	if !cfg.Approval.Web {
 		browser = nil
 	}
+	// Links this process issues carry a signature over their action and
+	// source; a restart makes older links unsigned, not unusable.
+	linkKey := make([]byte, 32)
+	if _, err := rand.Read(linkKey); err != nil {
+		return err
+	}
+	action.SetKey(linkKey)
+	defer action.SetKey(nil)
 	am := approval.New(cfg.Approval, cfg.HTTP.PublicURL, browser, env.Audit)
 	if err := am.EnableInboxNotify(cfg.Approval.InboxNotify); err != nil {
 		return fmt.Errorf("approval inbox notify: %w", err)

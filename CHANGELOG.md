@@ -11,7 +11,15 @@ GitHub releases carry generated release notes.
 
 - Go fuzz tests for every parser that takes outside input: action and choices links, approval routes, signed inbox notices, push endpoints, OAuth registration, authorization and token requests, signed analyzer batches, JWT scope claims and redaction. A weekly workflow fuzzes each target further; SECURITY.md lists what each must hold. / 외부 입력을 해석하는 모든 코드(조치 링크, 승인 경로, 서명된 알림, 푸시 주소, OAuth 등록·인가·토큰, 분석기 묶음, JWT scope, 비밀값 가리기)에 Go fuzz 테스트를 추가하고, 매주 더 오래 도는 워크플로를 둡니다. 대상마다 지켜야 하는 성질은 SECURITY.md에 적었습니다.
 
+### Changed
+
+- Analyzer reports are short and lead with the cause: **Cause** (confirmed, likely or insufficient evidence), **Do now** (at most three steps, each an approval link or one command alone in a code block for copying), up to three **Evidence** lines, and **Still to check** only when needed. The header is one line and the footer lists reads by name without their arguments. / 분석 보고서를 짧게 바꾸고 원인을 맨 앞에 둡니다. **원인**(확정·추정·증거 부족), **지금 할 일**(최대 3단계, 승인 링크이거나 복사하기 쉽게 코드 블록에 하나씩 넣은 명령), **근거**(최대 3줄), 필요할 때만 **더 확인할 것** 순서입니다. 머리말은 한 줄이고 꼬리말은 조회한 도구 이름만 적습니다.
+
+- `action_link` only issues `source=ai` links; `source: rule` is refused. Rule links come from `k8s_remediation_options` and the choices page. / `action_link`는 `source=ai` 링크만 만들고 `source: rule`은 거부합니다. rule 링크는 `k8s_remediation_options`와 조치 선택 페이지에서만 나옵니다.
+
 ### Security
+
+- Action links are signed over their tool, arguments and source. A link the server did not sign (hand-made, edited, or older than the last restart) still needs the same approval, but its card reads "a link this server did not sign — review carefully" instead of repeating the source it claims, and the audit source is `link`. / 조치 링크에 도구, 인자, 출처를 묶은 서명을 붙입니다. 서버가 서명하지 않은 링크(손으로 만든 링크, 고친 링크, 마지막 재시작 전 링크)도 같은 승인이 필요하지만, 카드에는 링크가 주장하는 출처 대신 "서버가 서명하지 않은 링크"라고 표시하고 감사 로그 출처는 `link`로 남깁니다.
 
 - Anonymous authorization requests can no longer push out a connection whose user has already signed in; when only signed-in entries remain, new requests get HTTP 429. / 익명 인가 요청이 로그인을 마친 연결을 밀어내지 못합니다. 그런 항목만 남으면 새 요청은 HTTP 429를 받습니다.
 - A quoted secret that continues past its line is masked through its closing quote (within 4 KiB and 32 lines) instead of only its first line, and later lines are still scanned so a truncated value cannot hide the next secret. / 여러 줄에 걸친 따옴표 비밀값을 첫 줄만이 아니라 닫는 따옴표까지(4 KiB, 32줄 이내) 가립니다. 이어지는 줄도 계속 검사해 잘린 값 뒤의 비밀이 드러나지 않습니다.

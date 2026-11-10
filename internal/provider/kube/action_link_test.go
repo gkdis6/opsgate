@@ -63,7 +63,7 @@ func TestActionLinkReadOnlyAndPolicy(t *testing.T) {
 		{"success", "k8s_rollout_restart", "apps", "", false},
 		{"scale", "k8s_scale", "apps", "", false},
 		{"owned pod", "k8s_delete_pod", "apps", "owned", false},
-		{"rule source", "k8s_rollout_restart", "apps", "rule", false},
+		{"rule source", "k8s_rollout_restart", "apps", "rule", true},
 		{"bad source", "k8s_rollout_restart", "apps", "bad source", true},
 		{"unknown", "unknown", "apps", "", true},
 		{"note", "note_trash", "apps", "", true},
@@ -139,9 +139,6 @@ func TestActionLinkReadOnlyAndPolicy(t *testing.T) {
 			if !tc.wantError {
 				entry, _ := action.Lookup(tc.target)
 				wantSource := "ai"
-				if source == "rule" {
-					wantSource = "rule"
-				}
 				var result map[string]string
 				if json.Unmarshal([]byte(out.Content[0].(*mcp.TextContent).Text), &result) != nil || !strings.Contains(result["url"], "/approve/action/"+tc.target+"?") || !strings.Contains(result["url"], "source="+wantSource) || result["label"] != entry.Label("en") || !strings.Contains(result["summary"], "apps/web") {
 					t.Fatalf("bad result: %v", result)

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gkdis6/opsgate/internal/action"
 	"github.com/gkdis6/opsgate/internal/audit"
 	"github.com/gkdis6/opsgate/internal/redact"
 	"github.com/gkdis6/opsgate/internal/ui"
@@ -215,6 +216,8 @@ func sourceLabel(source string) string {
 		return "AI — review carefully"
 	case "rule":
 		return "rule"
+	case action.Unsigned:
+		return "a link this server did not sign — review carefully"
 	}
 	return ""
 }

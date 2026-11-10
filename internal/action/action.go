@@ -3,6 +3,9 @@
 package action
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -53,6 +56,29 @@ func Source(value, fallback string) (string, error) {
 		return "", fmt.Errorf("source must be rule or ai")
 	}
 	return value, nil
+}
+
+// Unsigned is the source of a link this server did not issue, or whose
+// signature no longer verifies. Its claimed source is not shown as fact.
+const Unsigned = "link"
+
+var signingKey []byte
+
+// SetKey makes URL sign the links it builds and Parse distrust the source of
+// any link without a valid signature. Call it once before serving. Without a
+// key (stdio and tests) sources are taken as written.
+func SetKey(key []byte) { signingKey = append([]byte(nil), key...) }
+
+// signature binds the tool, every argument and the source, so a signed link
+// cannot be edited into another action or relabelled.
+func signature(name string, args map[string]any, source string) string {
+	q := url.Values{}
+	for k, v := range args {
+		q.Set(k, fmt.Sprint(v))
+	}
+	mac := hmac.New(sha256.New, signingKey)
+	mac.Write([]byte(name + "\x00" + source + "\x00" + q.Encode()))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:16])
 }
 
 // optional arguments may be omitted from a link: the cluster defaults on the
@@ -110,10 +136,14 @@ func Validate(name string, args map[string]any) error {
 // ParseQuery consumes source separately; it can never become a tool argument.
 func ParseQuery(name string, q url.Values) (map[string]any, string, error) {
 	args := map[string]any{}
-	source := "rule"
+	source, sig := "rule", ""
 	for key, values := range q {
 		if len(values) != 1 {
 			return nil, "", fmt.Errorf("field %q must occur at most once", key)
+		}
+		if key == "sig" {
+			sig = values[0]
+			continue
 		}
 		if key == "source" {
 			var err error
@@ -141,7 +171,13 @@ func ParseQuery(name string, q url.Values) (map[string]any, string, error) {
 			args[key] = values[0]
 		}
 	}
-	return args, source, Validate(name, args)
+	if err := Validate(name, args); err != nil {
+		return nil, "", err
+	}
+	if len(signingKey) > 0 && !hmac.Equal([]byte(sig), []byte(signature(name, args, source))) {
+		source = Unsigned
+	}
+	return args, source, nil
 }
 
 // URL is the sole builder for new action links. Empty base supports local routes.
@@ -160,6 +196,9 @@ func URL(base, name string, args map[string]any, source string) (string, error) 
 	q := url.Values{"source": {source}}
 	for k, v := range args {
 		q.Set(k, fmt.Sprint(v))
+	}
+	if len(signingKey) > 0 {
+		q.Set("sig", signature(name, args, source))
 	}
 	u.Path = "/approve/action/" + name
 	u.RawQuery = q.Encode()

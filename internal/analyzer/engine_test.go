@@ -61,7 +61,7 @@ func TestReadOnlyInvestigation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Calls != 2 || r.Tokens != 20 || !strings.Contains(r.Text, "조회 근거") || len(f.calls) != 2 || f.calls[0] != "note_search" || f.calls[1] != "k8s_get" {
+	if r.Calls != 2 || r.Tokens != 20 || !strings.Contains(r.Text, "[E2] k8s_get") || len(f.calls) != 2 || f.calls[0] != "note_search" || f.calls[1] != "k8s_get" {
 		t.Fatalf("result=%+v calls=%v", r, f.calls)
 	}
 }

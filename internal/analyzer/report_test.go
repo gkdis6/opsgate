@@ -13,13 +13,14 @@ import (
 func TestReportLanguagesAndProposals(t *testing.T) {
 	c := Default()
 	ko := reportInstructions(c)
-	for _, text := range []string{"Report in Korean", "권장 조치", "placeholder requiring validation", "NEVER tool calls", "Do not recommend a restart"} {
+	for _, text := range []string{"Report in Korean", "**원인**", "**지금 할 일**", "**근거**", "own fenced code block", "placeholder requiring validation", "NEVER tool calls", "Do not recommend a restart"} {
 		if !strings.Contains(ko, text) {
 			t.Errorf("missing policy %q", text)
 		}
 	}
-	footer := evidenceFooter(c, []string{"[E1] k8s_get"}, 1, 20, 0, 0)
-	if !strings.Contains(footer, "조회 근거") {
+	// The footer names each read once and leaves its arguments out.
+	footer := evidenceFooter(c, []string{`[E1] k8s_get {"name":"web","namespace":"apps"} (ok)`, `[E2] k8s_logs {"pod":"web"} (tool error)`}, 2, 20, 0, 0)
+	if !strings.Contains(footer, "[E1] k8s_get · [E2] k8s_logs (실패)\n조회 2회") || strings.Contains(footer, "namespace") {
 		t.Fatal(footer)
 	}
 	c.Report.Language = "en"
@@ -30,7 +31,7 @@ func TestReportLanguagesAndProposals(t *testing.T) {
 	if !strings.Contains(text, "Analysis failed") || strings.Contains(text, "분석 실패") {
 		t.Fatal(text)
 	}
-	if !strings.Contains(evidenceFooter(c, nil, 1, 20, 0, 0), "Evidence:") {
+	if !strings.Contains(evidenceFooter(c, []string{"[E1] k8s_get {} (failed)"}, 1, 20, 0, 0), "[E1] k8s_get (failed)\n1 reads") {
 		t.Fatal("English footer missing")
 	}
 	c.Report.SuggestActions = false

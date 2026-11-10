@@ -75,7 +75,7 @@ The shared `internal/redact` layer masks PEM private keys, Authorization/Proxy-A
 
 Web approval runs the original call once. All approval-gated tools accept optional `approval_id` to read a stored outcome; omit it on the first call. Retrying the same arguments never re-applies. `approval.wait` defaults to 25s with web approval (maximum 55s; zero disables waiting); a waiting call receives the execution result directly.
 
-When web approval is enabled, read-only `approval_status` (`ops:read`) takes required `approval_id` and returns the requester’s `tool`, `target`, `status` (`pending`, `running`, `applied`, `not_applied`, `rejected`) and `result` when available. Other users receive the same answer as unknown or expired IDs. Tool policy, audit and output limits apply. Outcomes remain in memory until original expiry and at least 10 minutes after execution.
+When web approval is enabled, read-only `approval_status` (`ops:read`) takes required `approval_id` and returns the requester’s `tool`, `target`, `status` (`pending`, `running`, `applied`, `not_applied`, `unknown`, `rejected`) and `result` when available. Other users receive the same answer as unknown or expired IDs. Tool policy, audit and output limits apply. Outcomes remain in memory until original expiry and at least 10 minutes after execution.
 
 Read tools accept up to 16 KiB of raw JSON arguments. Write arguments default to 16 KiB; `note_create`, `note_append` and `note_replace` allow 528 KiB. JSON escaping counts toward these limits. Approval summaries are bounded by `max(64 KiB, argument limit + 16 KiB)`: 64 KiB for default tools, 544 KiB for note content tools. Redacted display arguments must fit the tool's argument limit. Note previews have a separate approximately 8 KiB display bound.
 

@@ -225,7 +225,10 @@ func apiVersion(kind string) string {
 	return "v1"
 }
 
-var sensitiveEnv = regexp.MustCompile(`(?i)(pass|secret|token|key|credential|auth|dsn|private|cert|database_url)`)
+// Covers every name the shared redactor treats as a secret assignment (pwd,
+// cookie, session_id) so a literal value cannot stay visible here and then be
+// copied into an innocuous variable by expansion.
+var sensitiveEnv = regexp.MustCompile(`(?i)(pass|pwd|secret|token|key|credential|auth|dsn|private|cert|database_url|cookie|session)`)
 
 func sanitize(m map[string]any, kind string, showData bool) {
 	// Walk object metadata, including template metadata, to remove embedded snapshots.
@@ -282,14 +285,19 @@ func sanitize(m map[string]any, kind string, showData bool) {
 		containers, _ := spec[field].([]any)
 		for _, c := range containers {
 			cm, _ := c.(map[string]any)
+			// command and args form one argv: a flag ending command takes
+			// its value from the first element of args.
+			pending := false
 			for _, field := range []string{"command", "args"} {
 				argv, _ := cm[field].([]any)
-				for i := 0; i+1 < len(argv); i++ {
-					flag, _ := argv[i].(string)
-					if redact.SensitiveFlag(flag) {
-						i++
+				for i := range argv {
+					if pending {
 						argv[i] = redact.Mask
+						pending = false
+						continue
 					}
+					flag, _ := argv[i].(string)
+					pending = redact.SensitiveFlag(flag)
 				}
 			}
 			env, _ := cm["env"].([]any)

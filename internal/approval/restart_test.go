@@ -3,6 +3,7 @@ package approval
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -42,6 +43,8 @@ type restartFixture struct {
 	last    atomic.Value
 	// check, when set, becomes the plan's recovery check.
 	check atomic.Value
+	// applyErr, when set, is what Apply returns after counting the call.
+	applyErr atomic.Value
 }
 
 func newRestartFixture(t *testing.T, browser BrowserAuth) *restartFixture {
@@ -66,6 +69,9 @@ func newRestartFixture(t *testing.T, browser BrowserAuth) *restartFixture {
 			Apply: func(_ context.Context, _ tool.Caller, in linkRestartInput, _ tool.Plan) (string, error) {
 				f.applied.Add(1)
 				f.last.Store(in)
+				if err, ok := f.applyErr.Load().(error); ok {
+					return "", err
+				}
 				return "Requested restart", nil
 			},
 		})
@@ -244,5 +250,64 @@ func TestRestartURLEscapesAndRoutes(t *testing.T) {
 	id := strings.TrimPrefix(w.Header().Get("Location"), "/approve/")
 	if !strings.Contains(string(f.manager.approvals[id].args), `"cluster":"a/b"`) {
 		t.Fatalf("args = %s", f.manager.approvals[id].args)
+	}
+}
+
+// A lost response is not "nothing changed": the page and the status say the
+// outcome is unknown, while a definite rejection still reads Not applied.
+func TestUnknownOutcomeIsNotReportedAsNotApplied(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err          error
+		page, status string
+	}{
+		"timeout":  {context.DeadlineExceeded, "Outcome unknown", "unknown"},
+		"rejected": {errors.New("the server rejected the patch"), "Not applied", "not_applied"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newRestartFixture(t, writer())
+			f.applyErr.Store(tc.err)
+			path, csrf := f.open(t, "alice")
+			w := f.do("POST", path, "alice", url.Values{"csrf": {csrf}, "decision": {"approve"}})
+			if !strings.Contains(w.Body.String(), tc.page) || f.applied.Load() != 1 {
+				t.Fatalf("page: %s", w.Body)
+			}
+			f.manager.mu.Lock()
+			var status string
+			for _, p := range f.manager.approvals {
+				status = approvalStatus(p)
+			}
+			f.manager.mu.Unlock()
+			if status != tc.status {
+				t.Fatalf("status %q", status)
+			}
+		})
+	}
+}
+
+// Another site can make a signed-in user's browser open links. The same link
+// must not pile up approvals, and many links must not fill the shared table.
+func TestLinkApprovalsAreDeduplicatedAndCapped(t *testing.T) {
+	f := newRestartFixture(t, writer())
+	first, _ := f.open(t, "alice")
+	for range 5 {
+		if again, _ := f.open(t, "alice"); again != first {
+			t.Fatalf("same link opened %s, then %s", first, again)
+		}
+	}
+	if other, _ := f.open(t, "bob"); other == first {
+		t.Fatal("another user joined the approval")
+	}
+	for i := 1; i < maxLinkApprovals; i++ {
+		w := f.do("GET", RestartURL("", "main", "deployment", "apps", fmt.Sprint("web-", i)), "alice", nil)
+		if w.Code != http.StatusSeeOther {
+			t.Fatalf("link %d: %d", i, w.Code)
+		}
+	}
+	w := f.do("GET", RestartURL("", "main", "deployment", "apps", "one-more"), "alice", nil)
+	f.manager.mu.Lock()
+	total := len(f.manager.approvals)
+	f.manager.mu.Unlock()
+	if w.Code != http.StatusTooManyRequests || total != maxLinkApprovals+1 {
+		t.Fatalf("over the cap: %d, %d approvals", w.Code, total)
 	}
 }

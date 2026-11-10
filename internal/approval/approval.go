@@ -80,8 +80,10 @@ type pending struct {
 	done                                            chan struct{}
 	finished                                        bool
 	failed                                          bool
-	retainUntil                                     time.Time
-	window                                          time.Duration
+	// unknown: the apply ended without a definite answer.
+	unknown     bool
+	retainUntil time.Time
+	window      time.Duration
 	// run applies a write once approved, outside the manager lock.
 	run    func(context.Context) (string, error)
 	result string

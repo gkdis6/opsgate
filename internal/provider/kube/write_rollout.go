@@ -59,6 +59,10 @@ func (p *provider) planRollout(ctx context.Context, _ tool.Caller, in rolloutInp
 	annotations, _ := templateMeta["annotations"].(map[string]any)
 	summary := fmt.Sprintf("Rollout restart %s %s/%s (UID %q; replicas %d, ready %d, images %v)", in.Kind, in.Namespace, in.Name, metadata.GetUID(), desiredCount, ready, images)
 	plan, err := identityPlan(metadata.GetUID(), metadata.GetResourceVersion(), summary, annotations != nil)
+	if identity, ok := plan.Data.(writeIdentity); ok {
+		identity.generation = metadata.GetGeneration()
+		plan.Data = identity
+	}
 	plan.Check = p.workloadCheck(in.Kind, in.Namespace, in.Name)
 	return plan, err
 }
@@ -78,6 +82,11 @@ func (p *provider) applyRollout(ctx context.Context, _ tool.Caller, in rolloutIn
 		return "", err
 	}
 	ops := []map[string]any{{"op": "test", "path": "/metadata/uid", "value": identity.uid}}
+	if identity.generation > 0 {
+		// The image, replicas or template changed since the plan was read:
+		// the restart would act on a spec nobody reviewed.
+		ops = append(ops, map[string]any{"op": "test", "path": "/metadata/generation", "value": identity.generation})
+	}
 	if !identity.hasAnnotations {
 		// Avoid overwriting annotations added by another writer since planning.
 		ops = append(ops, map[string]any{"op": "test", "path": "/metadata/resourceVersion", "value": identity.version},

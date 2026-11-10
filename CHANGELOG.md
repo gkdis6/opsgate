@@ -19,6 +19,14 @@ GitHub releases carry generated release notes.
 
 ### Security
 
+- From an AI-assisted audit (OpenAI Codex CLI 0.166, read-only, findings verified and fixed by hand; not a third-party human review): / AI 보조 감사(OpenAI Codex CLI 0.166, 읽기 전용, 지적 사항은 직접 검증해 수정. 사람이 한 외부 검토는 아님)에서 나온 수정:
+  - `k8s_get` and `k8s_env` hide literal values of variables named like `MYSQL_PWD`, `COOKIE` and `SESSION_ID`, and a secret flag at the end of `command` masks the first element of `args`. / `k8s_get`과 `k8s_env`가 `MYSQL_PWD`, `COOKIE`, `SESSION_ID` 같은 이름의 값도 가리고, `command` 끝의 비밀 플래그 다음에 오는 `args` 첫 값도 가립니다.
+  - `k8s_env` bounds `$(VAR)` expansion to 16 KiB per value and 1 MiB per container, so a small spec that doubles a value at every variable cannot exhaust memory. / `k8s_env`의 `$(VAR)` 펼치기를 값마다 16 KiB, 컨테이너마다 1 MiB로 제한해, 변수마다 값을 두 배로 늘리는 작은 스펙으로 메모리를 고갈시킬 수 없습니다.
+  - Rollout restart also tests the reviewed spec generation, so a spec changed between the final plan and the patch is not restarted unseen. / 재시작 패치가 검토한 스펙의 generation도 확인해, 마지막 계획과 패치 사이에 스펙이 바뀌면 실행하지 않습니다.
+  - An apply that times out or loses its connection is reported as **Outcome unknown** (`approval_status`: `unknown`) instead of Not applied, since the change may have reached the target. / 적용 중 시간 초과나 연결 끊김은 "적용 안 됨"이 아니라 **결과 확인 필요**(`approval_status`의 `unknown`)로 알립니다. 변경이 대상에 도달했을 수 있기 때문입니다.
+  - Opening the same action link again returns the approval already waiting, and one user can hold at most 20 undecided approvals opened from links, so another site cannot fill the approval table through a signed-in browser. / 같은 조치 링크를 다시 열면 이미 대기 중인 승인으로 이동하고, 링크로 연 미결 승인은 사용자당 20개까지입니다. 다른 사이트가 로그인된 브라우저로 승인 대기열을 채울 수 없습니다.
+  - Request bodies must arrive within 30 seconds, new MCP sessions are admitted at a bounded rate per user (burst 20, then one every 3 seconds), and `/healthz` answers only GET. / 요청 본문은 30초 안에 도착해야 하고, 새 MCP 세션은 사용자별로 제한된 속도(한 번에 20개, 이후 3초에 1개)로만 받으며, `/healthz`는 GET에만 답합니다.
+
 - Action links are signed over their tool, arguments and source. A link the server did not sign (hand-made, edited, or older than the last restart) still needs the same approval, but its card reads "a link this server did not sign — review carefully" instead of repeating the source it claims, and the audit source is `link`. / 조치 링크에 도구, 인자, 출처를 묶은 서명을 붙입니다. 서버가 서명하지 않은 링크(손으로 만든 링크, 고친 링크, 마지막 재시작 전 링크)도 같은 승인이 필요하지만, 카드에는 링크가 주장하는 출처 대신 "서버가 서명하지 않은 링크"라고 표시하고 감사 로그 출처는 `link`로 남깁니다.
 
 - Anonymous authorization requests can no longer push out a connection whose user has already signed in; when only signed-in entries remain, new requests get HTTP 429. / 익명 인가 요청이 로그인을 마친 연결을 밀어내지 못합니다. 그런 항목만 남으면 새 요청은 HTTP 429를 받습니다.

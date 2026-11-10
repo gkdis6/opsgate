@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -462,4 +463,37 @@ func TestEnvMultilineValueStaysOnOneLine(t *testing.T) {
 	p.cfg.ShowConfigMapData = true
 	out := envRead(t, p, envInput{Namespace: "public", Name: "web"})
 	envContains(t, out, `app.yaml = "db:\n  host: db\n" (ConfigMap config via envFrom`)
+}
+
+// Each variable doubling the previous one must not allocate exponentially.
+func TestEnvExpansionIsBounded(t *testing.T) {
+	values := map[string]envValue{"A0": {expansion: strings.Repeat("x", 1024)}}
+	for i := 1; i <= 60; i++ {
+		prev := fmt.Sprintf("$(A%d)", i-1)
+		got := expandEnv(prev+prev, values)
+		if len(got) > maxEnvExpansion {
+			t.Fatalf("A%d expanded to %d bytes", i, len(got))
+		}
+		values[fmt.Sprintf("A%d", i)] = envValue{expansion: got}
+	}
+	if !strings.Contains(values["A60"].expansion, envExpansionOmitted) {
+		t.Fatalf("A60 = %.40q", values["A60"].expansion)
+	}
+}
+
+func TestSensitiveNamesAndArgvBoundary(t *testing.T) {
+	for _, name := range []string{"MYSQL_PWD", "COOKIE", "SESSION_ID", "DB_PASSWORD", "API_KEY"} {
+		if !sensitiveEnv.MatchString(name) {
+			t.Errorf("%s not treated as sensitive", name)
+		}
+	}
+	pod := map[string]any{"spec": map[string]any{"containers": []any{map[string]any{
+		"command": []any{"app", "--password"}, "args": []any{"hunter2", "--verbose", "--token", "abc"},
+		"env": []any{map[string]any{"name": "MYSQL_PWD", "value": "hunter2"}},
+	}}}}
+	sanitize(pod, "pods", false)
+	raw, _ := json.Marshal(pod)
+	if strings.Contains(string(raw), "hunter2") || strings.Contains(string(raw), `"abc"`) || !strings.Contains(string(raw), "--verbose") {
+		t.Fatalf("argv or env value visible: %s", raw)
+	}
 }

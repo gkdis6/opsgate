@@ -87,7 +87,7 @@ func TestRollout(t *testing.T) {
 	for _, kind := range []string{"deployment", "statefulset", "daemonset"} {
 		t.Run(kind, func(t *testing.T) {
 			count := int32(3)
-			md := metav1.ObjectMeta{Name: "web", Namespace: "prod", UID: "original", ResourceVersion: "7"}
+			md := metav1.ObjectMeta{Name: "web", Namespace: "prod", UID: "original", ResourceVersion: "7", Generation: 5}
 			template := corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "nginx:1"}}}}
 			var obj runtime.Object
 			switch kind {
@@ -127,7 +127,10 @@ func TestRollout(t *testing.T) {
 			if err = json.Unmarshal(action.GetPatch(), &ops); err != nil {
 				t.Fatal(err)
 			}
-			if len(ops) != 4 || ops[0].Op != "test" || ops[0].Path != "/metadata/uid" || ops[0].Value != "original" {
+			// The reviewed spec generation is tested too, so a spec changed
+			// after the plan was read is not restarted unseen.
+			if len(ops) != 5 || ops[0].Op != "test" || ops[0].Path != "/metadata/uid" || ops[0].Value != "original" ||
+				ops[1].Op != "test" || ops[1].Path != "/metadata/generation" || ops[1].Value != float64(5) {
 				t.Fatalf("patch = %s", action.GetPatch())
 			}
 			stamp, err := time.Parse(time.RFC3339, ops[len(ops)-1].Value.(string))

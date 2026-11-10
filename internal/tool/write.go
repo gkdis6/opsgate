@@ -5,7 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -123,6 +127,24 @@ type ApprovalResolver interface {
 // a stored, already audited execution result instead of authorizing an apply.
 type Confirmer interface {
 	Confirm(ctx context.Context, req *mcp.CallToolRequest, r ConfirmRequest) (method string, err error)
+}
+
+// ErrOutcomeUnknown marks an apply that ended without a definite answer: the
+// request may have reached the target before its response was lost. Callers
+// must not report it as "nothing changed".
+var ErrOutcomeUnknown = errors.New("outcome unknown: the change may have been applied; check the target before trying again")
+
+// applyError marks timeouts and broken connections during Apply as unknown.
+// Refusals and API rejections stay definite.
+func applyError(err error) error {
+	if err == nil || errors.Is(err, ErrDenied) || errors.Is(err, ErrOutcomeUnknown) {
+		return err
+	}
+	var network net.Error
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.As(err, &network) {
+		return fmt.Errorf("%w (%w)", ErrOutcomeUnknown, err)
+	}
+	return err
 }
 
 // ErrApprovalPending means a human has been asked but has not decided yet.
@@ -341,6 +363,7 @@ func runApproved[In WriteInput](ctx context.Context, env *Env, name, scope strin
 		defer cancel()
 		if err = applyCtx.Err(); err == nil {
 			text, err = h.Apply(applyCtx, c, in, plan)
+			err = applyError(err)
 		}
 	}
 	ev := audit.Event{Time: start, User: c.User, Transport: c.Transport, Tool: name, Args: args, Plan: shown, Approval: "web", Outcome: "ok", DurationMS: time.Since(start).Milliseconds()}
@@ -361,6 +384,9 @@ func runApproved[In WriteInput](ctx context.Context, env *Env, name, scope strin
 		ev.OutputSize = len(text)
 	}
 	env.Audit.Record(ev)
+	if errors.Is(err, ErrOutcomeUnknown) {
+		return "", fmt.Errorf("%w%s", ErrOutcomeUnknown, strings.TrimPrefix(text, ErrOutcomeUnknown.Error()))
+	}
 	if err != nil {
 		return "", errors.New(text)
 	}

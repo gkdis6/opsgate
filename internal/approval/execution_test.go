@@ -222,7 +222,13 @@ func TestMCPExecutionRecheckIdentityAuditAndReplay(t *testing.T) {
 			for range 2 {
 				result := call(id, "nginx.service")
 				text := result.Content[0].(*mcp.TextContent).Text
-				if result.IsError != (change != "none") || strings.Contains(text, "secret") || change != "none" && !strings.Contains(text, "Not applied:") {
+				// A timed-out apply may have reached the target, so it must
+				// not be reported as not applied.
+				prefix := "Not applied:"
+				if change == "timeout" {
+					prefix = "Check the target: outcome unknown"
+				}
+				if result.IsError != (change != "none") || strings.Contains(text, "secret") || change != "none" && !strings.Contains(text, prefix) {
 					t.Fatalf("retry: %+v %s", result, text)
 				}
 			}

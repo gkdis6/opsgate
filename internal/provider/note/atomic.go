@@ -109,7 +109,11 @@ func atomicWrite(ctx context.Context, dir *os.Root, base, text string, mode os.F
 	if err != nil {
 		return fmt.Errorf("cannot publish note")
 	}
-	return syncDir(dir)
+	// The note is already in place; only its durability is in doubt.
+	if err := syncDir(dir); err != nil {
+		return fmt.Errorf("%w: the note was written but %w", tool.ErrOutcomeUnknown, err)
+	}
+	return nil
 }
 
 func syncDir(dir *os.Root) error {

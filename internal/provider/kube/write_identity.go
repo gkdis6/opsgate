@@ -10,6 +10,9 @@ type writeIdentity struct {
 	uid            types.UID
 	version        string
 	hasAnnotations bool
+	// generation changes with the spec but not with status, so a restart can
+	// require the reviewed spec without failing on every readiness update.
+	generation int64
 }
 
 func identityPlan(uid types.UID, version, summary string, annotations bool) (tool.Plan, error) {

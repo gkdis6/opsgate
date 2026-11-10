@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -42,6 +43,15 @@ func common(next http.Handler) http.Handler {
 			}
 			log.Printf("http method=%q path=%q status=%d duration=%s", r.Method, path, status, time.Since(start))
 		}()
+		// A byte limit alone lets a slow sender hold a connection and its
+		// goroutine. Bound the upload, and lift the bound once the body has
+		// been read so a long response (an approval wait, a stream) is not cut.
+		if r.Body != nil && r.Body != http.NoBody && r.ContentLength != 0 {
+			controller := http.NewResponseController(response)
+			if controller.SetReadDeadline(time.Now().Add(bodyReadTimeout)) == nil {
+				r.Body = &deadlineBody{ReadCloser: r.Body, done: func() { _ = controller.SetReadDeadline(time.Time{}) }}
+			}
+		}
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				// Panic values and stacks can contain credentials from downstream handlers.
@@ -85,3 +95,23 @@ func (w *statusWriter) FlushError() error {
 	return http.NewResponseController(w.ResponseWriter).Flush()
 }
 func (w *statusWriter) Flush() { _ = w.FlushError() }
+
+// bodyReadTimeout covers the largest accepted upload (about 0.5 MiB of note
+// arguments) on a slow mobile link. A variable so tests can shorten it.
+var bodyReadTimeout = 30 * time.Second
+
+type deadlineBody struct {
+	io.ReadCloser
+	done func()
+}
+
+// Read lifts the deadline at the end of the body. A body that is closed
+// unread keeps it, which bounds the server's own drain of the remainder.
+func (b *deadlineBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil && b.done != nil {
+		b.done()
+		b.done = nil
+	}
+	return n, err
+}

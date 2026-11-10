@@ -169,6 +169,8 @@ func (m *Manager) page(w http.ResponseWriter, r *http.Request, subject string) {
 	}
 	view.Result, view.Undo, _ = m.splitUndo(view.Result)
 	switch {
+	case view.Direct && strings.HasPrefix(view.Result, outcomeUnknown):
+		view.Status, view.PageTitle = "Outcome unknown / 결과 확인 필요", "Outcome unknown"
 	case view.Direct && strings.HasPrefix(view.Result, notApplied):
 		view.Status, view.PageTitle = "Not applied / 적용 안 됨", "Not applied"
 	case view.Direct && view.Result != "" && p.decision == "approved" && p.window == 0:

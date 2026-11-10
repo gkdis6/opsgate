@@ -48,6 +48,8 @@ func approvalStatus(p *pending) string {
 	switch {
 	case p.decision == "rejected":
 		return "rejected"
+	case p.finished && p.unknown:
+		return "unknown"
 	case p.finished && p.failed:
 		return "not_applied"
 	case p.finished:

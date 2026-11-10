@@ -91,7 +91,7 @@ kubeconfig의 `exec` 및 `auth-provider` 자격 증명 플러그인은 허용하
 
 웹 승인을 하면 원래 호출을 한 번 실행합니다. 쓰기 도구는 저장된 결과를 조회하는 선택 인자 `approval_id`를 받으며, 첫 호출에서는 생략하세요. 같은 인자로 재호출해도 다시 실행하지 않습니다. `approval.wait`는 웹 승인 사용 시 기본 25s(최대 55s, 0이면 대기 안 함)이며 대기 중에는 결과를 바로 반환합니다.
 
-웹 승인이 켜져 있으면 읽기 전용 `approval_status`(`ops:read`)를 제공합니다. 필수 인자 `approval_id`로 요청자 본인의 `tool`, `target`, `status`(`pending`, `running`, `applied`, `not_applied`, `rejected`)와 결과가 있으면 `result`를 조회합니다. 다른 사용자와 알 수 없거나 만료된 ID에는 같은 응답을 반환합니다. 도구 정책, 감사 로그, 출력 제한을 적용합니다. 결과는 원래 만료 시각까지, 실행 후 최소 10분까지 메모리에 보관합니다.
+웹 승인이 켜져 있으면 읽기 전용 `approval_status`(`ops:read`)를 제공합니다. 필수 인자 `approval_id`로 요청자 본인의 `tool`, `target`, `status`(`pending`, `running`, `applied`, `not_applied`, `unknown`, `rejected`)와 결과가 있으면 `result`를 조회합니다. 다른 사용자와 알 수 없거나 만료된 ID에는 같은 응답을 반환합니다. 도구 정책, 감사 로그, 출력 제한을 적용합니다. 결과는 원래 만료 시각까지, 실행 후 최소 10분까지 메모리에 보관합니다.
 
 읽기 도구는 원시 JSON 인자를 최대 16 KiB까지 받습니다. 쓰기 인자의 기본 상한도 16 KiB이지만, `note_create`, `note_append`, `note_replace`는 528 KiB까지 허용합니다. JSON 이스케이프도 이 크기에 포함됩니다. 승인 요약의 상한은 `max(64 KiB, argument limit + 16 KiB)`로, 기본 도구는 64 KiB, 노트 내용을 다루는 도구는 544 KiB입니다. 화면에 표시할 마스킹한 인자도 각 도구의 인자 제한을 넘을 수 없습니다. 노트 미리보기에는 별도로 약 8 KiB의 표시 제한이 있습니다.
 

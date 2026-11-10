@@ -80,9 +80,15 @@ fuzzes each target further and keeps any failing input.
 | External JWT scope claims | `FuzzTokenScopes` (`internal/authn`) | Only known scopes, each once |
 | Redaction | `FuzzRanges`, `FuzzValue` (`internal/redact`) | Ranges are ordered and in bounds; pages keep their line breaks and never show a masked part; known secrets stay masked whatever text surrounds them |
 
-The server has not had a third-party security review.
+The server has not had a third-party security review. On 2026-11-10 the
+maintainer ran an AI-assisted read-only audit (OpenAI Codex CLI 0.166) and
+verified and fixed its findings by hand; the changelog lists them. That is a
+second automated opinion, not an independent human review.
 
 ## Known limitations
+
+- Approvals, approval windows, inbox notices and recovery checks live in memory and are lost when the server restarts, as is the link-signing key.
+- The built-in OIDC and external JWT issuers are fetched from operator-configured URLs without the private-address filter that push and webhook delivery use.
 
 - A flood of anonymous authorization requests can push out connection attempts that have not finished sign-in yet, so those users must start again. Connections whose user has signed in are kept.
 - A quoted secret value left open at its line end is masked through its closing quote when that quote follows within 4 KiB and 32 lines; past that, only its first line is masked. Text between the opening and closing quote is masked even if the quote belongs to other text.

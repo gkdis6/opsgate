@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
+	"golang.org/x/time/rate"
 
 	"github.com/gkdis6/opsgate/internal/config"
 )
@@ -55,7 +57,7 @@ func Handler(cfg config.Config, o Options) http.Handler {
 	})
 	mux.Handle("/.well-known/oauth-protected-resource", metadata)
 	mux.Handle("/.well-known/oauth-protected-resource/mcp", metadata)
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 	for _, routes := range o.Routes {
 		routes(mux)
 	}
@@ -90,6 +92,43 @@ func protocolSplit(stateful, stateless http.Handler) http.Handler {
 			stateless.ServeHTTP(w, r)
 			return
 		}
+		// Each request without a session ID starts a session the SDK keeps
+		// until its idle timeout. Admit them at a bounded rate per user so one
+		// token cannot open sessions without limit.
+		if r.Method == http.MethodPost && r.Header.Get("Mcp-Session-Id") == "" && !sessions.allow(r) {
+			w.Header().Set("Retry-After", "3")
+			http.Error(w, "too many new MCP sessions; retry shortly", http.StatusTooManyRequests)
+			return
+		}
 		stateful.ServeHTTP(w, r)
 	})
+}
+
+// sessionAdmission allows a burst of 20 new sessions per user and one more
+// every 3 seconds: at most about 620 live sessions per user within the
+// 30-minute idle timeout.
+type sessionAdmission struct {
+	mu    sync.Mutex
+	users map[string]*rate.Limiter
+}
+
+var sessions = &sessionAdmission{users: map[string]*rate.Limiter{}}
+
+func (s *sessionAdmission) allow(r *http.Request) bool {
+	user := ""
+	if ti := auth.TokenInfoFromContext(r.Context()); ti != nil {
+		user = ti.UserID
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	limiter := s.users[user]
+	if limiter == nil {
+		// Users come from verified tokens; cap the map anyway.
+		if len(s.users) >= 1024 {
+			clear(s.users)
+		}
+		limiter = rate.NewLimiter(rate.Every(3*time.Second), 20)
+		s.users[user] = limiter
+	}
+	return limiter.Allow()
 }

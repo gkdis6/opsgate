@@ -1,8 +1,10 @@
 package approval
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -15,9 +17,12 @@ import (
 
 const (
 	notApplied     = "Not applied: "
-	restartTool    = "k8s_rollout_restart"
-	restartPath    = "/approve/restart/"
-	restartPattern = restartPath + "{cluster}/{kind}/{namespace}/{name}"
+	outcomeUnknown = "Check the target: "
+	// maxLinkApprovals bounds one user's undecided approvals opened from links.
+	maxLinkApprovals = 20
+	restartTool      = "k8s_rollout_restart"
+	restartPath      = "/approve/restart/"
+	restartPattern   = restartPath + "{cluster}/{kind}/{namespace}/{name}"
 )
 
 // browserAccess is implemented by a BrowserAuth that knows what its users may
@@ -97,6 +102,27 @@ func (m *Manager) directRequest(w http.ResponseWriter, r *http.Request, subject,
 	}
 	m.mu.Lock()
 	m.sweepLocked()
+	// Opening a link is a GET, which another site can trigger for a signed-in
+	// user. Opening the same link again returns the approval already waiting,
+	// and one user's links cannot fill the table shared with MCP requests.
+	waiting := 0
+	for _, p := range m.approvals {
+		if p.user != subject || p.transport != caller.Transport || p.decision != "" {
+			continue
+		}
+		waiting++
+		if p.tool == name && p.source == source && p.summary == summary && bytes.Equal(p.args, display) {
+			existing := p.id
+			m.mu.Unlock()
+			http.Redirect(w, r, "/approve/"+existing, http.StatusSeeOther)
+			return
+		}
+	}
+	if waiting >= maxLinkApprovals {
+		m.mu.Unlock()
+		ui.Message(w, http.StatusTooManyRequests, "Action unavailable", "Too many approvals opened from links are waiting. Decide or let them expire first.")
+		return
+	}
 	// Bound all live records, including running and retained outcomes.
 	if len(m.approvals) >= 100 || m.approvals[id] != nil {
 		m.mu.Unlock()
@@ -119,12 +145,16 @@ func (m *Manager) directRequest(w http.ResponseWriter, r *http.Request, subject,
 func (m *Manager) runDirect(ctx context.Context, p *pending, run func(context.Context) (string, error)) string {
 	var check tool.Check
 	result, err := run(tool.WithCheckSink(context.WithoutCancel(ctx), func(c tool.Check) { check = c }))
-	if err != nil {
+	unknown := errors.Is(err, tool.ErrOutcomeUnknown)
+	if unknown {
+		result = outcomeUnknown + redact.String(err.Error())
+	} else if err != nil {
 		result = notApplied + redact.String(err.Error())
 	}
 	m.mu.Lock()
 	p.result = result
 	p.failed = err != nil
+	p.unknown = unknown
 	p.finished = true
 	p.run = nil
 	p.retainUntil = m.now().Add(10 * time.Minute)

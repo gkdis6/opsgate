@@ -114,6 +114,7 @@ func newDirect[In WriteInput](env *Env, spec WriteSpec, scope string, maxArgs, m
 				applyCtx, cancel := context.WithTimeout(ctx, env.Timeout)
 				defer cancel()
 				text, err = h.Apply(applyCtx, c, in, plan)
+				err = applyError(err)
 				undo = env.undoLine(plan)
 			}
 			text = record(start, c, args, shown, text, undo, err)

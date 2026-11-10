@@ -172,9 +172,15 @@ func (v *envView) mapValue(cm *corev1.ConfigMap, key string) (string, string) {
 func (v *envView) environment(c corev1.Container, pod *corev1.Pod) error {
 	values := map[string]envValue{}
 	var order []string
+	// Many variables near the per-value bound still add up; stop keeping
+	// values once one container's environment passes 1 MiB.
+	total := 0
 	set := func(e envValue) {
 		if sensitiveEnv.MatchString(e.name) {
 			e.value, e.expansion, e.template = "<hidden>", "<hidden>", ""
+		}
+		if total += len(e.value); total > 1<<20 {
+			e.value, e.expansion, e.template = "<omitted: environment exceeds 1 MiB>", "<hidden>", ""
 		}
 		if old, ok := values[e.name]; ok {
 			e.overrides = old.source
@@ -279,10 +285,23 @@ func (v *envView) environment(c corev1.Container, pod *corev1.Pod) error {
 	return nil
 }
 
+// maxEnvExpansion bounds one expanded value. References to earlier values can
+// double the size at every variable, so a small spec could otherwise ask for
+// gigabytes; the response cap applies only after expansion.
+const maxEnvExpansion = 16 << 10
+
+const envExpansionOmitted = "<expansion omitted: value exceeds 16 KiB>"
+
 // Expansion is single-pass: inserted values and escaped dollars are never rescanned.
 func expandEnv(raw string, values map[string]envValue) string {
+	if len(raw) > maxEnvExpansion {
+		return envExpansionOmitted
+	}
 	var out strings.Builder
 	for i := 0; i < len(raw); {
+		if out.Len() > maxEnvExpansion {
+			return envExpansionOmitted
+		}
 		if raw[i] == '$' && i+1 < len(raw) {
 			if raw[i+1] == '$' {
 				out.WriteByte('$')
@@ -304,6 +323,9 @@ func expandEnv(raw string, values map[string]envValue) string {
 		}
 		out.WriteByte(raw[i])
 		i++
+	}
+	if out.Len() > maxEnvExpansion {
+		return envExpansionOmitted
 	}
 	return redact.String(out.String())
 }

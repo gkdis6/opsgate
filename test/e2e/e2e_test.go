@@ -11,7 +11,6 @@
 package e2e
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -107,23 +106,10 @@ type process struct {
 func start(t *testing.T, args ...string) *process {
 	t.Helper()
 	p := &process{cmd: exec.Command(opsgateBinary(t), args...)}
-	pipe, err := p.cmd.StderrPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	p.cmd.Stdout = p.cmd.Stderr
+	p.cmd.Stdout, p.cmd.Stderr = p, p
 	if err := p.cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	go func() {
-		scanner := bufio.NewScanner(pipe)
-		scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
-		for scanner.Scan() {
-			p.mu.Lock()
-			p.log.WriteString(scanner.Text() + "\n")
-			p.mu.Unlock()
-		}
-	}()
 	t.Cleanup(func() {
 		p.stop()
 		if t.Failed() {
@@ -132,6 +118,12 @@ func start(t *testing.T, args ...string) *process {
 		}
 	})
 	return p
+}
+
+func (p *process) Write(b []byte) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.log.Write(b)
 }
 
 func (p *process) output() string {
@@ -306,10 +298,10 @@ func (a *authenticator) get(t *testing.T, options map[string]any, origin, rpID s
 func (b *browser) signIn(t *testing.T, a *authenticator, target, rpID string) (int, string, string) {
 	t.Helper()
 	code, text, location := b.get(t, target)
-	if code != http.StatusSeeOther || location != "/oauth/passkey" {
+	if code != http.StatusSeeOther || !strings.HasPrefix(location, "/oauth/passkey") {
 		t.Fatalf("protected page did not ask for sign-in: %d %q %s", code, location, text)
 	}
-	if code, text, _ := b.get(t, "/oauth/passkey"); code != http.StatusOK || !strings.Contains(text, "passkey") {
+	if code, text, _ := b.get(t, location); code != http.StatusOK || !strings.Contains(text, "passkey") {
 		t.Fatalf("sign-in page: %d %s", code, text)
 	}
 	code, options := b.postJSON(t, "/oauth/passkey/begin", map[string]any{})

@@ -276,8 +276,12 @@ exceeded limits, an incomplete response or timeout stops the investigation.
 These controls bound work, but are not a provider billing or exact dollar-spend
 limit. `max_total_tokens` must exceed `max_completion_tokens`. The final summary requires at least one successful Kubernetes read.
 
-Reports ask the model to separate confirmed facts, hypotheses and outstanding
-checks, and append actual tool names, redacted arguments and evidence IDs. The footer shows reads, tokens, total investigation wall time (including tool calls), and cumulative time inside model calls across API and CLI backends; for example `3 reads · 12345 tokens · 1m12s (model 48s)`. Durations round to whole seconds with a minimum of 1s; below a minute only seconds are shown. Failure/timeout notices also show elapsed total time once an investigation starts.
+Reports are written to be read on a phone: **Cause** with how sure it is, **Do now**
+with at most three steps, up to three **Evidence** lines with their IDs, and
+**Still to check** only when needed. A step is an approval link or a command;
+each command stands alone in its own code block so it can be copied as is. The
+footer names each read with its evidence ID on one line; arguments stay in the
+audit log. The footer shows reads, tokens, total investigation wall time (including tool calls), and cumulative time inside model calls across API and CLI backends; for example `3 reads · 12345 tokens · 1m12s (model 48s)`. Durations round to whole seconds with a minimum of 1s; below a minute only seconds are shown. Failure/timeout notices also show elapsed total time once an investigation starts.
 The model can still misinterpret evidence; a citation is not proof of correctness.
 Failures produce an explicit failure/evidence-insufficient report rather than a
 claimed cause. No system changes are performed. Discord output groups complete paragraphs within 1900 UTF-16 units, with automatic mentions disabled.

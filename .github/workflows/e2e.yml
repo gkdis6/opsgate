@@ -1,0 +1,36 @@
+name: E2E
+# The real binary against a real cluster (kind): passkey sign-in, an action
+# link, approval after a server restart, the restart itself and its recovery
+# check, and a crashing pod reaching a signed webhook.
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  cluster:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: "1.26.x"
+          check-latest: true
+          cache: true
+      - run: make build
+      # kind and kubectl ship with the runner image.
+      - name: Create cluster
+        run: |
+          kind version
+          kind create cluster --wait 180s
+          kubectl get nodes
+      - name: Run end-to-end tests
+        run: |
+          export KUBECONFIG="$HOME/.kube/config"
+          go test -tags e2e -count=1 -timeout 15m -v ./test/e2e/
+      - if: failure()
+        run: |
+          kubectl get pods -A
+          kubectl get events -A --sort-by=.lastTimestamp | tail -40

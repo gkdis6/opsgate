@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gkdis6/opsgate/internal/config"
+	"github.com/gkdis6/opsgate/internal/metrics"
 )
 
 // Serve listens on cfg.HTTP.Listen until ctx is done, then shuts down gracefully.
@@ -43,4 +44,27 @@ func serve(ctx context.Context, srv *http.Server, listener net.Listener) error {
 		}
 		return err
 	}
+}
+
+// ServeMetrics serves only /metrics on addr until ctx is done or the returned
+// function is called. It is a separate listener so the metrics never share the
+// public origin, its Host check or its authentication.
+func ServeMetrics(ctx context.Context, addr string) (func(), error) {
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", metrics.Handler())
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	go func() { _ = srv.Serve(listener) }()
+	stop := func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if srv.Shutdown(shutdownCtx) != nil {
+			_ = srv.Close()
+		}
+	}
+	go func() { <-ctx.Done(); stop() }()
+	return stop, nil
 }

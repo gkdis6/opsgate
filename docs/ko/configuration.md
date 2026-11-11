@@ -67,6 +67,7 @@ Kubernetes 도구를 활성화하면 `opsgate init`의 기본 네임스페이스
 | `providers.kubernetes.show_configmap_data` | `false` | false이면 키만 보여 주고 값은 숨깁니다 |
 | `providers.kubernetes.max_log_lines` | `500` | 호출당 파드 로그의 최대 줄 수입니다 |
 | `http.listen` | `127.0.0.1:8787` | 백엔드 TCP 주소입니다 |
+| `http.metrics_listen` | `""` | 선택 사항입니다. `0.0.0.0:9090`처럼 별도 주소를 적으면 그 주소의 `/metrics`에서 Prometheus 메트릭을 인증 없이 제공합니다. `http.listen`에서는 제공하지 않습니다. 수집기만 닿을 수 있게 두세요. [메트릭](deploy.md#메트릭) 참고 |
 | `http.public_url` | `""` | HTTP 사용 시 필수인 origin입니다. 루프백 HTTP를 제외하면 HTTPS여야 하며, 리소스는 origin + /mcp입니다 |
 | `auth.mode` | `""` | HTTP 사용 시 필수이며, builtin, external, static 중 하나입니다 |
 | `auth.builtin.state_file` | `""` | 클라이언트와 토큰 해시를 저장해 재시작 후에도 유지하는 파일이며, 권한은 0600입니다. 선택 사항으로, 비어 있으면 재시작 시 상태가 사라집니다 |

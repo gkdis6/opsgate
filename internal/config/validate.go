@@ -100,6 +100,14 @@ func (c Config) ValidateHTTP() error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
+	if c.HTTP.MetricsListen != "" {
+		if _, port, err := net.SplitHostPort(c.HTTP.MetricsListen); err != nil || port == "" {
+			return fmt.Errorf("http.metrics_listen must be host:port")
+		}
+		if c.HTTP.MetricsListen == c.HTTP.Listen {
+			return fmt.Errorf("http.metrics_listen must differ from http.listen")
+		}
+	}
 	host, _, err := net.SplitHostPort(c.HTTP.Listen)
 	if err != nil {
 		return fmt.Errorf("http.listen: %w", err)

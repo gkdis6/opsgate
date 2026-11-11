@@ -26,6 +26,7 @@ import (
 	"github.com/gkdis6/opsgate/internal/authn"
 	"github.com/gkdis6/opsgate/internal/config"
 	"github.com/gkdis6/opsgate/internal/httpserver"
+	"github.com/gkdis6/opsgate/internal/metrics"
 	"github.com/gkdis6/opsgate/internal/oauth"
 	"github.com/gkdis6/opsgate/internal/provider/host"
 	"github.com/gkdis6/opsgate/internal/provider/kube"
@@ -153,6 +154,16 @@ func runHTTP(ctx context.Context, cfg config.Config, env *tool.Env) error {
 	o.Server = s
 	if !cfg.Approval.RequireWeb {
 		log.Printf("warning: a compromised client can approve its own writes through elicitation; approval.require_web: true avoids this where web approval is available")
+	}
+	metrics.Gauge("opsgate_approvals_waiting", "Approvals waiting for a decision.", func() float64 { n, _ := am.Counts(); return float64(n) })
+	metrics.Gauge("opsgate_inbox_notices", "Inbox notices currently held.", func() float64 { _, n := am.Counts(); return float64(n) })
+	if cfg.HTTP.MetricsListen != "" {
+		stopMetrics, err := httpserver.ServeMetrics(ctx, cfg.HTTP.MetricsListen)
+		if err != nil {
+			return fmt.Errorf("http.metrics_listen: %w", err)
+		}
+		defer stopMetrics()
+		log.Printf("serving metrics on %s/metrics without authentication", cfg.HTTP.MetricsListen)
 	}
 	log.Printf("serving %s on %s", cfg.ResourceURL(), cfg.HTTP.Listen)
 	return httpserver.Serve(ctx, cfg, httpserver.Handler(cfg, o))

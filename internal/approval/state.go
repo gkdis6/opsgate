@@ -193,3 +193,22 @@ func writeState(path string, state diskState) error {
 	}
 	return nil
 }
+
+// Counts reports the approvals waiting for a decision and the inbox notices
+// held, for metrics.
+func (m *Manager) Counts() (waiting, notices int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sweepLocked()
+	for _, p := range m.approvals {
+		if p.decision == "" {
+			waiting++
+		}
+	}
+	if m.notices != nil {
+		for _, list := range m.notices.users {
+			notices += len(list)
+		}
+	}
+	return waiting, notices
+}

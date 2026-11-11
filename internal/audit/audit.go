@@ -8,6 +8,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/gkdis6/opsgate/internal/metrics"
 )
 
 // Event is one tool call. Args must already be redacted by the caller.
@@ -69,6 +71,7 @@ func (l *Logger) Record(e Event) {
 			fmt.Fprintln(os.Stderr, "opsgate: audit record panic")
 		}
 	}()
+	metrics.AuditEvents.Inc(e.Tool, e.Outcome, e.Approval)
 	if l == nil {
 		fmt.Fprintln(os.Stderr, "opsgate: audit logger is nil")
 		return

@@ -325,7 +325,7 @@ var (
 
 func TestApprovedRestartOnARealCluster(t *testing.T) {
 	kubeconfig, namespace := cluster(t)
-	port := freePort(t)
+	port, metricsPort := freePort(t), freePort(t)
 	// A passkey relying party must be a domain, not an IP address.
 	origin := "http://localhost:" + port
 	dir := t.TempDir()
@@ -337,6 +337,7 @@ server:
 http:
   listen: 127.0.0.1:%s
   public_url: %s
+  metrics_listen: 127.0.0.1:%s
 auth:
   mode: builtin
   builtin:
@@ -355,7 +356,7 @@ providers:
     kubeconfig: %q
     namespaces: [%q]
     rollout_restart: ["%s/*"]
-`, audit, port, origin, filepath.Join(dir, "oauth.json"), filepath.Join(dir, "approvals.json"), kubeconfig, namespace, namespace)), 0600); err != nil {
+`, audit, port, origin, metricsPort, filepath.Join(dir, "oauth.json"), filepath.Join(dir, "approvals.json"), kubeconfig, namespace, namespace)), 0600); err != nil {
 		t.Fatal(err)
 	}
 	healthy := func() bool {
@@ -466,6 +467,22 @@ providers:
 		}
 		return strings.Contains(page, "Recovered")
 	})
+	// The run is visible to a scraper on the separate metrics listener, and
+	// the public listener does not serve it.
+	resp, err := http.Get("http://127.0.0.1:" + metricsPort + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	scraped, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	for _, want := range []string{`opsgate_audit_events_total{tool="k8s_rollout_restart",outcome="ok",approval="web"} 1`, `opsgate_audit_events_total{tool="k8s_rollout_restart",outcome="recovered",approval="web"} 1`, "opsgate_approvals_waiting 0"} {
+		if !strings.Contains(string(scraped), want) {
+			t.Errorf("metrics lack %s:\n%s", want, scraped)
+		}
+	}
+	if code, _, _ := user.get(t, "/metrics"); code != http.StatusNotFound {
+		t.Errorf("public listener answered /metrics with %d", code)
+	}
 	log, _ := os.ReadFile(audit)
 	for _, want := range []string{`"tool":"k8s_rollout_restart"`, `"outcome":"approved"`, `"outcome":"ok"`, `"source":"link"`, `"user":"passkey:e2e"`} {
 		if !strings.Contains(string(log), want) {

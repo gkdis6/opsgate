@@ -70,6 +70,7 @@ this prints `require_web: true` explicitly. Running that output with
 | `providers.kubernetes.show_configmap_data` | `false` | False exposes keys only, hides values |
 | `providers.kubernetes.max_log_lines` | `500` | Pod log lines per call cap |
 | `http.listen` | `127.0.0.1:8787` | Backend TCP address |
+| `http.metrics_listen` | `""` | Optional separate address, e.g. `0.0.0.0:9090`, that serves Prometheus metrics at `/metrics` without authentication. Never served on `http.listen`; expose it only to the scraper. See [metrics](deploy.md#metrics) |
 | `http.public_url` | `""` | Required HTTP origin; HTTPS except loopback HTTP; resource is origin + /mcp |
 | `auth.mode` | `""` | Required for HTTP: builtin, external or static |
 | `auth.builtin.state_file` | `""` | Optional 0600 persistence for clients and token hashes; empty loses state on restart |

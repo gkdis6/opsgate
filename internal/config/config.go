@@ -94,6 +94,10 @@ type HTTP struct {
 	// "https://mcp.example.com". The MCP endpoint is PublicURL + "/mcp"
 	// and the built-in authorization server's issuer is PublicURL.
 	PublicURL string `yaml:"public_url"`
+	// MetricsListen, when set, serves Prometheus metrics at /metrics on a
+	// separate address without authentication, e.g. "0.0.0.0:9090". Keep it
+	// reachable only by the scraper; it is never served on Listen.
+	MetricsListen string `yaml:"metrics_listen,omitempty"`
 }
 
 // Auth configures how HTTP requests are authenticated.

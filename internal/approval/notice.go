@@ -16,6 +16,7 @@ import (
 	"github.com/gkdis6/opsgate/internal/action"
 	"github.com/gkdis6/opsgate/internal/alert"
 	"github.com/gkdis6/opsgate/internal/config"
+	"github.com/gkdis6/opsgate/internal/metrics"
 )
 
 type inboxNotice struct {
@@ -67,6 +68,7 @@ func (m *Manager) notify(w http.ResponseWriter, r *http.Request) {
 	controller := http.NewResponseController(w)
 	_ = controller.SetReadDeadline(time.Now().Add(5 * time.Second))
 	reject := func(code int) {
+		metrics.InboxNotices.Inc("rejected")
 		if r.ProtoMajor == 1 {
 			w.Header().Set("Connection", "close")
 		}
@@ -180,6 +182,7 @@ func (m *Manager) notify(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = m.saveLocked()
+	metrics.InboxNotices.Inc("accepted")
 	w.WriteHeader(http.StatusNoContent)
 }
 

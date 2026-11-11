@@ -200,3 +200,35 @@ Docker 앞에 소켓 프록시를 두세요. 이 경우 `mode: kubernetes`를 �
 스냅샷은 게시와 서명을 건너뜁니다.
 `v*` 태그 릴리스는 race 테스트와 취약점 검사를 마친 뒤 아카이브, SBOM, 다중 아키텍처 이미지를 빌드합니다.
 이어서 체크섬과 이미지에 서명하고 GitHub 빌드 출처 증명을 첨부합니다.
+
+## 메트릭
+
+`http.metrics_listen`을 설정하면 별도 포트에서 Prometheus 메트릭을 제공합니다.
+
+```yaml
+http:
+  listen: 0.0.0.0:8787
+  metrics_listen: 0.0.0.0:9090
+```
+
+메트릭 포트에는 인증도 Host 검사도 없고, `/metrics`만 제공합니다. 공개 프록시로 연결하지
+마세요. NetworkPolicy와 파드 annotation 등으로 클러스터 안 Prometheus만 닿게 하세요.
+
+```yaml
+metadata:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: /metrics
+```
+
+| 메트릭 | 뜻 |
+| --- | --- |
+| `opsgate_audit_events_total{tool,outcome,approval}` | 감사 로그에 남는 모든 이벤트입니다. 도구 호출(`ok`, `error`, `denied`, `pending`), 승인 결정(`approved`, `rejected`), 복구 결과(`recovered`, `not_recovered`, `unverified`) |
+| `opsgate_approvals_waiting` | 결정을 기다리는 승인 수 |
+| `opsgate_inbox_notices` | 승인함에 있는 알림 수 |
+| `opsgate_inbox_notices_total{result}` | 서명된 알림 수신: `accepted` 또는 `rejected` |
+| `opsgate_push_deliveries_total{result}` | 푸시 전송: `accepted`, `gone`(구독 삭제됨), `failed` |
+
+label 값은 서버에 정해진 값에서만 나오고, 요청 내용에서 가져오지 않습니다. 사용자 이름,
+대상, 인자는 메트릭에 들어가지 않습니다. 메트릭 이름은 1.0 전에 바뀔 수 있습니다.

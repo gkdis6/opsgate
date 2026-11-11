@@ -193,3 +193,38 @@ Syft and Docker with Buildx; release signing requires cosign and publishing requ
 Snapshots skip publishing and signing. Tagged `v*` releases run race tests and
 vulnerability scanning before building archives, SBOMs and multi-architecture
 images, signing checksums/images, and attaching GitHub build provenance.
+
+## Metrics
+
+Set `http.metrics_listen` to serve Prometheus metrics on a separate port:
+
+```yaml
+http:
+  listen: 0.0.0.0:8787
+  metrics_listen: 0.0.0.0:9090
+```
+
+The metrics listener has no authentication and no Host check, and it serves
+only `/metrics`. Do not route it through the public proxy: let only the
+cluster's Prometheus reach the port, for example with a NetworkPolicy and pod
+annotations.
+
+```yaml
+metadata:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: /metrics
+```
+
+| Metric | Meaning |
+| --- | --- |
+| `opsgate_audit_events_total{tool,outcome,approval}` | Every audited event: tool calls (`ok`, `error`, `denied`, `pending`), approval decisions (`approved`, `rejected`) and recovery results (`recovered`, `not_recovered`, `unverified`) |
+| `opsgate_approvals_waiting` | Approvals waiting for a decision |
+| `opsgate_inbox_notices` | Inbox notices currently held |
+| `opsgate_inbox_notices_total{result}` | Signed notice posts: `accepted` or `rejected` |
+| `opsgate_push_deliveries_total{result}` | Web Push sends: `accepted`, `gone` (subscription removed) or `failed` |
+
+Labels come from fixed sets in the server, never from request text. The
+metrics carry no user names, targets or arguments. Metric names may still
+change before 1.0.

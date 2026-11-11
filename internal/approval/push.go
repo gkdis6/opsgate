@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/gkdis6/opsgate/internal/config"
+	"github.com/gkdis6/opsgate/internal/metrics"
 )
 
 const maxPushState = 4 << 20
@@ -244,7 +245,13 @@ func (p *pushSender) work() {
 					return
 				}
 				gone, err := p.send(p.ctx, sub.Endpoint, job.expires)
-				if !gone && err == nil {
+				switch {
+				case gone:
+					metrics.PushDeliveries.Inc("gone")
+				case err != nil:
+					metrics.PushDeliveries.Inc("failed")
+				default:
+					metrics.PushDeliveries.Inc("accepted")
 					accepted++
 				}
 				if gone {

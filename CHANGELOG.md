@@ -9,6 +9,9 @@ GitHub releases carry generated release notes.
 
 ### Added
 
+- `http.metrics_listen` serves Prometheus metrics at `/metrics` on a separate, unauthenticated port for an in-cluster scraper: audited events by tool, outcome and approval method (including approval decisions and recovery results), approvals waiting, inbox notices and Web Push deliveries. Off by default; never served on the public listener. / `http.metrics_listen`을 설정하면 클러스터 안 수집기를 위한 별도 포트의 `/metrics`에서 Prometheus 메트릭을 인증 없이 제공합니다. 도구·결과·승인 방식별 감사 이벤트(승인 결정, 복구 결과 포함), 대기 중인 승인 수, 승인함 알림 수, 푸시 전송 결과가 나옵니다. 기본은 꺼짐이고 공개 포트에서는 제공하지 않습니다.
+- An end-to-end test runs the real binary on a kind cluster for every pull request: passkey sign-in, an action link, approval after a server restart, the restart and its recovery check, and a signed watch alert. / PR마다 kind 클러스터에서 실제 바이너리로 전체 흐름(패스키 로그인, 조치 링크, 서버 재시작 뒤 승인, 재시작과 복구 확인, 서명된 watch 알림)을 검증합니다.
+
 - [Stability and compatibility](docs/stability.md): which configuration, tools, routes and formats are kept compatible, which parts are experimental (analyzer, notes, host), and how removals and changed defaults are announced. `opsgate watch`, the approval inbox and push are part of the covered core loop and no longer labelled experimental. / [안정성과 호환성](docs/ko/stability.md) 문서를 추가합니다. 어떤 설정, 도구, 경로, 형식을 유지하는지, 무엇이 실험 기능인지(analyzer, 노트, 호스트), 삭제와 기본값 변경을 어떻게 알리는지 적었습니다. `opsgate watch`, 승인함, 푸시는 유지하는 핵심 흐름에 속하며 실험 기능 표시를 뗍니다.
 
 - `approval.state_file` (default `/var/lib/opsgate/approvals.json` with a mode): undecided approvals opened from links, inbox notices and the link-signing key survive a server restart. A restored approval gets a new CSRF token and is planned again when approved; a decided one is never restored. / `approval.state_file`(모드 기본값 `/var/lib/opsgate/approvals.json`)을 추가합니다. 링크로 연 미결 승인, 승인함 알림, 링크 서명 키가 서버 재시작 뒤에도 남습니다. 복원된 승인은 CSRF 토큰을 새로 받고 승인할 때 계획을 다시 세우며, 이미 결정된 승인은 복원하지 않습니다.

@@ -17,6 +17,7 @@ stdio:
 http:
   listen: 127.0.0.1:8787 # Private backend behind a Host-preserving TLS proxy.
   public_url: "" # Required origin for HTTP, e.g. https://mcp.example.com; no /mcp.
+  metrics_listen: "" # Optional, e.g. 0.0.0.0:9090: unauthenticated Prometheus /metrics on its own port.
 auth:
   mode: "" # Required for HTTP: builtin, external or static.
   builtin:

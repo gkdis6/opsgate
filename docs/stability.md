@@ -44,8 +44,8 @@ configuration, tools and output may change or be removed in a minor release:
 5. A configuration file with a removed or unknown key **fails at startup with a message that names the key**; it is never ignored silently. The changelog names the replacement.
 
 Before 1.0, rule 2 has exceptions: 0.3 removed configuration keys, 0.4 removed
-the Dev provider, 0.5 changed the web approval default and the next release
-makes `action_link` issue only `source=ai`. Each is in the changelog.
+the Dev provider, 0.5 changed the web approval default and 0.8 made
+`action_link` issue only `source=ai`. Each is in the changelog.
 
 ## Versions
 

@@ -8,11 +8,11 @@
     "url": "https://github.com/gkdis6/opsgate",
     "source": "github"
   },
-  "version": "0.7.0",
+  "version": "0.8.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/gkdis6/opsgate:v0.7.0",
+      "identifier": "ghcr.io/gkdis6/opsgate:v0.8.0",
       "transport": {
         "type": "stdio"
       },

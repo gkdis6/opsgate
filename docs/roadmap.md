@@ -49,9 +49,12 @@ actions (systemd units and Docker containers).
 
 ## Done
 
-The features below are implemented through v0.7.0. They have not yet been
+The features below are implemented through v0.8.0. They have not yet been
 security-reviewed by third parties.
 
+- Approvals opened from links, inbox notices and the link-signing key survive a
+  restart; signed action links; Prometheus metrics; a stability policy; fuzz
+  tests and an end-to-end test on a real cluster.
 - Install from any page, an iPhone Home Screen hint and a test notification in
   the inbox.
 - QR codes that open approval, inbox and choices pages and passkey invites on a

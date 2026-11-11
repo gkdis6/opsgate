@@ -7,6 +7,8 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-11
+
 ### Added
 
 - `http.metrics_listen` serves Prometheus metrics at `/metrics` on a separate, unauthenticated port for an in-cluster scraper: audited events by tool, outcome and approval method (including approval decisions and recovery results), approvals waiting, inbox notices and Web Push deliveries. Off by default; never served on the public listener. / `http.metrics_listen`을 설정하면 클러스터 안 수집기를 위한 별도 포트의 `/metrics`에서 Prometheus 메트릭을 인증 없이 제공합니다. 도구·결과·승인 방식별 감사 이벤트(승인 결정, 복구 결과 포함), 대기 중인 승인 수, 승인함 알림 수, 푸시 전송 결과가 나옵니다. 기본은 꺼짐이고 공개 포트에서는 제공하지 않습니다.

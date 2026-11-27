@@ -47,7 +47,7 @@ func New(c Config) (*Service, error) {
 	if parts[0] == "" || parts[1] == "" {
 		return nil, fmt.Errorf("invalid Discord webhook path")
 	}
-	sender, err := alert.NewWebhook(alert.WebhookOptions{Options: alert.Options{URL: discord + "?wait=true&with_components=true", Client: &http.Client{Transport: discordReceiptTransport{base: http.DefaultTransport}}}, BodyTemplate: `{"content":{{json .Text}},"allowed_mentions":{"parse":[]}{{if .Actions}},"components":[{"type":1,"components":[{{range $i,$a:=.Actions}}{{if $i}},{{end}}{"type":2,"style":5,"label":{{json $a.Label}},"url":{{json $a.URL}}}{{end}}]}]{{end}}}`})
+	sender, err := alert.NewWebhook(alert.WebhookOptions{Options: alert.Options{URL: discord + "?wait=true&with_components=true", Client: &http.Client{Transport: discordReceiptTransport{base: http.DefaultTransport}}}, BodyTemplate: `{"content":{{json .Text}},"flags":4,"allowed_mentions":{"parse":[]}{{if .Actions}},"components":[{"type":1,"components":[{{range $i,$a:=.Actions}}{{if $i}},{{end}}{"type":2,"style":5,"label":{{json $a.Label}},"url":{{json $a.URL}}}{{end}}]}]{{end}}}`})
 	if err != nil {
 		return nil, fmt.Errorf("cannot configure notifications")
 	}
@@ -81,7 +81,7 @@ func New(c Config) (*Service, error) {
 		}
 	}
 	s.notify = func(ctx context.Context, text string, actions []alert.ActionLink) error {
-		text = redact.String(text)
+		text = neutralizeLinks(redact.String(text), c.Report.ApprovalURL)
 		// Forward independently before Discord delivery so a Discord outage cannot suppress Telegram.
 		var forwardErr error
 		if forward != nil {

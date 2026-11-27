@@ -7,6 +7,10 @@ GitHub releases carry generated release notes.
 
 ## [Unreleased]
 
+### Security
+
+- Analyzer reports no longer carry live links that could leak what the model read. Before the forward receiver and Discord, every http(s) link outside inline code and fenced blocks that does not point at `report.approval_url` is defanged (`hxxps://attacker[.]example/...`), and Discord messages set `SUPPRESS_EMBEDS`, so neither a chat preview nor a click sends a request to a link the model was steered into writing. Commands in code stay as written. / 분석 보고서에 모델이 읽은 내용을 빼낼 수 있는 링크가 살아 있는 채로 나가지 않습니다. 전달 수신자와 Discord로 보내기 전에 인라인 코드와 코드 블록 밖에 있는 http(s) 링크 중 `report.approval_url`이 아닌 링크를 무력화하고(`hxxps://attacker[.]example/...`), Discord 메시지에는 `SUPPRESS_EMBEDS`를 설정합니다. 그래서 모델이 유도당해 쓴 링크라도 채팅 미리보기나 클릭으로 요청이 나가지 않습니다. 코드 안의 명령은 그대로 둡니다.
+
 ## [0.8.0] - 2026-11-11
 
 ### Added

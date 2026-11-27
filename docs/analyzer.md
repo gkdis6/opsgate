@@ -291,7 +291,9 @@ notification failures receive bounded retries, which can duplicate messages.
 
 Alert string values are masked before their final JSON encoding for every model backend, including quoted assignments and escaped text; tool output is masked before model use. Reports are masked once before both the optional forward receiver and Discord. This is not a guarantee that all sensitive
 content is detected: allow access only to data you intend the selected model
-provider and Discord to receive. Logs contain status, counts, timings and
+provider and Discord to receive.
+
+Report text is model output, and the model reads untrusted alerts, logs and notes, so a report can carry a link built to leak data in its path or query. Before both sinks, every http(s) link outside inline code and fenced blocks that does not point at `report.approval_url` is defanged (`hxxps://attacker[.]example/...`): it stays readable but no client follows it. Discord messages also set `SUPPRESS_EMBEDS`, so Discord never fetches a preview. Commands inside code are left as written. Keep the note provider of the reader limited to operational folders, because anything the model reads can appear in a report. Logs contain status, counts, timings and
 notification success, not provider bodies or credentials. The reference analyzer pod disables automatic ServiceAccount token mounting and projects the token, CA and namespace only into the reader; the analyzer uses its MCP token and does not need direct Kubernetes credentials. The queue and replay
 cache are not persistent, pending work is lost on restart, and failed notifications
 are logged rather than stored. Durable jobs, multi-worker coordination, automatic
